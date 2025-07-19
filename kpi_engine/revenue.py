@@ -1,23 +1,26 @@
 import pandas as pd
 
-def load_pnl_data(filepath: str = "sample_data/LnTPnL.xlsx", sheet_name: int = 0) -> pd.DataFrame:
+def load_pnl_data(filepath: str = "sample_data/LnTPnL.xlsx", sheet_name: str = "LnTPnL") -> pd.DataFrame:
     """
-    Loads P&L data from the given Excel file.
+    Loads P&L data from the given Excel file and sheet.
     
     Args:
         filepath (str): Path to the P&L Excel file.
-        sheet_name (int/str): Sheet name or index in the Excel file.
+        sheet_name (str): Sheet name in the Excel file.
 
     Returns:
         pd.DataFrame: Loaded dataframe.
     """
-    df = pd.read_excel(filepath, sheet_name=sheet_name)
-    return df
+    try:
+        df = pd.read_excel(filepath, sheet_name=sheet_name)
+        return df
+    except Exception as e:
+        raise RuntimeError(f"Failed to load data: {e}")
 
 
 def calculate_total_revenue(df: pd.DataFrame) -> float:
     """
-    Calculates total revenue by summing values in 'Amount in USD' for relevant Group1 categories.
+    Calculates total revenue from specified Group1 categories.
 
     Args:
         df (pd.DataFrame): The P&L dataframe.
@@ -32,23 +35,24 @@ def calculate_total_revenue(df: pd.DataFrame) -> float:
 
 def calculate_revenue_by_type(df: pd.DataFrame, revenue_type: str) -> float:
     """
-    Calculates revenue for a specific type like 'ONSITE', 'OFFSHORE', or 'INDIRECT REVENUE'.
+    Calculates revenue for a specific Group1 type.
 
     Args:
         df (pd.DataFrame): The P&L dataframe.
-        revenue_type (str): One of the allowed types.
+        revenue_type (str): One of 'ONSITE', 'OFFSHORE', 'INDIRECT REVENUE'
 
     Returns:
         float: Revenue for the given type.
     """
-    if revenue_type not in ["ONSITE", "OFFSHORE", "INDIRECT REVENUE"]:
-        raise ValueError("Invalid revenue_type. Must be one of: 'ONSITE', 'OFFSHORE', 'INDIRECT REVENUE'")
+    allowed_types = ["ONSITE", "OFFSHORE", "INDIRECT REVENUE"]
+    if revenue_type not in allowed_types:
+        raise ValueError(f"Invalid revenue_type. Must be one of: {allowed_types}")
     
     filtered = df[df["Group1"] == revenue_type]
     return filtered["Amount in USD"].sum()
 
 
-# Example (for testing or CLI execution)
+# Test block
 if __name__ == "__main__":
     df_pnl = load_pnl_data()
     total = calculate_total_revenue(df_pnl)
