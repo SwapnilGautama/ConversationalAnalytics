@@ -25,7 +25,7 @@ EMBEDDING_CACHE = {}
 def get_embedding(text):
     if text in EMBEDDING_CACHE:
         return EMBEDDING_CACHE[text]
-    
+
     try:
         response = openai.Embedding.create(
             input=text,
@@ -36,7 +36,7 @@ def get_embedding(text):
         return embedding
     except Exception as e:
         logging.error(f"Embedding failed for '{text}': {e}")
-        return [0.0] * 1536  # Fallback zero vector
+        return [0.0] * 1536
 
 def cosine_similarity(a, b):
     a = np.array(a)
@@ -54,7 +54,7 @@ def get_best_matching_question(user_query, prompt_bank):
         return "q1"  # Safe fallback
 
     scores = {}
-    for key, prompt in PROMPT_BANK.items():
+    for key, prompt in prompt_bank.items():
         prompt_embedding = get_embedding(prompt)
         similarity = cosine_similarity(user_embedding, prompt_embedding)
         scores[key] = similarity
