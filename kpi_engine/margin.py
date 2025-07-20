@@ -12,13 +12,26 @@ def load_pnl_data(filepath, sheet_name="LnTPnL"):
 def preprocess_pnl_data(df):
     df.columns = df.columns.str.strip()
 
-    # Rename columns for consistency
-    df = df.rename(columns={
-        'Month': 'Month',
-        'Company_Code': 'Client',
-        'Amount in INR': 'Amount',
-        'Type': 'Type'
-    })
+    # Dynamically rename columns based on what's present
+    column_map = {}
+
+    if 'Company Code' in df.columns:
+        column_map['Company Code'] = 'Client'
+    elif 'Company_Code' in df.columns:
+        column_map['Company_Code'] = 'Client'
+
+    if 'Amount in INR' in df.columns:
+        column_map['Amount in INR'] = 'Amount'
+    elif 'Amount' in df.columns:
+        column_map['Amount'] = 'Amount'
+
+    if 'Month' in df.columns:
+        column_map['Month'] = 'Month'
+
+    if 'Type' in df.columns:
+        column_map['Type'] = 'Type'
+
+    df = df.rename(columns=column_map)
 
     # Ensure Month is datetime
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
