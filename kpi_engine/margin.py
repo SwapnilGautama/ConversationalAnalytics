@@ -12,46 +12,37 @@ def load_pnl_data(filepath, sheet_name="LnTPnL"):
 def preprocess_pnl_data(df):
     df.columns = df.columns.str.strip()
 
-    # Dynamically rename columns based on what's present
-    column_map = {}
+    # Rename columns for consistency
+    df = df.rename(columns={
+        'Month': 'Month',
+        'Company Code': 'Client',
+        'Amount': 'Amount',
+        'Type': 'Type'
+    })
 
-    if 'Company Code' in df.columns:
-        column_map['Company Code'] = 'Client'
-    elif 'Company_Code' in df.columns:
-        column_map['Company_Code'] = 'Client'
-
-    if 'Amount in INR' in df.columns:
-        column_map['Amount in INR'] = 'Amount'
-    elif 'Amount' in df.columns:
-        column_map['Amount'] = 'Amount'
-
-    if 'Month' in df.columns:
-        column_map['Month'] = 'Month'
-
-    if 'Type' in df.columns:
-        column_map['Type'] = 'Type'
-
-    df = df.rename(columns=column_map)
-
-    # Ensure Month is datetime
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-
-    # Keep only Cost and Revenue rows
-    df = df[df['Type'].isin(['Cost', 'Revenue'])]
-
-    # Convert Amount to numeric and drop invalid rows
+    df['Type'] = df['Type'].str.strip()
+    df['Client'] = df['Client'].astype(str).str.strip()
     df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-    df = df.dropna(subset=['Month', 'Amount'])
 
-    return df
+    # Filter only Cost and Revenue rows
+    df = df[df['Type'].isin(['Cost', 'Revenue'])].copy()
 
-def compute_margin(df):
-    # Group by Month and Client
-    grouped = df.groupby(['Month', 'Client', 'Type'])['Amount'].sum().unstack().fillna(0)
+    # Pivot data to get separate Revenue and Cost columns
+    df_pivot = df.pivot_table(
+        index=['Client', 'Month'],
+        columns='Type',
+        values='Amount',
+        aggfunc='sum',
+        fill_value=0
+    ).reset_index()
 
-    # Calculate margin and CM%
-    grouped['Margin'] = grouped['Revenue'] - grouped['Cost']
-    grouped['CM%'] = (grouped['Margin'] / grouped['Revenue']) * 100
-    grouped = grouped.reset_index()
+    # Rename columns back to flat names
+    df_pivot.columns.name = None
 
-    return grouped
+    # Calculate Margin %
+    df_pivot['Margin %'] = (
+        (df_pivot['Revenue'] - df_pivot['Cost']) / df_pivot['Revenue'].replace(0, pd.NA)
+    ) * 100
+
+    return df_pivot
