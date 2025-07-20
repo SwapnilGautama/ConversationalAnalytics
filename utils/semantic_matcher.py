@@ -3,8 +3,9 @@
 import openai
 import os
 import numpy as np
+from functools import lru_cache
 
-# Load your prompt bank (can be extended)
+# Load your prompt bank (extendable with more questions)
 PROMPT_BANK = {
     "q1": "Accounts with CM% < 30 in last quarter",
     "q2": "Which cost triggered the margin drop in transportation",
@@ -18,7 +19,16 @@ PROMPT_BANK = {
     "q10": "DU wise fresher UT trends"
 }
 
-def get_embedding(text):
+# Cache prompt embeddings for faster performance
+@lru_cache(maxsize=32)
+def get_cached_prompt_embedding(prompt: str):
+    response = openai.Embedding.create(
+        input=prompt,
+        model="text-embedding-ada-002"
+    )
+    return response["data"][0]["embedding"]
+
+def get_user_embedding(text: str):
     response = openai.Embedding.create(
         input=text,
         model="text-embedding-ada-002"
@@ -30,12 +40,12 @@ def cosine_similarity(a, b):
     b = np.array(b)
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def get_best_matching_question(user_query):
-    user_embedding = get_embedding(user_query)
+def get_best_matching_question(user_query: str):
+    user_embedding = get_user_embedding(user_query)
     scores = {}
 
     for key, prompt in PROMPT_BANK.items():
-        prompt_embedding = get_embedding(prompt)
+        prompt_embedding = get_cached_prompt_embedding(prompt)
         similarity = cosine_similarity(user_embedding, prompt_embedding)
         scores[key] = similarity
 
