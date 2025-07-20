@@ -12,37 +12,32 @@ def load_pnl_data(filepath, sheet_name="LnTPnL"):
 def preprocess_pnl_data(df):
     df.columns = df.columns.str.strip()
 
-    # Rename columns for consistency
+    # Rename for consistency using correct column names from your data
     df = df.rename(columns={
         'Month': 'Month',
-        'Company Code': 'Client',
-        'Amount': 'Amount',
+        'Company_code': 'Client',
+        'Amount in INR': 'Amount',
         'Type': 'Type'
     })
 
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-    df['Type'] = df['Type'].str.strip()
-    df['Client'] = df['Client'].astype(str).str.strip()
+
+    # Clean & filter
+    df = df[df['Type'].isin(['Cost', 'Revenue'])]
     df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+    df = df.dropna(subset=['Month', 'Client', 'Amount'])
 
-    # Filter only Cost and Revenue rows
-    df = df[df['Type'].isin(['Cost', 'Revenue'])].copy()
+    return df
 
-    # Pivot data to get separate Revenue and Cost columns
-    df_pivot = df.pivot_table(
-        index=['Client', 'Month'],
-        columns='Type',
-        values='Amount',
-        aggfunc='sum',
-        fill_value=0
-    ).reset_index()
+def calculate_margin(df):
+    # Pivot to get Revenue and Cost per Client-Month
+    pivot_df = df.pivot_table(index=['Client', 'Month'], columns='Type', values='Amount', aggfunc='sum').reset_index()
 
-    # Rename columns back to flat names
-    df_pivot.columns.name = None
+    # Fill missing values
+    pivot_df = pivot_df.fillna(0)
 
-    # Calculate Margin %
-    df_pivot['Margin %'] = (
-        (df_pivot['Revenue'] - df_pivot['Cost']) / df_pivot['Revenue'].replace(0, pd.NA)
-    ) * 100
+    # Calculate margin %
+    pivot_df['Margin %'] = ((pivot_df['Revenue'] - pivot_df['Cost']) / pivot_df['Revenue']) * 100
+    pivot_df['Margin %'] = pivot_df['Margin %'].round(2)
 
-    return df_pivot
+    return pivot_df
