@@ -1,43 +1,43 @@
 import pandas as pd
 
-def compare_cb_variation_quarters(pnl_df: pd.DataFrame) -> dict:
+def analyze_cb_variation(df: pd.DataFrame) -> dict:
     """
-    Compare C&B Cost between FY25Q4 (Jan–Mar) and FY26Q1 (Apr–Jun)
+    Analyze quarter-on-quarter variation in C&B cost from the P&L table.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing P&L data with columns like 'Group Description', 'TimePeriod', 'Amount in USD'
+
+    Returns:
+        dict: Summary including variation value and breakdown by month if available
     """
-    # Define months by quarter
-    q4_months = ["Jan-25", "Feb-25", "Mar-25"]
-    q1_months = ["Apr-25", "May-25", "Jun-25"]
+    # Filter for C&B related costs
+    cb_keywords = ["C&B Cost Onsite", "C&B Cost Offshore"]
+    df_cb = df[df["Group Description"].isin(cb_keywords)].copy()
 
-    # Filter relevant rows
-    cb_df = pnl_df[
-        (pnl_df["Group Description"] == "C&B Cost") &
-        (pnl_df["Month"].isin(q4_months + q1_months))
-    ]
+    # Ensure TimePeriod is datetime for proper quarter extraction
+    df_cb["TimePeriod"] = pd.to_datetime(df_cb["TimePeriod"])
+    df_cb["Quarter"] = df_cb["TimePeriod"].dt.to_period("Q")
 
-    # Aggregate
-    totals = cb_df.groupby("Month")["Amount in USD"].sum()
-    q4_total = totals[q4_months].sum()
-    q1_total = totals[q1_months].sum()
-
-    delta = q1_total - q4_total
-    pct_change = (delta / q4_total * 100) if q4_total else None
-
-    summary = (
-        f"C&B cost was ${q4_total:,.0f} in FY25Q4 and ${q1_total:,.0f} in FY26Q1.\n"
-        f"The change is ${delta:,.0f} ({pct_change:.2f}% {'increase' if delta > 0 else 'decrease'})."
+    # Aggregate C&B cost by quarter
+    cb_by_quarter = (
+        df_cb.groupby("Quarter")["Amount in USD"].sum().sort_index().reset_index()
     )
 
+    if len(cb_by_quarter) < 2:
+        return {"error": "Insufficient data for quarter-on-quarter comparison."}
+
+    # Compare last two quarters
+    current_qtr = cb_by_quarter.iloc[-1]
+    previous_qtr = cb_by_quarter.iloc[-2]
+    diff = current_qtr["Amount in USD"] - previous_qtr["Amount in USD"]
+    pct_change = (diff / previous_qtr["Amount in USD"]) * 100 if previous_qtr["Amount in USD"] else None
+
     return {
-        "summary": summary,
-        "table": pd.DataFrame({
-            "Quarter": ["FY25Q4", "FY26Q1"],
-            "C&B Cost": [q4_total, q1_total]
-        }),
-        "chart": {
-            "x": ["FY25Q4", "FY26Q1"],
-            "y": [q4_total, q1_total],
-            "title": "C&B Cost Comparison by Quarter",
-            "xlabel": "Quarter",
-            "ylabel": "Cost (USD)"
-        }
+        "previous_quarter": str(previous_qtr["Quarter"]),
+        "previous_cb": previous_qtr["Amount in USD"],
+        "current_quarter": str(current_qtr["Quarter"]),
+        "current_cb": current_qtr["Amount in USD"],
+        "difference": diff,
+        "percentage_change": pct_change,
+        "trend": "increase" if diff > 0 else "decrease" if diff < 0 else "no change",
     }
