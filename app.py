@@ -4,7 +4,7 @@ import streamlit as st
 import openai
 import pandas as pd
 import importlib
-from utils.semantic_matcher import get_best_matching_question
+from utils.semantic_matcher import get_best_matching_question, PROMPT_BANK
 from config.prompt_bank import PROMPT_BANK
 
 # Set OpenAI API Key
