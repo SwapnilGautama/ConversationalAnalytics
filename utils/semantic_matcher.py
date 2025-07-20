@@ -5,10 +5,8 @@ import os
 import numpy as np
 import logging
 
-# Set your OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Prompt bank for 10 questions
 PROMPT_BANK = {
     "q1": "Accounts with CM% < 30 in last quarter",
     "q2": "Which cost triggered the margin drop in transportation",
@@ -22,13 +20,12 @@ PROMPT_BANK = {
     "q10": "DU-wise fresher UT trends"
 }
 
-# Embedding cache (optional – speeds up matching)
 EMBEDDING_CACHE = {}
 
 def get_embedding(text):
     if text in EMBEDDING_CACHE:
         return EMBEDDING_CACHE[text]
-
+    
     try:
         response = openai.Embedding.create(
             input=text,
@@ -39,24 +36,22 @@ def get_embedding(text):
         return embedding
     except Exception as e:
         logging.error(f"Embedding failed for '{text}': {e}")
-        return None
+        return [0.0] * 1536  # Fallback zero vector
 
 def cosine_similarity(a, b):
-    if a is None or b is None:
-        return -1  # Lowest possible similarity
-
     a = np.array(a)
     b = np.array(b)
 
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+    if len(a) != len(b) or np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
         return -1
 
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 def get_best_matching_question(user_query):
     user_embedding = get_embedding(user_query)
-    if user_embedding is None:
-        return None  # or return "q1" as fallback
+    if user_embedding is None or sum(user_embedding) == 0.0:
+        logging.error("Failed to get user embedding.")
+        return "q1"  # Safe fallback
 
     scores = {}
     for key, prompt in PROMPT_BANK.items():
