@@ -15,21 +15,20 @@ def analyze_low_cm_accounts(pnl_df: pd.DataFrame) -> pd.DataFrame:
         if col not in pnl_df.columns:
             raise ValueError(f"Missing column: {col}")
 
-    # Q1 FY26 months
+    # Filter for Q1 FY26 months
     target_months = ["Apr'25", "May'25", "Jun'25"]
     df = pnl_df[pnl_df['Month'].isin(target_months)].copy()
 
-    # Calculate CM%
+    # Calculate Contribution Margin %
     df['CM%'] = (df['Revenue'] - df['Cost']) / df['Revenue']
 
-    # Filter low CM%
+    # Filter accounts with CM% < 30%
     flagged = df[df['CM%'] < 0.3][['Final Customer Name', 'Month', 'CM%']]
     return flagged.sort_values(by=['Final Customer Name', 'Month'])
 
-
 def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame = None):
     """
-    Runs question analysis for low CM% accounts.
+    Executes the analysis for Question 1.
     """
     flagged_accounts = analyze_low_cm_accounts(pnl_df)
     return {
