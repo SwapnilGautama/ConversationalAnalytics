@@ -2,30 +2,47 @@
 
 import pandas as pd
 from kpi_engine.margin import compute_margin
+from dateutil.relativedelta import relativedelta
 
-def run(df):
-    df = df.copy()
+def run_question(df):
+    df_margin = compute_margin(df)
 
-    # Step 1: Ensure margin is computed
-    df = compute_margin(df)
+    if "Month" not in df_margin or "Client" not in df_margin or "Margin %" not in df_margin:
+        return {
+            "error": "Required fields missing. Ensure Margin % calculation is correctly applied."
+        }
 
-    # Step 2: Add quarter column
-    df['Quarter'] = df['Month'].dt.to_period("Q")
+    # Get the latest quarter
+    latest_month = df_margin["Month"].max()
+    quarter_start = latest_month - relativedelta(months=2)
+    quarter_data = df_margin[df_margin["Month"] >= quarter_start]
 
-    # Step 3: Filter latest quarter
-    latest_qtr = df['Quarter'].max()
-    latest_df = df[df['Quarter'] == latest_qtr]
+    # Group by Client and calculate average margin
+    grouped = (
+        quarter_data.groupby("Client")["Margin %"]
+        .mean()
+        .reset_index()
+        .rename(columns={"Margin %": "Avg Margin %"})
+    )
 
-    # Step 4: Filter accounts with Margin % < 30
-    if 'Margin %' not in latest_df.columns:
-        return "❌ Error: 'Margin %' not found in data. Please ensure margin calculation is applied."
+    # Remove rows with NaN or invalid values
+    grouped = grouped.dropna(subset=["Avg Margin %"])
+    grouped["Avg Margin %"] = grouped["Avg Margin %"].round(2)
 
-    result = latest_df[latest_df['Margin %'] < 30]
+    # Filter where margin is less than 30%
+    low_margin_clients = grouped[grouped["Avg Margin %"] < 30].copy()
 
-    # Step 5: Return output
-    if result.empty:
-        return "🎯 No accounts had margin < 30% in the latest quarter."
+    # 🔹 Text summary
+    total_clients = grouped["Client"].nunique()
+    low_margin_count = low_margin_clients["Client"].nunique()
+    proportion = (low_margin_count / total_clients * 100) if total_clients else 0
 
-    summary = result.groupby('Client')[['Margin %']].mean().sort_values('Margin %').reset_index()
-    summary.columns = ['Client', 'Avg Margin %']
-    return summary
+    summary = (
+        f"🔍 In the last quarter, {low_margin_count} accounts had an average margin below 30% "
+        f"— which is {proportion:.1f}% of all {total_clients} accounts."
+    )
+
+    return {
+        "summary": summary,
+        "table": low_margin_clients.sort_values("Avg Margin %"),
+    }
