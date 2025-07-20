@@ -1,37 +1,37 @@
-# questions/question_q1.py
+# ✅ FILE: questions/question_q1.py
 
 import pandas as pd
+import streamlit as st
+from kpi_engine.cm_margin import compute_cm_margin  # Prebuilt KPI
 
-def analyze_low_cm_accounts(pnl_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Returns accounts where CM% < 30% in any month of FY26-Q1 (Apr–Jun 2025).
-    CM% = (Revenue - Cost) / Revenue
-    """
-    if pnl_df is None or pnl_df.empty:
-        raise ValueError("P&L dataframe is empty or missing.")
+def run_question(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
+    st.subheader("Accounts with CM% < 30 in the Last Quarter")
 
-    required_cols = ['Final Customer Name', 'Month', 'Revenue', 'Cost']
-    for col in required_cols:
-        if col not in pnl_df.columns:
-            raise ValueError(f"Missing column: {col}")
+    try:
+        # ✅ Get CM% from KPI engine
+        cm_df = compute_cm_margin(pnl_df)
 
-    # Filter for Q1 FY26 months
-    target_months = ["Apr'25", "May'25", "Jun'25"]
-    df = pnl_df[pnl_df['Month'].isin(target_months)].copy()
+        # ✅ Check expected columns
+        required_columns = ["Quarter", "CM%", "Company Code"]
+        for col in required_columns:
+            if col not in cm_df.columns:
+                st.error(f"Missing column in KPI output: {col}")
+                return
 
-    # Calculate Contribution Margin %
-    df['CM%'] = (df['Revenue'] - df['Cost']) / df['Revenue']
+        # ✅ Use most recent quarter
+        latest_qtr = cm_df["Quarter"].max()
+        st.write(f"🔎 Showing results for: **{latest_qtr}**")
 
-    # Filter accounts with CM% < 30%
-    flagged = df[df['CM%'] < 0.3][['Final Customer Name', 'Month', 'CM%']]
-    return flagged.sort_values(by=['Final Customer Name', 'Month'])
+        # ✅ Filter for CM% < 30
+        filtered_df = cm_df[(cm_df["Quarter"] == latest_qtr) & (cm_df["CM%"] < 30)]
 
-def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame = None):
-    """
-    Executes the analysis for Question 1.
-    """
-    flagged_accounts = analyze_low_cm_accounts(pnl_df)
-    return {
-        "summary": f"Identified {flagged_accounts['Final Customer Name'].nunique()} accounts with contribution margin below 30% during Q1 FY26.",
-        "table": flagged_accounts
-    }
+        if filtered_df.empty:
+            st.success(f"No accounts had CM% < 30 in {latest_qtr}.")
+            return
+
+        # ✅ Show result
+        st.write("📉 Accounts with low margin:")
+        st.dataframe(filtered_df[["Company Code", "Quarter", "CM%"]])
+
+    except Exception as e:
+        st.error(f"❌ Error running Q1 logic: {e}")
