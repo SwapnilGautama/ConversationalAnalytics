@@ -9,7 +9,7 @@ from openai import OpenAI
 # Initialize OpenAI client
 client = OpenAI()
 
-# Optional: Cache folder to avoid repeated embedding calls
+# Cache folder for prompt embeddings
 CACHE_DIR = "utils/.embedding_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -28,37 +28,34 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 def get_embedding_cache_path(text):
-    """Generate file path for caching based on text hash"""
+    """Generate cache file path based on hashed input text"""
     text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return os.path.join(CACHE_DIR, f"{text_hash}.json")
 
 def get_cached_prompt_embedding(text):
-    """Retrieve embedding from cache or generate and store if not found"""
+    """Retrieve embedding from cache or generate and store it"""
     cache_path = get_embedding_cache_path(text)
     if os.path.exists(cache_path):
-        with open(cache_path, "r") as f:
-            return json.load(f)
-    else:
-        embedding = get_embedding(text)
-        with open(cache_path, "w") as f:
-            json.dump(embedding, f)
-        return embedding
+        try:
+            with open(cache_path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            # If corrupted, delete and regenerate
+            os.remove(cache_path)
+
+    embedding = get_embedding(text)
+    # Convert to list explicitly to ensure JSON serializability
+    embedding_list = list(embedding)
+    with open(cache_path, "w") as f:
+        json.dump(embedding_list, f)
+    return embedding_list
 
 def get_user_embedding(user_query):
-    """Fetch embedding for user input without caching"""
+    """Get embedding for user's query (no caching for live queries)"""
     return get_embedding(user_query)
 
 def get_best_matching_question(user_query: str, prompt_bank: dict):
-    """
-    Compute the best matching prompt ID using cosine similarity.
-
-    Args:
-        user_query (str): User's question.
-        prompt_bank (dict): Dictionary of prompt_id -> question string.
-
-    Returns:
-        str: Best matching question ID (e.g., 'q3')
-    """
+    """Return the best matching prompt ID from the prompt bank"""
     user_embedding = get_user_embedding(user_query)
     scores = {}
 
