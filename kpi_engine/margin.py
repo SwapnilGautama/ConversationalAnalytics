@@ -1,43 +1,43 @@
-# kpi_engine/margin.py
-
 import pandas as pd
 
-def load_pnl_data(filepath, sheet_name="LnTPnL"):
-    try:
-        df = pd.read_excel(filepath, sheet_name=sheet_name, engine="openpyxl")
-        return df
-    except Exception as e:
-        raise RuntimeError(f"Failed to load data: {e}")
-
 def preprocess_pnl_data(df):
-    df.columns = df.columns.str.strip()
+    # Normalize column names
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Rename for consistency using correct column names from your data
+    # Rename to standardized names
     df = df.rename(columns={
-        'Month': 'Month',
         'Company_Code': 'Client',
-        'Amount in INR': 'Amount',
+        'Amount in Inr': 'Amount',
+        'Month': 'Month',
         'Type': 'Type'
     })
 
-    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-
-    # Clean & filter
-    df = df[df['Type'].isin(['Cost', 'Revenue'])]
+    # Ensure 'Amount' is numeric
     df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-    df = df.dropna(subset=['Month', 'Client', 'Amount'])
-
+    
     return df
 
-def calculate_margin(df):
-    # Pivot to get Revenue and Cost per Client-Month
-    pivot_df = df.pivot_table(index=['Client', 'Month'], columns='Type', values='Amount', aggfunc='sum').reset_index()
+def compute_margin(pnl_df):
+    # Clean column names again for safety
+    pnl_df.columns = pnl_df.columns.str.strip()
 
-    # Fill missing values
-    pivot_df = pivot_df.fillna(0)
+    # Check necessary fields exist
+    required_cols = ['Client', 'Type', 'Month', 'Amount']
+    for col in required_cols:
+        if col not in pnl_df.columns:
+            raise KeyError(f"Missing column: '{col}' in P&L data")
 
-    # Calculate margin %
-    pivot_df['Margin %'] = ((pivot_df['Revenue'] - pivot_df['Cost']) / pivot_df['Revenue']) * 100
-    pivot_df['Margin %'] = pivot_df['Margin %'].round(2)
+    # Filter Revenue and Cost
+    revenue_df = pnl_df[pnl_df['Type'].str.lower() == 'revenue']
+    cost_df = pnl_df[pnl_df['Type'].str.lower() == 'cost']
 
-    return pivot_df
+    # Group by Client and Month
+    revenue_grouped = revenue_df.groupby(['Client', 'Month'])['Amount'].sum().reset_index()
+    cost_grouped = cost_df.groupby(['Client', 'Month'])['Amount'].sum().reset_index()
+
+    # Merge and compute CM%
+    margin_df = pd.merge(revenue_grouped, cost_grouped, on=['Client', 'Month'], suffixes=('_revenue', '_cost'))
+    margin_df['CM%'] = ((margin_df['Amount_revenue'] - margin_df['Amount_cost']) / margin_df['Amount_revenue']) * 100
+    margin_df = margin_df.rename(columns={'Amount_revenue': 'Revenue', 'Amount_cost': 'Cost'})
+
+    return margin_df
