@@ -1,93 +1,54 @@
 # app.py
 
 import streamlit as st
-import openai
-import pandas as pd
+from semantic_matcher import get_best_matching_question
 import importlib
-from utils.semantic_matcher import get_best_matching_question, PROMPT_BANK
-from config.prompt_bank import PROMPT_BANK
+import os
+from kpi_engine import margin
 
-# Set OpenAI API Key
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-
-st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
-
-# Load data files into session state (only once)
-@st.cache_resource
+# Load and cache data
+@st.cache_data
 def load_data():
-    try:
-        pnl_df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL")
-        ut_df = pd.read_excel("sample_data/LNTData.xlsx", sheet_name="LNTData")
-        return pnl_df, ut_df
-    except Exception as e:
-        st.error(f"Failed to load Excel files: {e}")
-        return None, None
+    filepath = "LnTPnL.xlsx"
+    df = margin.load_pnl_data(filepath)
+    df = margin.preprocess_pnl_data(df)
+    return df
 
-if "pnl_df" not in st.session_state or "ut_df" not in st.session_state:
-    pnl_df, ut_df = load_data()
-    st.session_state["pnl_df"] = pnl_df
-    st.session_state["ut_df"] = ut_df
+df = load_data()
 
-# Header / Landing message
-st.title("📊 LTTS BI Assistant")
+# UI
+st.title("AI-Powered Business Insights Chatbot")
+
 st.markdown("""
-Welcome to the LTTS BI Assistant! This tool helps you analyze performance trends using P&L and Utilization data.
+Welcome to the Business Insights Assistant!  
+**This app uses the P&L data from the `LnTPnL.xlsx` file.**  
+You can ask questions related to:
+- Margins
+- Cost breakdown
+- Revenue trends
+- Utilization
+- Headcount and more
 
-✅ Use this assistant to:
-- Understand revenue, cost, margin, headcount, and utilization trends
-- Ask natural language questions like:
-    - "Which accounts had CM% < 30 in the last quarter?"
-    - "What caused the margin drop in Transportation?"
-    - "Show UT% trends for the last 2 quarters"
-
-👉 Type your question below to get started:
+Example questions:
+- "Which clients had a margin less than 30% last quarter?"
+- "Which costs increased in the transportation account?"
 """)
 
-# User input
-user_question = st.text_input("Ask your business question:", key="user_input")
+user_query = st.text_input("Ask your question:")
 
-# Session state for conversation history
-if "history" not in st.session_state:
-    st.session_state.history = []
+if user_query:
+    matched_question_id = get_best_matching_question(user_query)
 
-# Response placeholder
-response_container = st.container()
-
-# Main app logic
-if user_question:
-    best_qid = get_best_matching_question(user_question, PROMPT_BANK)
-
-    if best_qid:
-        st.success(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
+    if matched_question_id:
+        st.markdown(f"**Matched Question:** {matched_question_id}")
 
         try:
-            # Dynamically import the appropriate module
-            question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
-            result = question_module.run(
-                st.session_state["pnl_df"], 
-                st.session_state["ut_df"]
-            )
-
-            with response_container:
-                st.write(result.get("summary"))
-                if "table" in result:
-                    st.dataframe(result["table"])
-                if "chart" in result:
-                    st.pyplot(result["chart"])
-
-            st.session_state.history.append((user_question, result.get("summary")))
+            module_path = f"questions.question_{matched_question_id}"
+            question_module = importlib.import_module(module_path)
+            result = question_module.run(df)
+            st.success("Here is the result:")
+            st.write(result)
         except Exception as e:
-            st.error(f"❌ Error running analysis: {e}")
+            st.error(f"Failed to load or run question module: {e}")
     else:
-        st.warning("⚠️ Couldn’t match your question. Try rephrasing or be more specific.")
-
-# Suggestions
-if user_question:
-    st.markdown("---")
-    st.info("**Try asking next:**\n- MoM headcount trend\n- Realized rate drop > $5\n- DU-wise fresher UT%")
-
-# History
-with st.expander("🔁 Show previous questions"):
-    for i, (q, a) in enumerate(st.session_state.history[::-1]):
-        st.markdown(f"**Q{i+1}:** {q}")
-        st.markdown(f"_A:_ {a}")
+        st.error("Could not understand your question.")
