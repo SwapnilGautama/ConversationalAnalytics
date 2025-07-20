@@ -1,38 +1,18 @@
-# question_q1.py
+# questions/question_q1.py
 
 import pandas as pd
-from kpi_engine.margin import compute_margin
 
-def answer(df_pnl: pd.DataFrame, df_ut: pd.DataFrame = None):
-    """
-    Which accounts had CM% < 30 in the last quarter?
-    """
+def run(df):
+    df = df.copy()
+    df['Quarter'] = df['Month'].dt.to_period('Q')
 
-    # Compute margin KPIs
-    df_margin = compute_margin(df_pnl)
+    # Use latest quarter
+    latest_qtr = df['Quarter'].max()
+    filtered = df[df['Quarter'] == latest_qtr]
+    result = filtered[filtered['Margin %'] < 30]
 
-    # Extract last quarter from the data
-    latest_quarter = df_margin['Quarter'].max()
+    if result.empty:
+        return "No accounts with margin below 30% in the latest quarter."
 
-    # Filter for CM% < 30 in last quarter
-    df_filtered = df_margin[
-        (df_margin['Quarter'] == latest_quarter) &
-        (df_margin['CM%'] < 30)
-    ]
-
-    if df_filtered.empty:
-        return {
-            "answer": f"No accounts had CM% below 30 in the last quarter ({latest_quarter}).",
-            "tables": [],
-            "charts": []
-        }
-
-    summary_text = f"{len(df_filtered)} accounts had CM% below 30 in the last quarter ({latest_quarter})."
-
-    result_table = df_filtered[['Company Code', 'Quarter', 'Revenue', 'Cost', 'CM%', 'Margin']].sort_values(by='CM%')
-
-    return {
-        "answer": summary_text,
-        "tables": [result_table],
-        "charts": []
-    }
+    summary = result.groupby('Client')[['Margin %']].mean().sort_values('Margin %').reset_index()
+    return summary
