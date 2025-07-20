@@ -47,7 +47,7 @@ def cosine_similarity(a, b):
 
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def get_best_matching_question(user_query):
+def get_best_matching_question(user_query, prompt_bank):
     user_embedding = get_embedding(user_query)
     if user_embedding is None or sum(user_embedding) == 0.0:
         logging.error("Failed to get user embedding.")
