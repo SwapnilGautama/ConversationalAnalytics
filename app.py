@@ -16,8 +16,8 @@ st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 @st.cache_resource
 def load_data():
     try:
-        pnl_df = pd.read_excel("data/LnTPnL.xlsx", sheet_name="LnTPnL")
-        ut_df = pd.read_excel("data/LNTData.xlsx", sheet_name="LNTData")
+        pnl_df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL")
+        ut_df = pd.read_excel("sample_data/LNTData.xlsx", sheet_name="LNTData")
         return pnl_df, ut_df
     except Exception as e:
         st.error(f"Failed to load Excel files: {e}")
