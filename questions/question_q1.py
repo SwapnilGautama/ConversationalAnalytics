@@ -1,6 +1,7 @@
 # questions/question_q1.py
 
 import pandas as pd
+from kpi_engine.margin import compute_margin  # NOT compute_cm_margin
 
 def run(df):
     df = df.copy()
