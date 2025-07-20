@@ -4,15 +4,18 @@ import pandas as pd
 
 def run(df):
     df = df.copy()
-    df['Quarter'] = df['Month'].dt.to_period('Q')
+    df['Quarter'] = df['Month'].dt.to_period("Q")
 
-    # Use latest quarter
+    # Get latest quarter
     latest_qtr = df['Quarter'].max()
-    filtered = df[df['Quarter'] == latest_qtr]
-    result = filtered[filtered['Margin %'] < 30]
+    latest_df = df[df['Quarter'] == latest_qtr]
+
+    # Filter accounts with CM% < 30
+    result = latest_df[latest_df['Margin %'] < 30]
 
     if result.empty:
-        return "No accounts with margin below 30% in the latest quarter."
+        return "🎯 No accounts had margin < 30% in the latest quarter."
 
     summary = result.groupby('Client')[['Margin %']].mean().sort_values('Margin %').reset_index()
+    summary.columns = ['Client', 'Avg Margin %']
     return summary
