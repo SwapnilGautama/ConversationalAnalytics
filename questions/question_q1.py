@@ -38,11 +38,14 @@ def run(df):
     proportion = (low_margin_count / total_clients * 100) if total_clients else 0
 
     summary = (
-        f"🔍 In the last quarter, {low_margin_count} accounts had an average margin below 30% "
-        f"— which is {proportion:.1f}% of all {total_clients} accounts."
+        f"🔍 **In the last quarter**, **{low_margin_count} accounts** had an average margin below **30%** "
+        f"— which is **{proportion:.1f}%** of all **{total_clients} accounts**."
     )
+
+    # Sort for display
+    low_margin_clients = low_margin_clients.sort_values("Avg Margin %")
 
     return {
         "summary": summary,
-        "table": low_margin_clients.sort_values("Avg Margin %"),
+        "table": low_margin_clients
     }
