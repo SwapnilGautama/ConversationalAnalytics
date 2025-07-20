@@ -1,66 +1,66 @@
 # utils/semantic_matcher.py
 
+import openai
 import os
-import json
-import hashlib
 import numpy as np
-from openai import OpenAI
+import logging
 
-# Initialize OpenAI client
-client = OpenAI()
+# Set your OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Cache folder for prompt embeddings
-CACHE_DIR = "utils/.embedding_cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
+# Prompt bank for 10 questions
+PROMPT_BANK = {
+    "q1": "Accounts with CM% < 30 in last quarter",
+    "q2": "Which cost triggered the margin drop in transportation",
+    "q3": "C&B cost variation from last quarter to this",
+    "q4": "MoM trend of C&B cost % w.r.t. revenue",
+    "q5": "YoY, QoQ, MoM revenue trend for an account",
+    "q6": "Accounts where realized rate dropped more than $3 or $5",
+    "q7": "MoM Headcount change for an account",
+    "q8": "Revenue per person trend by account",
+    "q9": "UT% trend for last 2 quarters",
+    "q10": "DU-wise fresher UT trends"
+}
+
+# Embedding cache (optional – speeds up matching)
+EMBEDDING_CACHE = {}
 
 def get_embedding(text):
-    """Fetch embedding using OpenAI API"""
-    response = client.embeddings.create(
-        input=[text],
-        model="text-embedding-ada-002"
-    )
-    return response.data[0].embedding
+    if text in EMBEDDING_CACHE:
+        return EMBEDDING_CACHE[text]
+
+    try:
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        embedding = response["data"][0]["embedding"]
+        EMBEDDING_CACHE[text] = embedding
+        return embedding
+    except Exception as e:
+        logging.error(f"Embedding failed for '{text}': {e}")
+        return None
 
 def cosine_similarity(a, b):
-    """Compute cosine similarity between two vectors"""
+    if a is None or b is None:
+        return -1  # Lowest possible similarity
+
     a = np.array(a)
     b = np.array(b)
+
+    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+        return -1
+
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def get_embedding_cache_path(text):
-    """Generate cache file path based on hashed input text"""
-    text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return os.path.join(CACHE_DIR, f"{text_hash}.json")
+def get_best_matching_question(user_query):
+    user_embedding = get_embedding(user_query)
+    if user_embedding is None:
+        return None  # or return "q1" as fallback
 
-def get_cached_prompt_embedding(text):
-    """Retrieve embedding from cache or generate and store it"""
-    cache_path = get_embedding_cache_path(text)
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            # If corrupted, delete and regenerate
-            os.remove(cache_path)
-
-    embedding = get_embedding(text)
-    # Convert to list explicitly to ensure JSON serializability
-    embedding_list = list(embedding)
-    with open(cache_path, "w") as f:
-        json.dump(embedding_list, f)
-    return embedding_list
-
-def get_user_embedding(user_query):
-    """Get embedding for user's query (no caching for live queries)"""
-    return get_embedding(user_query)
-
-def get_best_matching_question(user_query: str, prompt_bank: dict):
-    """Return the best matching prompt ID from the prompt bank"""
-    user_embedding = get_user_embedding(user_query)
     scores = {}
-
-    for key, prompt in prompt_bank.items():
-        prompt_embedding = get_cached_prompt_embedding(prompt)
+    for key, prompt in PROMPT_BANK.items():
+        prompt_embedding = get_embedding(prompt)
         similarity = cosine_similarity(user_embedding, prompt_embedding)
         scores[key] = similarity
 
