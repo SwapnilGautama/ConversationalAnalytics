@@ -1,10 +1,13 @@
 # utils/semantic_matcher.py
 
-import openai
 import os
-import numpy as np
-import hashlib
 import json
+import hashlib
+import numpy as np
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI()
 
 # Optional: Cache folder to avoid repeated embedding calls
 CACHE_DIR = "utils/.embedding_cache"
@@ -12,16 +15,11 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 def get_embedding(text):
     """Fetch embedding using OpenAI API"""
-    from openai import OpenAI
-client = OpenAI()
-
-def get_embedding(text):
     response = client.embeddings.create(
         input=[text],
         model="text-embedding-ada-002"
     )
     return response.data[0].embedding
-
 
 def cosine_similarity(a, b):
     """Compute cosine similarity between two vectors"""
@@ -53,7 +51,7 @@ def get_user_embedding(user_query):
 def get_best_matching_question(user_query: str, prompt_bank: dict):
     """
     Compute the best matching prompt ID using cosine similarity.
-    
+
     Args:
         user_query (str): User's question.
         prompt_bank (dict): Dictionary of prompt_id -> question string.
