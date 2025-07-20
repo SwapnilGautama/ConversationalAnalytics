@@ -1,37 +1,44 @@
 # ✅ FILE: questions/question_q1.py
 
 import pandas as pd
-import streamlit as st
-from kpi_engine.cm_margin import compute_cm_margin  # Prebuilt KPI
+from kpi_engine.margin import compute_cm_margin  # Make sure this is the correct file
 
-def run_question(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
-    st.subheader("Accounts with CM% < 30 in the Last Quarter")
-
+def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
     try:
-        # ✅ Get CM% from KPI engine
+        # Get CM% from KPI engine
         cm_df = compute_cm_margin(pnl_df)
 
-        # ✅ Check expected columns
+        # Ensure expected columns exist
         required_columns = ["Quarter", "CM%", "Company Code"]
         for col in required_columns:
             if col not in cm_df.columns:
-                st.error(f"Missing column in KPI output: {col}")
-                return
+                return {
+                    "summary": f"❌ Missing column in KPI output: {col}",
+                    "table": pd.DataFrame(),
+                }
 
-        # ✅ Use most recent quarter
+        # Use most recent quarter
         latest_qtr = cm_df["Quarter"].max()
-        st.write(f"🔎 Showing results for: **{latest_qtr}**")
 
-        # ✅ Filter for CM% < 30
+        # Filter for CM% < 30
         filtered_df = cm_df[(cm_df["Quarter"] == latest_qtr) & (cm_df["CM%"] < 30)]
 
         if filtered_df.empty:
-            st.success(f"No accounts had CM% < 30 in {latest_qtr}.")
-            return
+            return {
+                "summary": f"No accounts had CM% < 30 in {latest_qtr}.",
+                "table": pd.DataFrame(),
+            }
 
-        # ✅ Show result
-        st.write("📉 Accounts with low margin:")
-        st.dataframe(filtered_df[["Company Code", "Quarter", "CM%"]])
+        summary = f"📉 These accounts had CM% < 30 in **{latest_qtr}**:"
+        table = filtered_df[["Company Code", "Quarter", "CM%"]].reset_index(drop=True)
+
+        return {
+            "summary": summary,
+            "table": table,
+        }
 
     except Exception as e:
-        st.error(f"❌ Error running Q1 logic: {e}")
+        return {
+            "summary": f"❌ Error running Q1 logic: {str(e)}",
+            "table": pd.DataFrame(),
+        }
