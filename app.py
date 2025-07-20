@@ -1,54 +1,61 @@
 # app.py
 
 import streamlit as st
-from semantic_matcher import get_best_matching_question
+from utils.semantic_matcher import get_best_matching_question
 import importlib
-import os
 from kpi_engine import margin
+import os
 
-# Load and cache data
+# ✅ Load data from sample_data folder
 @st.cache_data
 def load_data():
-    filepath = "LnTPnL.xlsx"
+    filepath = os.path.join("sample_data", "LnTPnL.xlsx")
     df = margin.load_pnl_data(filepath)
     df = margin.preprocess_pnl_data(df)
     return df
 
 df = load_data()
 
-# UI
-st.title("AI-Powered Business Insights Chatbot")
+# Prompt bank (from Q1 to Q10)
+PROMPT_BANK = {
+    "q1": "Which accounts had CM% < 30 in the last quarter?",
+    "q2": "What caused the margin drop in Transportation?",
+    "q3": "Show UT% trends for the last 2 quarters",
+    "q4": "Which clients have the highest costs this year?",
+    # ... (q5 to q10, optional)
+}
+
+# Streamlit UI
+st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
+st.title("📊 LTTS BI Assistant")
 
 st.markdown("""
-Welcome to the Business Insights Assistant!  
-**This app uses the P&L data from the `LnTPnL.xlsx` file.**  
-You can ask questions related to:
-- Margins
-- Cost breakdown
-- Revenue trends
-- Utilization
-- Headcount and more
+Welcome to the LTTS BI Assistant! This tool helps you analyze performance trends using P&L and Utilization data.
 
-Example questions:
-- "Which clients had a margin less than 30% last quarter?"
-- "Which costs increased in the transportation account?"
+✅ Use this assistant to:
+- Understand revenue, cost, margin, headcount, and utilization trends
+- Ask natural language questions like:
+    - "Which accounts had CM% < 30 in the last quarter?"
+    - "What caused the margin drop in Transportation?"
+    - "Show UT% trends for the last 2 quarters"
+
+👉 Type your question below to get started:
 """)
 
-user_query = st.text_input("Ask your question:")
+# Input box
+user_question = st.text_input("Ask your business question:")
 
-if user_query:
-    matched_question_id = get_best_matching_question(user_query)
+# Main logic
+if user_question:
+    try:
+        best_qid = get_best_matching_question(user_question, PROMPT_BANK)
+        st.info(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
 
-    if matched_question_id:
-        st.markdown(f"**Matched Question:** {matched_question_id}")
+        question_module = importlib.import_module(f"questions.question_{best_qid}")
+        result = question_module.run(df)
 
-        try:
-            module_path = f"questions.question_{matched_question_id}"
-            question_module = importlib.import_module(module_path)
-            result = question_module.run(df)
-            st.success("Here is the result:")
-            st.write(result)
-        except Exception as e:
-            st.error(f"Failed to load or run question module: {e}")
-    else:
-        st.error("Could not understand your question.")
+        st.success("✅ Analysis complete.")
+        st.write(result)
+
+    except Exception as e:
+        st.error(f"❌ Error running analysis: {e}")
