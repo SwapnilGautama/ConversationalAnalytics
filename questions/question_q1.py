@@ -4,7 +4,7 @@ import pandas as pd
 from kpi_engine.margin import compute_margin
 from dateutil.relativedelta import relativedelta
 
-def run_question(df):
+def run(df):
     df_margin = compute_margin(df)
 
     if "Month" not in df_margin or "Client" not in df_margin or "Margin %" not in df_margin:
