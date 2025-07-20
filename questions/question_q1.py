@@ -1,44 +1,38 @@
-# ✅ FILE: questions/question_q1.py
+# question_q1.py
 
 import pandas as pd
-from kpi_engine.margin import compute_margin_kpi  # ✅ corrected name
+from kpi_engine.margin import compute_margin
 
-def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
-    try:
-        # Call correct KPI function
-        cm_df = compute_margin_kpi(pnl_df)
+def answer(df_pnl: pd.DataFrame, df_ut: pd.DataFrame = None):
+    """
+    Which accounts had CM% < 30 in the last quarter?
+    """
 
-        # Ensure expected columns exist
-        required_columns = ["Quarter", "CM%", "Company Code"]
-        for col in required_columns:
-            if col not in cm_df.columns:
-                return {
-                    "summary": f"❌ Missing column in KPI output: {col}",
-                    "table": pd.DataFrame(),
-                }
+    # Compute margin KPIs
+    df_margin = compute_margin(df_pnl)
 
-        # Use most recent quarter
-        latest_qtr = cm_df["Quarter"].max()
+    # Extract last quarter from the data
+    latest_quarter = df_margin['Quarter'].max()
 
-        # Filter for CM% < 30
-        filtered_df = cm_df[(cm_df["Quarter"] == latest_qtr) & (cm_df["CM%"] < 30)]
+    # Filter for CM% < 30 in last quarter
+    df_filtered = df_margin[
+        (df_margin['Quarter'] == latest_quarter) &
+        (df_margin['CM%'] < 30)
+    ]
 
-        if filtered_df.empty:
-            return {
-                "summary": f"No accounts had CM% < 30 in {latest_qtr}.",
-                "table": pd.DataFrame(),
-            }
-
-        summary = f"📉 These accounts had CM% < 30 in **{latest_qtr}**:"
-        table = filtered_df[["Company Code", "Quarter", "CM%"]].reset_index(drop=True)
-
+    if df_filtered.empty:
         return {
-            "summary": summary,
-            "table": table,
+            "answer": f"No accounts had CM% below 30 in the last quarter ({latest_quarter}).",
+            "tables": [],
+            "charts": []
         }
 
-    except Exception as e:
-        return {
-            "summary": f"❌ Error running Q1 logic: {str(e)}",
-            "table": pd.DataFrame(),
-        }
+    summary_text = f"{len(df_filtered)} accounts had CM% below 30 in the last quarter ({latest_quarter})."
+
+    result_table = df_filtered[['Company Code', 'Quarter', 'Revenue', 'Cost', 'CM%', 'Margin']].sort_values(by='CM%')
+
+    return {
+        "answer": summary_text,
+        "tables": [result_table],
+        "charts": []
+    }
