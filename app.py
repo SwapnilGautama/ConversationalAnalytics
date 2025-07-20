@@ -3,10 +3,10 @@ import openai
 import importlib
 from utils.semantic_matcher import get_best_matching_question
 from config.prompt_bank import PROMPT_BANK
-from config.openai_config import OPENAI_API_KEY
+
 
 # Set OpenAI API Key
-openai.api_key = OPENAI_API_KEY
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
