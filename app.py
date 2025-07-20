@@ -1,12 +1,13 @@
+# app.py
+
 import streamlit as st
 import openai
 import importlib
 from utils.semantic_matcher import get_best_matching_question
 from config.prompt_bank import PROMPT_BANK
 
-
 # Set OpenAI API Key
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
@@ -25,30 +26,31 @@ Welcome to the LTTS BI Assistant! This tool helps you analyze performance trends
 👉 Type your question below to get started:
 """)
 
-# Question input
+# User input
 user_question = st.text_input("Ask your business question:", key="user_input")
 
-# Placeholder for output
-response_container = st.container()
-
-# Optional: History to maintain conversational tone (reset each session)
+# Session state for conversation history
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Run analysis and display result
+# Response placeholder
+response_container = st.container()
+
+# Main app logic
 if user_question:
-    # Match user question to best Q1–Q10 match
     best_qid = get_best_matching_question(user_question, PROMPT_BANK)
 
     if best_qid:
         st.success(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
 
-        # Dynamically import and run the matched question module
         try:
+            # Dynamically import the appropriate module
             question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
-            result = question_module.run(user_question)
+            result = question_module.run(
+                st.session_state.get("pnl_df"), 
+                st.session_state.get("ut_df")
+            )
 
-            # Show the result
             with response_container:
                 st.write(result.get("summary"))
                 if "table" in result:
@@ -56,19 +58,18 @@ if user_question:
                 if "chart" in result:
                     st.pyplot(result["chart"])
 
-                # Save to history
                 st.session_state.history.append((user_question, result.get("summary")))
         except Exception as e:
-            st.error(f"❌ Error running the analysis: {e}")
+            st.error(f"❌ Error running analysis: {e}")
     else:
-        st.warning("Sorry, I couldn’t match your question to a known analysis. Try rephrasing.")
+        st.warning("⚠️ Couldn’t match your question. Try rephrasing or be more specific.")
 
-# Post-answer suggestions
+# Suggestions
 if user_question:
     st.markdown("---")
-    st.info("**You can also try asking:**\n- What is the M-o-M headcount trend?\n- Revenue per person by account\n- DU-wise fresher UT trends")
+    st.info("**Try asking next:**\n- MoM headcount trend\n- Realized rate drop > $5\n- DU-wise fresher UT%")
 
-# Optional: Show Q&A history
+# History
 with st.expander("🔁 Show previous questions"):
     for i, (q, a) in enumerate(st.session_state.history[::-1]):
         st.markdown(f"**Q{i+1}:** {q}")
