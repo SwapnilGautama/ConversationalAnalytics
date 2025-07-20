@@ -15,7 +15,7 @@ def preprocess_pnl_data(df):
     # Rename for consistency using correct column names from your data
     df = df.rename(columns={
         'Month': 'Month',
-        'Company_code': 'Client',
+        'Company_Code': 'Client',
         'Amount in INR': 'Amount',
         'Type': 'Type'
     })
