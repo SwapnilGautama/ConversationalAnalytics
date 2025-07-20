@@ -1,12 +1,12 @@
 # ✅ FILE: questions/question_q1.py
 
 import pandas as pd
-from kpi_engine.margin import compute_cm_margin  # Make sure this is the correct file
+from kpi_engine.margin import compute_margin  # Make sure this is the correct file
 
 def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
     try:
         # Get CM% from KPI engine
-        cm_df = compute_cm_margin(pnl_df)
+        cm_df = compute_margin(pnl_df)
 
         # Ensure expected columns exist
         required_columns = ["Quarter", "CM%", "Company Code"]
