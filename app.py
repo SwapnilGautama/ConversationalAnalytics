@@ -5,16 +5,28 @@ from utils.semantic_matcher import get_best_matching_question
 import importlib
 from kpi_engine import margin
 import os
+import pandas as pd
 
 # ✅ Load data from sample_data folder
 @st.cache_data
 def load_data():
     filepath = os.path.join("sample_data", "LnTPnL.xlsx")
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"File not found at path: {filepath}")
+
     df = margin.load_pnl_data(filepath)
     df = margin.preprocess_pnl_data(df)
+
+    if df.empty:
+        raise ValueError("Loaded P&L data is empty after preprocessing.")
+
     return df
 
-df = load_data()
+try:
+    df = load_data()
+except Exception as e:
+    st.error(f"❌ Failed to load data: {e}")
+    st.stop()
 
 # Prompt bank (from Q1 to Q10)
 PROMPT_BANK = {
@@ -22,7 +34,12 @@ PROMPT_BANK = {
     "q2": "What caused the margin drop in Transportation?",
     "q3": "Show UT% trends for the last 2 quarters",
     "q4": "Which clients have the highest costs this year?",
-    # ... (q5 to q10, optional)
+    "q5": "Show YoY, QoQ and MoM revenue trends for a client",
+    "q6": "Highlight accounts where realized rate dropped > $3 or $5",
+    "q7": "What is the MoM headcount change for an account?",
+    "q8": "Revenue per person trend by account",
+    "q9": "Utilization % trend across accounts",
+    "q10": "DU-wise fresher UT trends"
 }
 
 # Streamlit UI
@@ -30,16 +47,14 @@ st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 st.title("📊 LTTS BI Assistant")
 
 st.markdown("""
-Welcome to the LTTS BI Assistant! This tool helps you analyze performance trends using P&L and Utilization data.
+Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 
-✅ Use this assistant to:
-- Understand revenue, cost, margin, headcount, and utilization trends
-- Ask natural language questions like:
-    - "Which accounts had CM% < 30 in the last quarter?"
-    - "What caused the margin drop in Transportation?"
-    - "Show UT% trends for the last 2 quarters"
+✅ You can ask questions such as:
+- *Which accounts had CM% < 30 in the last quarter?*
+- *What caused the margin drop in Transportation?*
+- *Show UT% trends for the last 2 quarters*
 
-👉 Type your question below to get started:
+👉 **Start by typing your business question below**:
 """)
 
 # Input box
@@ -55,7 +70,14 @@ if user_question:
         result = question_module.run(df)
 
         st.success("✅ Analysis complete.")
-        st.write(result)
+        if isinstance(result, pd.DataFrame):
+            st.dataframe(result)
+        elif isinstance(result, str):
+            st.markdown(result)
+        else:
+            st.write(result)
 
+    except ModuleNotFoundError as e:
+        st.error(f"❌ Could not load analysis script for {best_qid}: {e}")
     except Exception as e:
         st.error(f"❌ Error running analysis: {e}")
