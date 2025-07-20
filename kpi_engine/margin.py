@@ -3,10 +3,10 @@ import pandas as pd
 def preprocess_pnl_data(df):
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
     df = df.rename(columns={
-        'company_code': 'Client',
-        'amount_in_inr': 'Amount',
-        'month': 'Month',
-        'type': 'Type'
+        'Company_Code': 'Client',
+        'Amount in Inr': 'Amount',
+        'Month': 'Month',
+        'Type': 'Type'
     })
     df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
     return df
