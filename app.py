@@ -2,6 +2,7 @@
 
 import streamlit as st
 import openai
+import pandas as pd
 import importlib
 from utils.semantic_matcher import get_best_matching_question
 from config.prompt_bank import PROMPT_BANK
@@ -10,6 +11,22 @@ from config.prompt_bank import PROMPT_BANK
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
+
+# Load data files into session state (only once)
+@st.cache_resource
+def load_data():
+    try:
+        pnl_df = pd.read_excel("data/LnTPnL.xlsx", sheet_name="LnTPnL")
+        ut_df = pd.read_excel("data/LNTData.xlsx", sheet_name="LNTData")
+        return pnl_df, ut_df
+    except Exception as e:
+        st.error(f"Failed to load Excel files: {e}")
+        return None, None
+
+if "pnl_df" not in st.session_state or "ut_df" not in st.session_state:
+    pnl_df, ut_df = load_data()
+    st.session_state["pnl_df"] = pnl_df
+    st.session_state["ut_df"] = ut_df
 
 # Header / Landing message
 st.title("📊 LTTS BI Assistant")
@@ -47,8 +64,8 @@ if user_question:
             # Dynamically import the appropriate module
             question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
             result = question_module.run(
-                st.session_state.get("pnl_df"), 
-                st.session_state.get("ut_df")
+                st.session_state["pnl_df"], 
+                st.session_state["ut_df"]
             )
 
             with response_container:
@@ -58,7 +75,7 @@ if user_question:
                 if "chart" in result:
                     st.pyplot(result["chart"])
 
-                st.session_state.history.append((user_question, result.get("summary")))
+            st.session_state.history.append((user_question, result.get("summary")))
         except Exception as e:
             st.error(f"❌ Error running analysis: {e}")
     else:
