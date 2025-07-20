@@ -1,3 +1,4 @@
 streamlit
 openai>=1.2.3
 pandas
+openpyxl
