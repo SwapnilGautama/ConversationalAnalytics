@@ -52,6 +52,10 @@ def compute_margin(df):
     # Calculate margin and CM%
     grouped['Margin'] = grouped['Revenue'] - grouped['Cost']
     grouped['CM%'] = (grouped['Margin'] / grouped['Revenue']) * 100
+
+    # ✅ Add Margin % alias to satisfy question_q1.py expectations
+    grouped['Margin %'] = grouped['CM%']
+
     grouped = grouped.reset_index()
 
     return grouped
