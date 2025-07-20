@@ -15,12 +15,18 @@ def preprocess_pnl_data(df):
     # Rename for consistency
     df = df.rename(columns={
         'Month': 'Month',
-        'Company Code': 'Client',
-        'Amount': 'Amount',
+        'Company_Code': 'Client',
+        'Amount in INR': 'Amount',
         'Type': 'Type'
     })
 
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    df = df[df['Type'].isin(['Cost', 'Revenue'])]
+
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+    df = df.dropna(subset=['Month', 'Amount'])
+
+    return df
 
     # Clean & filter
     df = df[df['Type'].isin(['Cost', 'Revenue'])]
