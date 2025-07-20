@@ -1,44 +1,38 @@
-# question_engine/question_q1.py
+# questions/question_q1.py
 
 import pandas as pd
 
 def analyze_low_cm_accounts(pnl_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Returns final customer accounts where CM% < 30 or CM% < 0
-    for any of the months in FY26-Q1 (Apr'25, May'25, Jun'25).
-
+    Returns accounts where CM% < 30% in any month of FY26-Q1 (Apr–Jun 2025).
     CM% = (Revenue - Cost) / Revenue
     """
-    # Ensure relevant columns exist
-    required_columns = [
-        'Final Customer Name', 'Month', 'Revenue', 'Cost'
-    ]
-    for col in required_columns:
-        if col not in pnl_df.columns:
-            raise ValueError(f"Missing required column: {col}")
+    if pnl_df is None or pnl_df.empty:
+        raise ValueError("P&L dataframe is empty or missing.")
 
-    # Filter for months in FY26-Q1
+    required_cols = ['Final Customer Name', 'Month', 'Revenue', 'Cost']
+    for col in required_cols:
+        if col not in pnl_df.columns:
+            raise ValueError(f"Missing column: {col}")
+
+    # Q1 FY26 months
     target_months = ["Apr'25", "May'25", "Jun'25"]
     df = pnl_df[pnl_df['Month'].isin(target_months)].copy()
 
     # Calculate CM%
     df['CM%'] = (df['Revenue'] - df['Cost']) / df['Revenue']
 
-    # Filter rows where CM% < 0.3
-    df_filtered = df[df['CM%'] < 0.3]
-
-    # Get distinct Final Customer Names meeting the condition
-    flagged_accounts = df_filtered[['Final Customer Name', 'Month', 'CM%']]
-
-    return flagged_accounts.sort_values(by=['Final Customer Name', 'Month'])
+    # Filter low CM%
+    flagged = df[df['CM%'] < 0.3][['Final Customer Name', 'Month', 'CM%']]
+    return flagged.sort_values(by=['Final Customer Name', 'Month'])
 
 
-# ✅ Required by the app: wrapper function to expose the module
 def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame = None):
     """
-    Wrapper for question execution. Required by app.py
+    Runs question analysis for low CM% accounts.
     """
+    flagged_accounts = analyze_low_cm_accounts(pnl_df)
     return {
-        "summary": "Accounts with contribution margin below 30% in Q1 FY26",
-        "table": analyze_low_cm_accounts(pnl_df)
+        "summary": f"Identified {flagged_accounts['Final Customer Name'].nunique()} accounts with contribution margin below 30% during Q1 FY26.",
+        "table": flagged_accounts
     }
