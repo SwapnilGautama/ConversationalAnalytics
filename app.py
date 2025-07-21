@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-from utils.semantic_matcher import PROMPT_BANK
+from utils.semantic_matcher import get_best_matching_question, PROMPT_BANK
 import importlib
 from kpi_engine import margin
 import os
@@ -52,7 +52,7 @@ user_question = st.text_input("Ask your business question:")
 # Main logic
 if user_question:
     try:
-        best_qid, matched_prompt = find_best_matching_qid(user_question)
+        best_qid, matched_prompt = find_best_matching_qid(user_question, PROMPT_BANK)
         st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
         # ✅ Call question logic dynamically
