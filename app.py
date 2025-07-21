@@ -52,8 +52,8 @@ user_question = st.text_input("Ask your business question:")
 # Main logic
 if user_question:
     try:
-        best_qid = get_best_matching_question(user_question, PROMPT_BANK)
-        st.info(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
+        best_qid, matched_prompt = find_best_matching_qid(user_question)
+        st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
         # ✅ Call question logic dynamically
         question_module = importlib.import_module(f"questions.question_{best_qid}")
