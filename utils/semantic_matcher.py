@@ -9,7 +9,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 PROMPT_BANK = {
     "q1": "Accounts with CM% < 30 in last quarter",
-    "q2": "Which cost triggered the margin drop in transportation",
+    "q2": "What caused the margin drop in Transportation segment or any other segment",
     "q3": "C&B cost variation from last quarter to this",
     "q4": "MoM trend of C&B cost % w.r.t. revenue",
     "q5": "YoY, QoQ, MoM revenue trend for an account",
