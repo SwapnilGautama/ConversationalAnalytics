@@ -59,7 +59,7 @@ if user_question:
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
 
         # ✅ Pass user_question into run() if it accepts it
-        if "user_query" in question_module.run.__code__.co_varnames:
+        if "user_query" in question_module.run.__code__.co_varnames or "query" in question_module.run.__code__.co_varnames:
             result = question_module.run(user_question, df)
         else:
             result = question_module.run(df)
