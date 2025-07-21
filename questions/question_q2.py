@@ -21,11 +21,14 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     if not segment:
         return {"summary": "❌ Could not identify the segment from the query. Please specify a valid segment."}
 
+    if "segment" not in df_pnl.columns:
+        return {"summary": "❌ 'segment' column not found in the dataset."}
+
     df_filtered = df_pnl[df_pnl["segment"].str.lower() == segment.lower()].copy()
     if df_filtered.empty:
         return {"summary": f"❌ No data found for segment: {segment}"}
 
-    df_margin = calculate_margin(df_filtered)
+    df_margin = compute_margin(df_filtered)
     df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
     df_margin["Quarter"] = df_margin["Quarter"].dt.to_period("Q")
 
