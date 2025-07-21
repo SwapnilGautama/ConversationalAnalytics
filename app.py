@@ -55,8 +55,8 @@ if user_question:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
         st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
-        # ✅ Call question logic dynamically
-        question_module = importlib.import_module(f"questions.question_{best_qid}")
+        # ✅ Lowercase the QID for correct import
+        question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
 
         # ✅ Pass user_question into run() if it accepts it
         if "user_query" in question_module.run.__code__.co_varnames:
