@@ -1,79 +1,70 @@
 import pandas as pd
+import datetime
 import matplotlib.pyplot as plt
 import io
 import base64
+from dateutil.relativedelta import relativedelta
+from kpi_engine.margin import calculate_margin
 
-from kpi_engine.margin import compute_margin_by_quarter
-from utils.helpers import render_table, extract_quarters, return_latest_quarters
 
-def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame = None, **kwargs) -> dict:
-    # Filter for Transportation segment
-    transportation_df = pnl_df[pnl_df["segment"].str.lower() == "transportation"]
+def extract_segment_from_query(query):
+    query = query.lower()
+    keywords = ["transportation", "manufacturing", "utilities", "healthcare", "defense", "aerospace"]  # Add more as needed
+    for k in keywords:
+        if k in query:
+            return k.capitalize()
+    return None
 
-    if transportation_df.empty:
-        return {
-            "summary": "🚨 No P&L data available for the Transportation segment.",
-            "table": None
-        }
 
-    # Extract quarter column
-    transportation_df["Quarter"] = extract_quarters(transportation_df["Date"])
+def run(df_pnl: pd.DataFrame, query: str) -> dict:
+    segment = extract_segment_from_query(query)
+    if not segment:
+        return {"summary": "❌ Could not identify the segment from the query. Please specify a valid segment."}
 
-    # Calculate margins by quarter
-    margin_df = compute_margin_by_quarter(transportation_df)
+    df_filtered = df_pnl[df_pnl["segment"].str.lower() == segment.lower()].copy()
+    if df_filtered.empty:
+        return {"summary": f"❌ No data found for segment: {segment}"}
 
-    # Sort and get last 2 quarters
-    sorted_quarters = return_latest_quarters(margin_df["Quarter"].unique())
-    if len(sorted_quarters) < 2:
-        return {"summary": "🕒 Not enough quarters available for margin trend comparison.", "table": None}
+    df_margin = calculate_margin(df_filtered)
+    df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
+    df_margin["Quarter"] = df_margin["Quarter"].dt.to_period("Q")
 
-    q1, q2 = sorted_quarters[-2], sorted_quarters[-1]
-    margin_q1 = margin_df[margin_df["Quarter"] == q1]["Margin %"].mean()
-    margin_q2 = margin_df[margin_df["Quarter"] == q2]["Margin %"].mean()
-    margin_drop = margin_q2 - margin_q1
+    latest_quarter = df_margin["Quarter"].max()
+    prev_quarter = (latest_quarter - 1)
 
-    # Analyze major cost contributors to the margin drop
-    cost_breakdown = transportation_df[transportation_df["Quarter"].isin([q1, q2])]
-    grouped_costs = cost_breakdown.groupby(["Cost Element", "Quarter"])["Amount in INR"].sum().unstack().fillna(0)
-    grouped_costs["Change"] = grouped_costs[q2] - grouped_costs[q1]
-    grouped_costs["Change %"] = (grouped_costs["Change"] / grouped_costs[q1].replace(0, 1)) * 100
-    top_contributors = grouped_costs.sort_values("Change", ascending=False).head(5).reset_index()
+    current = df_margin[df_margin["Quarter"] == latest_quarter]
+    previous = df_margin[df_margin["Quarter"] == prev_quarter]
 
-    # Summary
-    summary = (
-        f"🛣️ The margin for the **Transportation** segment dropped from **{margin_q1:.2f}%** in {q1} "
-        f"to **{margin_q2:.2f}%** in {q2}, a change of **{margin_drop:.2f} percentage points**.\n\n"
-        f"Top cost elements contributing to this drop:"
-    )
+    if current.empty or previous.empty:
+        return {"summary": f"❌ Not enough quarterly data available for segment: {segment}"}
 
-    # Table rendering
-    table_md = render_table(
-        top_contributors[["Cost Element", q1, q2, "Change", "Change %"]].rename(
-            columns={
-                q1: f"Cost in {q1}",
-                q2: f"Cost in {q2}",
-                "Change": "₹ Change",
-                "Change %": "% Change"
-            }
-        )
-    )
+    current_avg = current["Margin %"].mean()
+    previous_avg = previous["Margin %"].mean()
+    diff = current_avg - previous_avg
 
-    # Optional: Add bar chart as visual
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.barh(top_contributors["Cost Element"], top_contributors["Change"], color="orange")
-    ax.set_xlabel("Change in Cost (INR)")
-    ax.set_title("Top 5 Cost Elements Causing Margin Drop (Transportation)")
+    trend = "decreased" if diff < 0 else "increased"
+    pct = abs(diff)
+    summary = f"🔍 In the **{segment}** segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
+
+    client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
+    table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
+
+    # Chart
+    fig, ax = plt.subplots(figsize=(6, 4))
+    client_comparison.plot(kind="barh", ax=ax, color="coral")
+    ax.set_xlabel("Avg Margin %")
+    ax.set_ylabel("Client")
+    ax.set_title(f"Client Margin% in {segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
     plt.tight_layout()
 
-    # Convert plot to base64
     buf = io.BytesIO()
     plt.savefig(buf, format="png")
     buf.seek(0)
-    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
-    img_html = f"<img src='data:image/png;base64,{img_base64}'/>"
+    chart_base64 = base64.b64encode(buf.read()).decode("utf-8")
+    plt.close()
 
     return {
         "summary": summary,
-        "table": table_md,
-        "visual": img_html
+        "table": table.to_dict(orient="records"),
+        "chart": chart_base64
     }
