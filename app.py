@@ -28,7 +28,7 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
 
-# Prompt bank (Q1–Q10)
+# Prompt bank (from Q1 to Q10)
 PROMPT_BANK = {
     "q1": "Which accounts had CM% < 30 in the last quarter?",
     "q2": "What caused the margin drop in Transportation?",
@@ -67,23 +67,13 @@ if user_question:
         st.info(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
 
         question_module = importlib.import_module(f"questions.question_{best_qid}")
-        result = question_module.run(user_question, df)
+        result = question_module.run(df)
 
         st.success("✅ Analysis complete.")
-
-        # Display based on result type
         if isinstance(result, pd.DataFrame):
             st.dataframe(result)
         elif isinstance(result, str):
             st.markdown(result)
-        elif isinstance(result, tuple):
-            for item in result:
-                if isinstance(item, pd.DataFrame):
-                    st.dataframe(item)
-                elif hasattr(item, "figure"):
-                    st.pyplot(item.figure)
-                elif isinstance(item, str):
-                    st.markdown(item)
         else:
             st.write(result)
 
