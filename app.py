@@ -60,7 +60,7 @@ if user_question:
 
         # ✅ Pass user_question into run() if it accepts it
         if "user_query" in question_module.run.__code__.co_varnames or "query" in question_module.run.__code__.co_varnames:
-            result = question_module.run(user_question, df)
+            result = question_module.run(df, user_question)
         else:
             result = question_module.run(df)
 
