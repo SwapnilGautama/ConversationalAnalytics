@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-from utils.semantic_matcher import prompt_bank as PROMPT_BANK
+from utils.semantic_matcher import PROMPT_BANK
 import importlib
 from kpi_engine import margin
 import os
