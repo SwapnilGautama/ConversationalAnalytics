@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-from utils.semantic_matcher import get_best_matching_question
+from utils.semantic_matcher import find_best_matching_qid
 import importlib
 from kpi_engine import margin
 import os
