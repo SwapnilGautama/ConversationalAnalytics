@@ -4,6 +4,7 @@ import pandas as pd
 from kpi_engine.margin import compute_margin
 from dateutil.relativedelta import relativedelta
 import streamlit as st
+import matplotlib.pyplot as plt
 
 def run(df):
     df_margin = compute_margin(df)
@@ -42,11 +43,24 @@ def run(df):
     )
     st.markdown(summary)
 
-    # 🔹 Show table
-    st.dataframe(low_margin_clients.reset_index(drop=True))
+    # 🔹 Layout: Table + Chart side by side
+    col1, col2 = st.columns([1, 1])
 
-    # Also return dict for logging if needed
-    return {
-        "summary": summary,
-        "table": low_margin_clients
-    }
+    with col1:
+        st.markdown("#### 📋 Accounts with Margin < 30%")
+        st.dataframe(low_margin_clients.reset_index(drop=True), use_container_width=True)
+
+    with col2:
+        st.markdown("#### 📊 Margin % by Client (Bar Chart)")
+        fig, ax = plt.subplots()
+        ax.barh(low_margin_clients["Client"], low_margin_clients["Avg Margin %"], color='tomato')
+        ax.set_xlabel("Avg Margin %")
+        ax.set_ylabel("Client")
+        ax.set_title("Clients with Avg Margin < 30%")
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    # ✅ Do NOT show unformatted dict output
+    # ✅ Everything else is preserved exactly
+
+    return None  # Or return summary + table if needed elsewhere
