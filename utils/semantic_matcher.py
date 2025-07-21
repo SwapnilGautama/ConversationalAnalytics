@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Define your prompt bank
-prompt_bank = {
+PROMPT_BANK = {
     "Q1": [
         "Which accounts had CM% < 30 in the last quarter?",
         "Clients with less than 30% margin last quarter",
