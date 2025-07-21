@@ -66,8 +66,9 @@ if user_question:
         best_qid = get_best_matching_question(user_question, PROMPT_BANK)
         st.info(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
 
+        # ✅ Dynamically load the matching question module
         question_module = importlib.import_module(f"questions.question_{best_qid}")
-        result = question_module.run(df)
+        result = question_module.run(df, user_question)  # user_question now passed to support dynamic filters
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
