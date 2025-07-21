@@ -12,12 +12,17 @@ PROMPT_BANK = {
     "q1": [
         "Accounts with CM% < 30 in last quarter",
         "Clients with less than 30% margin last quarter",
-        "Which accounts had margins below 30 percent"
+        "Which accounts had margins below 30 percent",
+        "Show me accounts with less than 40% margin",
+        "List clients with margin below threshold"
     ],
     "q2": [
         "What caused the margin drop in Transportation segment",
         "Which cost component triggered the margin drop in a segment",
-        "Why did margin fall in Transportation or any other segment"
+        "Why did margin fall in Transportation or any other segment",
+        "Cost drivers of margin decline in a segment",
+        "Breakdown of margin fall in transportation",
+        "Explain margin dip in any business segment"
     ],
     "q3": ["C&B cost variation from last quarter to this"],
     "q4": ["MoM trend of C&B cost % w.r.t. revenue"],
