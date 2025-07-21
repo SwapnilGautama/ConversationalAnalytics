@@ -28,19 +28,8 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
 
-# Prompt bank (from Q1 to Q10)
-PROMPT_BANK = {
-    "q1": "Which accounts had CM% < 30 in the last quarter?",
-    "q2": "What caused the margin drop in Transportation?",
-    "q3": "Show UT% trends for the last 2 quarters",
-    "q4": "Which clients have the highest costs this year?",
-    "q5": "Show YoY, QoQ and MoM revenue trends for a client",
-    "q6": "Highlight accounts where realized rate dropped > $3 or $5",
-    "q7": "What is the MoM headcount change for an account?",
-    "q8": "Revenue per person trend by account",
-    "q9": "Utilization % trend across accounts",
-    "q10": "DU-wise fresher UT trends"
-}
+# ✅ Import correct prompt bank used for semantic matching
+from utils.semantic_matcher import PROMPT_BANK
 
 # Streamlit UI
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
