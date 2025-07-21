@@ -26,7 +26,7 @@ PROMPT_BANK = {
 # Create a flat list of (question, qid)
 questions = []
 qids = []
-for qid, qlist in prompt_bank.items():
+for qid, qlist in PROMPT_BANK.items():  # ✅ FIXED — use correct variable name
     for q in qlist:
         questions.append(q)
         qids.append(qid)
