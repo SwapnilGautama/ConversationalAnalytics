@@ -84,3 +84,10 @@ def run_question():
 
     # Show summary
     st.success(summary)
+def run(user_query: str):
+    # your logic here
+    return {
+        "summary": summary,
+        "table": formatted_table,
+        "chart": chart_buffer,
+    }
