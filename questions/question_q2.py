@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import io
 import base64
 from dateutil.relativedelta import relativedelta
-from kpi_engine.margin import calculate_margin
+from kpi_engine.margin import compute_margin
 
 
 def extract_segment_from_query(query):
