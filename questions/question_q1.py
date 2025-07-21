@@ -6,7 +6,7 @@ from dateutil.relativedelta import relativedelta
 import streamlit as st
 import matplotlib.pyplot as plt
 
-def run(df):
+def run(user_query, df):
     df_margin = compute_margin(df)
 
     if "Month" not in df_margin or "Client" not in df_margin or "Margin %" not in df_margin:
