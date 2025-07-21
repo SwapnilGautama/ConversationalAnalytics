@@ -55,8 +55,14 @@ if user_question:
         best_qid = get_best_matching_question(user_question, PROMPT_BANK)
         st.info(f"🔍 Running analysis for: **{PROMPT_BANK[best_qid]}**")
 
+        # ✅ Call question logic dynamically
         question_module = importlib.import_module(f"questions.question_{best_qid}")
-        result = question_module.run(df)
+
+        # ✅ Pass user_question into run() if it accepts it
+        if "user_query" in question_module.run.__code__.co_varnames:
+            result = question_module.run(user_question, df)
+        else:
+            result = question_module.run(df)
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
