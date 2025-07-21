@@ -1,66 +1,86 @@
 # questions/question_q1.py
 
 import pandas as pd
-from kpi_engine.margin import compute_margin
-from dateutil.relativedelta import relativedelta
-import streamlit as st
 import matplotlib.pyplot as plt
+import streamlit as st
+from io import BytesIO
+from kpis.margin import calculate_margin_kpi
+import re
 
-def run(df):
-    df_margin = compute_margin(df)
+def extract_threshold(query):
+    match = re.search(r'less than (\d+)%', query)
+    if match:
+        return float(match.group(1))
+    return 30.0  # default threshold
 
-    if "Month" not in df_margin or "Client" not in df_margin or "Margin %" not in df_margin:
-        st.error("Required fields missing. Ensure Margin % calculation is correctly applied.")
-        return
+def extract_period(query):
+    query = query.lower()
+    if "last month" in query:
+        return "last_month"
+    elif "last quarter" in query or "previous quarter" in query:
+        return "last_quarter"
+    else:
+        return "last_quarter"  # default
 
-    # Get the latest quarter
-    latest_month = df_margin["Month"].max()
-    quarter_start = latest_month - relativedelta(months=2)
-    quarter_data = df_margin[df_margin["Month"] >= quarter_start]
+def generate_bar_chart(df):
+    fig, ax = plt.subplots(figsize=(8, 4))
+    df_sorted = df.sort_values("Margin %")
+    ax.barh(df_sorted["Company_code"], df_sorted["Margin %"], color='skyblue')
+    ax.set_xlabel("Margin %")
+    ax.set_title("Clients with Margin Below Threshold")
+    plt.tight_layout()
 
-    # Group by Client and calculate average margin
-    grouped = (
-        quarter_data.groupby("Client")["Margin %"]
-        .mean()
-        .reset_index()
-        .rename(columns={"Margin %": "Avg Margin %"})
-    )
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    return buffer
 
-    # Clean and filter
-    grouped = grouped.dropna(subset=["Avg Margin %"])
-    grouped["Avg Margin %"] = grouped["Avg Margin %"].round(2)
-    low_margin_clients = grouped[grouped["Avg Margin %"] < 30].copy()
-    low_margin_clients = low_margin_clients.sort_values("Avg Margin %")
+def run_question():
+    st.subheader("📉 Accounts with Margin Below Threshold")
 
-    # 🔹 Text summary (Markdown)
-    total_clients = grouped["Client"].nunique()
-    low_margin_count = low_margin_clients["Client"].nunique()
-    proportion = (low_margin_count / total_clients * 100) if total_clients else 0
+    user_query = st.session_state.get("last_user_query", "").lower()
 
+    # Extract dynamic threshold and time period
+    threshold = extract_threshold(user_query)
+    period = extract_period(user_query)
+
+    # Load margin KPI and filter
+    df = calculate_margin_kpi()
+
+    if period == "last_quarter":
+        latest_period = df["Period"].max()
+        df = df[df["Period"] == latest_period]
+    elif period == "last_month":
+        df["Period"] = pd.to_datetime(df["Period"])
+        latest_month = df["Period"].max()
+        df = df[df["Period"] == latest_month]
+
+    # Filter clients with low margin
+    filtered_df = df[df["Margin %"] < threshold].copy()
+    filtered_df = filtered_df[["Company_code", "Margin %"]]
+    filtered_df["Margin %"] = filtered_df["Margin %"].map("{:.2f}%".format)
+
+    # Summary
+    count = len(filtered_df)
+    total_clients = df["Company_code"].nunique()
     summary = (
-        f"🔍 **In the last quarter**, **{low_margin_count} accounts** had an average margin below **30%**, "
-        f"which is **{proportion:.1f}%** of all **{total_clients} accounts**."
+        f"✅ {count} account(s) had margin below {threshold}% "
+        f"in the {period.replace('_', ' ')} period, "
+        f"which is {round((count / total_clients) * 100, 2)}% of all accounts."
     )
-    st.markdown(summary)
 
-    # 🔹 Layout: Table + Chart side by side
+    # Display in two columns
     col1, col2 = st.columns([1, 1])
-
     with col1:
-        st.markdown("#### 📋 Accounts with Margin < 30%")
-        st.dataframe(low_margin_clients.reset_index(drop=True), use_container_width=True)
-
+        st.markdown("#### Clients with Low Margin")
+        st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True)
     with col2:
-        st.markdown("#### 📊 Margin % by Client (Bar Chart)")
-        fig, ax = plt.subplots()
-        ax.barh(low_margin_clients["Client"], low_margin_clients["Avg Margin %"], color='tomato')
-        ax.set_xlabel("Avg Margin %")
-        ax.set_ylabel("Client")
-        ax.set_title("Clients with Avg Margin < 30%")
-        plt.tight_layout()
-        st.pyplot(fig)
+        st.markdown("#### Margin % by Client (Bar Chart)")
+        if not filtered_df.empty:
+            chart = generate_bar_chart(df[df["Margin %"] < threshold])
+            st.image(chart, use_column_width=True)
+        else:
+            st.info("No clients found below the margin threshold.")
 
-    # ✅ Do NOT show unformatted dict output
-    # ✅ Everything else is preserved exactly
-
-    return None  # Or return summary + table if needed elsewhere
+    # Show summary
+    st.success(summary)
