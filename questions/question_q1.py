@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from io import BytesIO
-from kpis.margin import calculate_margin_kpi
+from kpi_engine.margin import compute_margin
 import re
 
 def extract_threshold(query):
