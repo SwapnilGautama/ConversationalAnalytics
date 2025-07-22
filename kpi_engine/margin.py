@@ -29,8 +29,8 @@ def preprocess_pnl_data(df):
     if 'Type' in df.columns:
         column_map['Type'] = 'Type'
 
-    if 'segment' in df.columns:
-        column_map['segment'] = 'segment'  # preserve as-is
+    if 'Segment' in df.columns:
+        column_map['Segment'] = 'Segment'  # preserve as-is
 
     df = df.rename(columns=column_map)
 
@@ -49,8 +49,8 @@ def preprocess_pnl_data(df):
 def compute_margin(df):
     # Check if 'segment' exists and include in groupby if present
     groupby_cols = ['Month', 'Client']
-    if 'segment' in df.columns:
-        groupby_cols.append('segment')
+    if 'Segment' in df.columns:
+        groupby_cols.append('Segment')
 
     grouped = df.groupby(groupby_cols + ['Type'])['Amount'].sum().unstack().fillna(0)
 
