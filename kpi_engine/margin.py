@@ -47,10 +47,10 @@ def preprocess_pnl_data(df):
     return df
 
 def compute_margin(df):
-    # Check if 'segment' exists and include in groupby if present
+    # Check if 'Segment' exists and include in groupby if present
     groupby_cols = ['Month', 'Client']
-    if 'segment' in df.columns:
-        groupby_cols.append('segment')
+    if 'Segment' in df.columns:
+        groupby_cols.append('Segment')
 
     grouped = df.groupby(groupby_cols + ['Type'])['Amount'].sum().unstack().fillna(0)
 
