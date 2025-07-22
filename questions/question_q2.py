@@ -32,18 +32,18 @@ def run(data, user_question):
                 st.error(f"Missing expected column: {col}")
                 return
 
-        # Identify segment
-        segment = None
-        for s in df['segment'].dropna().unique():
+        # Identify Segment
+        Segment = None
+        for s in df['Segment'].dropna().unique():
             if s.lower() in user_question.lower():
-                segment = s
+                Segment = s
                 break
 
-        if not segment:
-            st.warning("Could not identify segment from your question.")
+        if not Segment:
+            st.warning("Could not identify Segment from your question.")
             return
 
-        df = df[df['segment'] == segment]
+        df = df[df['Segment'] == Segment]
 
         # Split cost vs revenue
         df_cost = df[df['Type'] == 'Cost']
@@ -65,7 +65,7 @@ def run(data, user_question):
         margin_pct_current = (rev_by_month[current_month] - cost_by_month[current_month]) / cost_by_month[current_month] * 100
         margin_pct_prev = (rev_by_month[previous_month] - cost_by_month[previous_month]) / cost_by_month[previous_month] * 100
 
-        st.subheader(f"Margin Drop Analysis for {segment} Segment")
+        st.subheader(f"Margin Drop Analysis for {Segment} Segment")
 
         # 🔹 TEXT SUMMARY
         st.markdown("### 🔍 Summary")
