@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from kpi_engine.margin import compute_margin
 
 
-def extract_segment_from_query(query):
+def extract_Segment_from_query(query):
     query = query.lower()
     keywords = ["transportation", "manufacturing", "utilities", "healthcare", "defense", "aerospace"]  # Add more as needed
     for k in keywords:
@@ -17,16 +17,17 @@ def extract_segment_from_query(query):
 
 
 def run(df_pnl: pd.DataFrame, query: str) -> dict:
-    segment = extract_segment_from_query(query)
-    if not segment:
-        return {"summary": "❌ Could not identify the segment from the query. Please specify a valid segment."}
+    Segment = extract_Segment_from_query(query)
+    if not Segment:
+        return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid Segment."}
 
-    if "segment" not in df_pnl.columns:
-        return {"summary": "❌ 'segment' column not found in the dataset."}
+    if "Segment" not in df_pnl.columns:
+        return {"summary": "❌ 'S
+        egment' column not found in the dataset."}
 
-    df_filtered = df_pnl[df_pnl["segment"].str.lower() == segment.lower()].copy()
+    df_filtered = df_pnl[df_pnl["Segment"].str.lower() == Segment.lower()].copy()
     if df_filtered.empty:
-        return {"summary": f"❌ No data found for segment: {segment}"}
+        return {"summary": f"❌ No data found for Segment: {Segment}"}
 
     df_margin = compute_margin(df_filtered)
     df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
@@ -47,7 +48,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
 
     trend = "decreased" if diff < 0 else "increased"
     pct = abs(diff)
-    summary = f"🔍 In the **{segment}** segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
+    summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
 
     client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
     table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
@@ -57,7 +58,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     client_comparison.plot(kind="barh", ax=ax, color="coral")
     ax.set_xlabel("Avg Margin %")
     ax.set_ylabel("Client")
-    ax.set_title(f"Client Margin% in {segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
+    ax.set_title(f"Client Margin% in {Segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
     plt.tight_layout()
 
     buf = io.BytesIO()
