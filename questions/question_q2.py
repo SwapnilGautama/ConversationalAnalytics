@@ -22,8 +22,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
         return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid Segment."}
 
     if "Segment" not in df_pnl.columns:
-        return {"summary": "❌ 'S
-        egment' column not found in the dataset."}
+        return {"summary": "❌ 'Segment' column not found in the dataset."}
 
     df_filtered = df_pnl[df_pnl["Segment"].str.lower() == Segment.lower()].copy()
     if df_filtered.empty:
