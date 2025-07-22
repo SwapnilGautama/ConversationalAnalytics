@@ -2,89 +2,87 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
-def run(df, user_question=None):
+def run(df: pd.DataFrame, user_question: str = ""):
     try:
-        # Ensure necessary columns are present
-        required_columns = ['Month', 'Company_code', 'segment', 'Type', 'Group 1', 'Group 2', 'Group 3', 'Group 4', 'Amount in INR']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            return f"❌ Missing columns: {', '.join(missing_columns)}"
+        # Filter only Transportation segment
+        df_transport = df[df['Segment'].str.lower() == 'transportation'].copy()
 
-        # Convert Month to datetime
-        df['Month'] = pd.to_datetime(df['Month'])
+        # Separate Revenue and Cost
+        df_transport['Month'] = pd.to_datetime(df_transport['Month'])
+        df_rev = df_transport[df_transport['Type'].str.lower() == 'revenue']
+        df_cost = df_transport[df_transport['Type'].str.lower() == 'cost']
 
-        # Filter for Transportation segment only
-        df = df[df['segment'].str.lower() == 'transportation']
+        # Aggregate Revenue
+        rev_summary = df_rev.groupby(['Company_Code', 'Month'])['Amount in INR'].sum().reset_index()
+        rev_summary = rev_summary.rename(columns={'Amount in INR': 'Revenue'})
 
-        # Split revenue and cost
-        revenue_df = df[df['Type'].str.lower() == 'revenue']
-        cost_df = df[df['Type'].str.lower() == 'cost']
-
-        # Aggregate revenue and cost per company and month
-        revenue_agg = revenue_df.groupby(['Company_code', 'Month'])['Amount in INR'].sum().reset_index(name='Revenue')
-        cost_agg = cost_df.groupby(['Company_code', 'Month'])['Amount in INR'].sum().reset_index(name='Cost')
+        # Aggregate Total Cost and break up by cost groups
+        cost_summary = df_cost.groupby(['Company_Code', 'Month']).agg({
+            'Amount in INR': 'sum',
+            'Group 1': 'first',
+            'Group 2': 'first',
+            'Group 3': 'first',
+            'Group 4': 'first'
+        }).reset_index()
+        cost_summary = cost_summary.rename(columns={'Amount in INR': 'Total Cost'})
 
         # Merge revenue and cost
-        merged = pd.merge(revenue_agg, cost_agg, on=['Company_code', 'Month'], how='inner')
+        merged = pd.merge(rev_summary, cost_summary, on=['Company_Code', 'Month'], how='outer').fillna(0)
 
-        # Calculate margin and margin %
-        merged['Margin'] = merged['Revenue'] - merged['Cost']
-        merged['Margin %'] = ((merged['Revenue'] - merged['Cost']) / merged['Cost']) * 100
+        # Get last 2 months with data
+        last_two_months = sorted(merged['Month'].unique())[-2:]
+        df_curr = merged[merged['Month'] == last_two_months[1]].copy()
+        df_prev = merged[merged['Month'] == last_two_months[0]].copy()
 
-        # Get latest 2 months
-        latest_months = sorted(merged['Month'].unique())[-2:]
-        if len(latest_months) < 2:
-            return "❌ Not enough data to compare two months."
+        # Rename for merging
+        df_curr = df_curr.rename(columns={
+            'Revenue': 'Revenue_Curr',
+            'Total Cost': 'Cost_Curr',
+            'Group 1': 'G1_Curr',
+            'Group 2': 'G2_Curr',
+            'Group 3': 'G3_Curr',
+            'Group 4': 'G4_Curr'
+        })
 
-        current_month, previous_month = latest_months[1], latest_months[0]
-        current_df = merged[merged['Month'] == current_month]
-        previous_df = merged[merged['Month'] == previous_month]
+        df_prev = df_prev.rename(columns={
+            'Revenue': 'Revenue_Prev',
+            'Total Cost': 'Cost_Prev',
+            'Group 1': 'G1_Prev',
+            'Group 2': 'G2_Prev',
+            'Group 3': 'G3_Prev',
+            'Group 4': 'G4_Prev'
+        })
 
-        # Merge current and previous month
-        combined = pd.merge(current_df, previous_df, on='Company_code', suffixes=('_current', '_previous'))
+        combined = pd.merge(df_curr, df_prev, on='Company_Code', how='outer').fillna(0)
 
-        # Filter where margin dropped, but revenue remained ~same (within 5% tolerance)
-        combined['Revenue_change_pct'] = 100 * (combined['Revenue_current'] - combined['Revenue_previous']) / combined['Revenue_previous'].replace(0, 1)
-        combined['Margin_drop'] = combined['Margin_current'] < combined['Margin_previous']
-        filtered = combined[(abs(combined['Revenue_change_pct']) < 5) & (combined['Margin_drop'])]
+        # Margin Calculations
+        combined['Margin_Prev'] = combined['Revenue_Prev'] - combined['Cost_Prev']
+        combined['Margin_Curr'] = combined['Revenue_Curr'] - combined['Cost_Curr']
+        combined['Margin_Change'] = combined['Margin_Curr'] - combined['Margin_Prev']
+        combined['Margin_%_Curr'] = ((combined['Margin_Curr']) / combined['Cost_Curr'].replace(0, 1)) * 100
 
-        if filtered.empty:
-            return "✅ No clients with margin drop caused by stable revenue but increased costs."
+        # Only show clients where margin dropped and revenue didn't drop more than 5%
+        combined = combined[(combined['Margin_Change'] < 0) & ((combined['Revenue_Curr'] >= 0.95 * combined['Revenue_Prev']))]
 
-        # Now analyze cost group breakdowns
-        group_cols = ['Group 1', 'Group 2', 'Group 3', 'Group 4']
-        cost_df = cost_df[cost_df['Company_code'].isin(filtered['Company_code']) & cost_df['Month'].isin(latest_months)]
-        group_summary = cost_df.groupby(['Company_code', 'Month'])[group_cols].sum().reset_index()
+        # Compute group-level changes
+        combined['G1_Diff'] = combined['G1_Curr'] - combined['G1_Prev']
+        combined['G2_Diff'] = combined['G2_Curr'] - combined['G2_Prev']
+        combined['G3_Diff'] = combined['G3_Curr'] - combined['G3_Prev']
+        combined['G4_Diff'] = combined['G4_Curr'] - combined['G4_Prev']
 
-        # Pivot to have current and previous group costs side-by-side
-        pivot = group_summary.pivot(index='Company_code', columns='Month')[group_cols]
-        pivot.columns = [f"{grp}_{dt.strftime('%b-%Y')}" for grp, dt in pivot.columns]
-        pivot.reset_index(inplace=True)
+        output_cols = ['Company_Code', 'Revenue_Prev', 'Revenue_Curr', 'Cost_Prev', 'Cost_Curr',
+                       'Margin_Prev', 'Margin_Curr', 'Margin_Change', 'Margin_%_Curr',
+                       'G1_Diff', 'G2_Diff', 'G3_Diff', 'G4_Diff']
 
-        # Merge with filtered margin drop clients
-        final = pd.merge(filtered, pivot, on='Company_code', how='left')
+        st.subheader("📉 Clients with Margin Drop in Transportation")
+        st.dataframe(combined[output_cols].sort_values(by='Margin_Change'))
 
-        # Calculate changes in group costs
-        for grp in group_cols:
-            col_prev = f"{grp}_{previous_month.strftime('%b-%Y')}"
-            col_curr = f"{grp}_{current_month.strftime('%b-%Y')}"
-            final[f"{grp}_change"] = final[col_curr] - final[col_prev]
-
-        # Select top rows to show
-        display_cols = ['Company_code', 'Revenue_previous', 'Revenue_current', 'Cost_previous', 'Cost_current',
-                        'Margin_previous', 'Margin_current', 'Margin %_previous', 'Margin %_current'] + [f"{g}_change" for g in group_cols]
-        st.subheader("🧾 Clients with Margin Drop Due to Increased Costs in Transportation")
-        st.dataframe(final[display_cols].sort_values(by='Margin %_current').reset_index(drop=True))
-
-        # Visual
-        st.subheader("📊 Margin % Drop by Client")
+        # Pie chart
+        pie_data = combined.groupby('Company_Code')['Margin_Change'].sum().abs()
+        st.subheader("🔍 Margin Drop Contribution by Client")
         fig, ax = plt.subplots()
-        ax.bar(final['Company_code'], final['Margin %_previous'] - final['Margin %_current'], color='red')
-        ax.set_ylabel("Margin % Drop")
-        ax.set_title("Clients with Margin % Drop (Revenue Stable)")
+        ax.pie(pie_data, labels=pie_data.index, autopct='%1.1f%%')
         st.pyplot(fig)
 
-        return "✅ Analysis complete."
-
     except Exception as e:
-        return f"❌ Error: {str(e)}"
+        st.error(f"Failed to generate Q2 analysis: {e}")
