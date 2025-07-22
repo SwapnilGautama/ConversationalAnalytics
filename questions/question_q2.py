@@ -18,15 +18,15 @@ def extract_Segment_from_query(query):
 
 def run(df_pnl: pd.DataFrame, query: str) -> dict:
     Segment = extract_Segment_from_query(query)
-    if not segment:
-        return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid segment."}
+    if not Segment:
+        return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid Segment."}
 
-    if "segment" not in df_pnl.columns:
+    if "Segment" not in df_pnl.columns:
         return {"summary": "❌ 'Segment' column not found in the dataset."}
 
     df_filtered = df_pnl[df_pnl["Segment"].str.lower() == Segment.lower()].copy()
     if df_filtered.empty:
-        return {"summary": f"❌ No data found for segment: {Segment}"}
+        return {"summary": f"❌ No data found for Segment: {Segment}"}
 
     df_margin = compute_margin(df_filtered)
     df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
@@ -57,7 +57,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     client_comparison.plot(kind="barh", ax=ax, color="coral")
     ax.set_xlabel("Avg Margin %")
     ax.set_ylabel("Client")
-    ax.set_title(f"Client Margin% in {segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
+    ax.set_title(f"Client Margin% in {Segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
     plt.tight_layout()
 
     buf = io.BytesIO()
