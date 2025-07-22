@@ -1,94 +1,92 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-import io
-import base64
-from datetime import datetime
+import streamlit as st
 
-def analyze_margin_drop(segment_input):
-    # Load data
-    file_path = "sample_data/LnTPnL.xlsx"
-    df = pd.read_excel(file_path)
+def run(data, user_question):
+    try:
+        df = data.copy()
+        df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+        df = df.dropna(subset=['Month'])
 
-    # Clean and filter
-    df["Month"] = pd.to_datetime(df["Month"])
-    df["MonthStr"] = df["Month"].dt.strftime("%b-%Y")
-    df = df[df["Segment"] == segment_input]
+        # Ensure numeric conversion
+        df['Amount in INR'] = pd.to_numeric(df['Amount in INR'], errors='coerce')
+        df = df.dropna(subset=['Amount in INR'])
 
-    # Ensure enough months
-    latest_months = sorted(df["Month"].dt.to_period("M").unique())[-2:]
-    if len(latest_months) < 2:
-        return f"❗Not enough data for MoM comparison in segment: {segment_input}", pd.DataFrame()
+        # Use correct Group column names
+        group_cols = ['Group1', 'Group2', 'Group3', 'Group4']
+        for col in group_cols:
+            if col not in df.columns:
+                st.error(f"Missing expected column: {col}")
+                return
 
-    prev_month, curr_month = latest_months
-    df_filtered = df[df["Month"].dt.to_period("M").isin([prev_month, curr_month])]
+        # Identify segment
+        segment = None
+        for s in df['segment'].dropna().unique():
+            if s.lower() in user_question.lower():
+                segment = s
+                break
 
-    # Aggregate by Month and Type
-    summary_df = df_filtered.groupby(["MonthStr", "Type"])["Amount in INR"].sum().unstack().fillna(0)
-    summary_df["Margin"] = summary_df.get("Revenue", 0) - summary_df.get("Cost", 0)
-    summary_df["Margin %"] = (summary_df["Margin"] / summary_df.get("Cost", 1)) * 100
+        if not segment:
+            st.warning("Could not identify segment from your question.")
+            return
 
-    # MoM movement summary
-    if summary_df.shape[0] < 2:
-        return "❗Insufficient data for margin comparison", pd.DataFrame()
+        df = df[df['segment'] == segment]
 
-    rev_diff = summary_df.get("Revenue", pd.Series([0,0])).iloc[1] - summary_df.get("Revenue", pd.Series([0,0])).iloc[0]
-    cost_diff = summary_df.get("Cost", pd.Series([0,0])).iloc[1] - summary_df.get("Cost", pd.Series([0,0])).iloc[0]
+        # Split cost vs revenue
+        df_cost = df[df['Type'] == 'Cost']
+        df_rev = df[df['Type'] == 'Revenue']
 
-    summary_text = f"""\
-1. **Revenue Change (MoM)**: ₹{rev_diff:,.0f}
-2. **Cost Change (MoM)**: ₹{cost_diff:,.0f}
-"""
+        # Group by month
+        cost_by_month = df_cost.groupby('Month')['Amount in INR'].sum().sort_index()
+        rev_by_month = df_rev.groupby('Month')['Amount in INR'].sum().sort_index()
 
-    # Correct field names (no space)
-    cost_fields = ["Group1", "Group2", "Group3", "Group4"]
+        if len(cost_by_month) < 2 or len(rev_by_month) < 2:
+            st.warning("Not enough monthly data to compare.")
+            return
 
-    missing_cols = [col for col in cost_fields if col not in df_filtered.columns]
-    if missing_cols:
-        return f"❗Columns not found: {missing_cols}", pd.DataFrame()
+        # Get latest two months
+        current_month = cost_by_month.index[-1]
+        previous_month = cost_by_month.index[-2]
 
-    # Detailed cost category comparison
-    cost_df = df_filtered[df_filtered["Type"] == "Cost"]
-    monthly_costs = cost_df.groupby(["MonthStr"])[cost_fields].sum()
+        cost_diff = cost_by_month[current_month] - cost_by_month[previous_month]
+        rev_diff = rev_by_month[current_month] - rev_by_month[previous_month]
 
-    if monthly_costs.shape[0] < 2:
-        return summary_text + "\n⚠️ Insufficient cost category data.", pd.DataFrame()
+        margin_pct_current = (rev_by_month[current_month] - cost_by_month[current_month]) / cost_by_month[current_month] * 100
+        margin_pct_prev = (rev_by_month[previous_month] - cost_by_month[previous_month]) / cost_by_month[previous_month] * 100
 
-    delta = monthly_costs.iloc[1] - monthly_costs.iloc[0]
-    delta_sorted = delta.sort_values(ascending=False)
+        st.subheader(f"Margin Drop Analysis for {segment} Segment")
 
-    top_contributors = delta_sorted.head(4)
-    insights = "\n3. **Top Increasing Cost Categories:**\n" + "\n".join([
-        f"   - {idx}: ₹{val:,.0f}" for idx, val in top_contributors.items() if val > 0
-    ])
+        # 📌 Text Summary
+        st.markdown("### 🔍 Summary")
+        st.markdown(f"""
+        - **Revenue movement**: ₹{rev_diff:,.0f} (from ₹{rev_by_month[previous_month]:,.0f} to ₹{rev_by_month[current_month]:,.0f})
+        - **Cost movement**: ₹{cost_diff:,.0f} (from ₹{cost_by_month[previous_month]:,.0f} to ₹{cost_by_month[current_month]:,.0f})
+        """)
 
-    final_summary = summary_text + insights
+        # 🔍 Cost group comparison
+        st.markdown("### 📊 Group-wise Cost Increase")
 
-    # Prepare comparison table
-    comparison_df = monthly_costs.copy()
-    comparison_df.loc["Change"] = delta
+        group_summary = []
+        for group in group_cols:
+            monthly_group = df_cost.groupby(['Month'])[group].value_counts().unstack().fillna(0)
+            # Convert to numeric
+            monthly_group = monthly_group.apply(pd.to_numeric, errors='coerce')
+            if monthly_group.shape[0] < 2:
+                continue
+            increase = (monthly_group.iloc[-1] - monthly_group.iloc[-2]).sum()
+            group_summary.append((group, increase))
 
-    return final_summary, comparison_df
+        group_df = pd.DataFrame(group_summary, columns=["Group", "Total Increase"])
+        group_df = group_df.sort_values(by="Total Increase", ascending=False)
 
-# ✅ Streamlit run wrapper
-def run(user_input):
-    import streamlit as st
-    import re
+        st.dataframe(group_df)
 
-    user_input = str(user_input)
-    segment_match = re.search(r"(?:in|for)\s+([A-Za-z]+)", user_input, re.IGNORECASE)
-    segment = segment_match.group(1) if segment_match else "Transportation"
+        # 📈 Plot Chart
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.bar(group_df['Group'], group_df['Total Increase'])
+        ax.set_title("Group-wise Cost Increase")
+        ax.set_ylabel("INR Increase")
+        st.pyplot(fig)
 
-    st.markdown(f"### Margin Drop Analysis for **{segment}** Segment")
-
-    summary, table = analyze_margin_drop(segment)
-
-    if isinstance(summary, str):
-        st.markdown(summary)
-    else:
-        st.warning("⚠️ Could not generate summary.")
-
-    if isinstance(table, pd.DataFrame) and not table.empty:
-        st.dataframe(table)
-    else:
-        st.info("ℹ️ No data available for table view.")
+    except Exception as e:
+        st.error(f"Error running analysis: {e}")
