@@ -21,10 +21,10 @@ def calculate_margin_diff(df, segment):
         return None, None
 
     # ✅ Safeguard: Check for required 'Date' column
-    if "Date" not in df_segment.columns:
+    if "Month" not in df_segment.columns:
         return None, None
 
-    df_segment["Quarter"] = pd.to_datetime(df_segment["Date"], errors="coerce").dt.to_period("Q")
+    df_segment["Quarter"] = pd.to_datetime(df_segment["Month"], errors="coerce").dt.to_period("Q")
     grouped = df_segment.groupby(["Quarter", "Client"]).agg({"Margin": "sum", "Revenue": "sum"}).reset_index()
     grouped["Margin %"] = (grouped["Margin"] / grouped["Revenue"]) * 100
 
