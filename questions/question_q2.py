@@ -20,11 +20,15 @@ def calculate_margin_diff(df, segment):
     if df_segment.empty:
         return None, None
 
-    df_segment["Quarter"] = pd.to_datetime(df_segment["Date"]).dt.to_period("Q")
+    # ✅ Safeguard: Check for required 'Date' column
+    if "Date" not in df_segment.columns:
+        return None, None
+
+    df_segment["Quarter"] = pd.to_datetime(df_segment["Date"], errors="coerce").dt.to_period("Q")
     grouped = df_segment.groupby(["Quarter", "Client"]).agg({"Margin": "sum", "Revenue": "sum"}).reset_index()
     grouped["Margin %"] = (grouped["Margin"] / grouped["Revenue"]) * 100
 
-    latest_two_quarters = sorted(grouped["Quarter"].unique())[-2:]
+    latest_two_quarters = sorted(grouped["Quarter"].dropna().unique())[-2:]
     if len(latest_two_quarters) < 2:
         return grouped, None
 
@@ -40,7 +44,6 @@ def calculate_margin_diff(df, segment):
 def run(df_pnl: pd.DataFrame, query: str) -> dict:
     Segment = extract_Segment_from_query(query)
 
-    # ✅ Updated check to safely handle Series ambiguity
     if Segment is None or (isinstance(Segment, pd.Series) and Segment.empty):
         return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid Segment."}
 
@@ -54,7 +57,6 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
 
     table = table_data.to_dict(orient="records")
 
-    # ✅ Chart generation preserved as-is
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.bar(table_data["Client"], table_data["Avg Margin %"], color="orange")
     ax.set_title(f"{Segment} - Margin % Change by Client")
