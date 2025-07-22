@@ -1,5 +1,3 @@
-# kpi_engine/margin.py
-
 import pandas as pd
 
 def load_pnl_data(filepath, sheet_name="LnTPnL"):
@@ -31,6 +29,9 @@ def preprocess_pnl_data(df):
     if 'Type' in df.columns:
         column_map['Type'] = 'Type'
 
+    if 'segment' in df.columns:
+        column_map['segment'] = 'segment'  # preserve as-is
+
     df = df.rename(columns=column_map)
 
     # Ensure Month is datetime
@@ -46,14 +47,15 @@ def preprocess_pnl_data(df):
     return df
 
 def compute_margin(df):
-    # Group by Month and Client
-    grouped = df.groupby(['Month', 'Client', 'Type'])['Amount'].sum().unstack().fillna(0)
+    # Check if 'segment' exists and include in groupby if present
+    groupby_cols = ['Month', 'Client']
+    if 'segment' in df.columns:
+        groupby_cols.append('segment')
 
-    # Calculate margin and CM%
+    grouped = df.groupby(groupby_cols + ['Type'])['Amount'].sum().unstack().fillna(0)
+
     grouped['Margin'] = grouped['Revenue'] - grouped['Cost']
     grouped['CM%'] = (grouped['Margin'] / grouped['Revenue']) * 100
-
-    # ✅ Add Margin % alias to satisfy question_q1.py expectations
     grouped['Margin %'] = grouped['CM%']
 
     grouped = grouped.reset_index()
