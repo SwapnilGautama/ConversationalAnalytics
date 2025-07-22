@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from kpi_engine.margin import compute_margin
 
 
-def extract_segment_from_query(query):
+def extract_Segment_from_query(query):
     query = query.lower()
     keywords = ["transportation", "manufacturing", "utilities", "healthcare", "defense", "aerospace"]  # Add more as needed
     for k in keywords:
@@ -17,16 +17,16 @@ def extract_segment_from_query(query):
 
 
 def run(df_pnl: pd.DataFrame, query: str) -> dict:
-    segment = extract_segment_from_query(query)
+    Segment = extract_Segment_from_query(query)
     if not segment:
-        return {"summary": "❌ Could not identify the segment from the query. Please specify a valid segment."}
+        return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid segment."}
 
     if "segment" not in df_pnl.columns:
-        return {"summary": "❌ 'segment' column not found in the dataset."}
+        return {"summary": "❌ 'Segment' column not found in the dataset."}
 
-    df_filtered = df_pnl[df_pnl["segment"].str.lower() == segment.lower()].copy()
+    df_filtered = df_pnl[df_pnl["Segment"].str.lower() == Segment.lower()].copy()
     if df_filtered.empty:
-        return {"summary": f"❌ No data found for segment: {segment}"}
+        return {"summary": f"❌ No data found for segment: {Segment}"}
 
     df_margin = compute_margin(df_filtered)
     df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
@@ -39,7 +39,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     previous = df_margin[df_margin["Quarter"] == prev_quarter]
 
     if current.empty or previous.empty:
-        return {"summary": f"❌ Not enough quarterly data available for segment: {segment}"}
+        return {"summary": f"❌ Not enough quarterly data available for Segment: {Segment}"}
 
     current_avg = current["Margin %"].mean()
     previous_avg = previous["Margin %"].mean()
@@ -47,7 +47,7 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
 
     trend = "decreased" if diff < 0 else "increased"
     pct = abs(diff)
-    summary = f"🔍 In the **{segment}** segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
+    summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
 
     client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
     table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
