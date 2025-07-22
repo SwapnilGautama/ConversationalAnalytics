@@ -7,7 +7,7 @@ from datetime import datetime
 
 def analyze_margin_drop(segment_input):
     # Load data
-    file_path = "/mnt/data/LnTPnLSample.xlsx"
+    file_path = "sample_data/LnTPnL.xlsx"
     df = pd.read_excel(file_path)
 
     # Clean and transform
