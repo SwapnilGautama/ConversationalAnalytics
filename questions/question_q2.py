@@ -41,20 +41,24 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     if current.empty or previous.empty:
         return {"summary": f"❌ Not enough quarterly data available for Segment: {Segment}"}
 
-    current_avg = current["Margin %"].mean()
-    previous_avg = previous["Margin %"].mean()
+    # Fill missing Margin % with 0 for clients that exist in only one of the two quarters
+    current_filled = current[["Client", "Margin %"]].groupby("Client").mean()
+    previous_filled = previous[["Client", "Margin %"]].groupby("Client").mean()
+
+    combined = pd.concat([current_filled, previous_filled], axis=1, keys=["Current", "Previous"]).fillna(0)
+    current_avg = combined["Current"].mean()
+    previous_avg = combined["Previous"].mean()
     diff = current_avg - previous_avg
 
     trend = "decreased" if diff < 0 else "increased"
     pct = abs(diff)
     summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
 
-    client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
-    table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
+    table = combined["Current"].reset_index().rename(columns={"Current": "Avg Margin %"}).sort_values("Avg Margin %")
 
     # Chart
     fig, ax = plt.subplots(figsize=(6, 4))
-    client_comparison.plot(kind="barh", ax=ax, color="coral")
+    table.set_index("Client")["Avg Margin %"].plot(kind="barh", ax=ax, color="coral")
     ax.set_xlabel("Avg Margin %")
     ax.set_ylabel("Client")
     ax.set_title(f"Client Margin% in {Segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
