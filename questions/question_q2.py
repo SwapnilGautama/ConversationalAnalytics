@@ -1,80 +1,55 @@
 import pandas as pd
-from utils.helpers import extract_relevant_quarters, extract_latest_quarters, format_in_inr_cr
-from utils.visuals import generate_bar_chart
-from utils.nlp import capitalize_each_word
 
-def analyze_margin_change_by_segment(pnl_df, segment="Transportation"):
-    # ✅ Clean and standardize column names
-    pnl_df.columns = pnl_df.columns.str.strip()
+def run(user_query: str, df: pd.DataFrame) -> dict:
+    # Extract segment name from user_query
+    segment = None
+    for word in user_query.split():
+        if word.lower() in df['Segment'].str.lower().unique():
+            segment = word.title()
+            break
+    if not segment:
+        return {"answer": "Please specify a valid segment name in your query (e.g., Transportation, Healthcare)."}
 
-    # ✅ Rename expected columns
-    pnl_df.rename(columns={
-        "Amount in INR": "Amount",
-        "Company code": "Company_Code",
-        "Month": "Date"
-    }, inplace=True)
+    # Filter only that segment
+    segment_df = df[df['Segment'].str.lower() == segment.lower()]
 
-    # ✅ Filter for relevant groupings
-    pnl_df = pnl_df[pnl_df["Group2"].isin(["Revenue - Fixed", "Revenue - Projects", "Costs - Direct Expenses - Onsite", "Costs - Direct Expenses - Offshore"])]
-    
-    if "Segment" not in pnl_df.columns or "Date" not in pnl_df.columns:
-        return {"summary": f"❌ Required columns are missing in data."}
-
-    # ✅ Narrow to segment
-    segment_df = pnl_df[pnl_df["Segment"].str.strip().str.lower() == segment.strip().lower()]
     if segment_df.empty:
-        return {"summary": f"❌ No data found for segment: {segment}"}
+        return {"answer": f"No data found for segment '{segment}'."}
 
-    # ✅ Extract latest 2 quarters
-    segment_df["Date"] = pd.to_datetime(segment_df["Date"], errors='coerce')
-    segment_df = segment_df.dropna(subset=["Date"])
-    latest_qtrs = extract_latest_quarters(segment_df["Date"])
-    if len(latest_qtrs) < 2:
-        return {"summary": f"⚠️ Only current quarter margin data is available for **{segment}** segment. Please add previous quarter data to compare changes."}
+    # Ensure 'Month' is datetime type
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    segment_df['Month'] = pd.to_datetime(segment_df['Month'], errors='coerce')
 
-    q1, q2 = latest_qtrs
-    q1_df = extract_relevant_quarters(segment_df, [q1])
-    q2_df = extract_relevant_quarters(segment_df, [q2])
+    # Extract Quarter and Year
+    segment_df['Quarter'] = segment_df['Month'].dt.to_period('Q')
 
-    def calc_margin(df):
-        pivot = df.pivot_table(index="Company_Code", columns="Group2", values="Amount", aggfunc="sum").fillna(0)
-        revenue = pivot.get("Revenue - Fixed", 0) + pivot.get("Revenue - Projects", 0)
-        cost = pivot.get("Costs - Direct Expenses - Onsite", 0) + pivot.get("Costs - Direct Expenses - Offshore", 0)
-        margin = revenue - cost
-        margin_pct = (margin / revenue * 100) if revenue.sum() != 0 else 0
-        return pd.DataFrame({"Revenue": revenue, "Cost": cost, "Margin": margin, "Margin %": margin_pct})
+    # Group revenue by client and quarter
+    grouped = segment_df.groupby(['Client Name', 'Quarter'])['Revenue'].sum().unstack(fill_value=0)
 
-    q1_metrics = calc_margin(q1_df)
-    q2_metrics = calc_margin(q2_df)
+    # Get the 2 most recent quarters
+    recent_quarters = sorted(grouped.columns)[-2:]
+    if len(recent_quarters) < 2:
+        return {"answer": f"Not enough data for two quarters in '{segment}' segment."}
 
-    combined = q2_metrics.join(q1_metrics, lsuffix="_q2", rsuffix="_q1", how="outer").fillna(0)
-    combined["Δ Margin %"] = combined["Margin %_q2"] - combined["Margin %_q1"]
-    combined_sorted = combined.sort_values("Δ Margin %")
+    q_prev, q_curr = recent_quarters
+    grouped['Revenue Drop'] = grouped[q_prev] - grouped[q_curr]
+    grouped['% Drop'] = grouped['Revenue Drop'] / grouped[q_prev].replace(0, pd.NA) * 100
 
-    # ✅ Summary
-    worst_accounts = combined_sorted.head(3)
-    summary_lines = [
-        f"📉 Margin dropped in **{segment}** segment from **{q1}** to **{q2}**.",
-        f"🔻 Top contributors to the drop:",
-    ]
-    for acc, row in worst_accounts.iterrows():
-        summary_lines.append(
-            f"- `{acc}`: Margin % dropped from {row['Margin %_q1']:.1f}% to {row['Margin %_q2']:.1f}% (Δ {row['Δ Margin %']:.1f}%)"
-        )
+    # Sort by biggest drop
+    result = grouped.sort_values(by='Revenue Drop', ascending=False).reset_index()
 
-    # ✅ Chart
-    chart = generate_bar_chart(
-        worst_accounts.reset_index(),
-        x_col="Company_Code",
-        y_col="Δ Margin %",
-        title=f"Top Accounts Causing Margin Drop in {capitalize_each_word(segment)}"
+    # Generate summary
+    top_client = result.iloc[0]
+    summary = (
+        f"In the '{segment}' segment, the client with the biggest revenue drop from {q_prev} to {q_curr} "
+        f"is **{top_client['Client Name']}**, whose revenue fell from ₹{top_client[q_prev]:,.0f} to "
+        f"₹{top_client[q_curr]:,.0f} — a drop of ₹{top_client['Revenue Drop']:,.0f} ({top_client['% Drop']:.1f}%)."
     )
 
-    return {
-        "summary": "\n".join(summary_lines),
-        "charts": [chart],
-        "tables": [{"title": "Margin Comparison", "df": combined_sorted.reset_index()}]
-    }
+    # Format final table
+    table = result[['Client Name', q_prev, q_curr, 'Revenue Drop', '% Drop']]
 
-def run(pnl_df, ut_df, user_question):
-    return analyze_margin_change_by_segment(pnl_df)
+    return {
+        "answer": summary,
+        "tables": [{"title": f"Client Revenue Comparison in '{segment}' Segment", "df": table}]
+    }
