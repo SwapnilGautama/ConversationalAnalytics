@@ -6,7 +6,6 @@ import base64
 from dateutil.relativedelta import relativedelta
 from kpi_engine.margin import compute_margin
 
-
 def extract_Segment_from_query(query):
     query = query.lower()
     keywords = ["transportation", "manufacturing", "utilities", "healthcare", "defense", "aerospace"]  # Add more as needed
@@ -14,7 +13,6 @@ def extract_Segment_from_query(query):
         if k in query:
             return k.capitalize()
     return None
-
 
 def run(df_pnl: pd.DataFrame, query: str) -> dict:
     Segment = extract_Segment_from_query(query)
@@ -39,18 +37,22 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     previous = df_margin[df_margin["Quarter"] == prev_quarter]
 
     if current.empty or previous.empty:
-        return {"summary": f"❌ Not enough quarterly data available for segment: {segment}"}
+        return {"summary": f"❌ Not enough quarterly data available for segment: {Segment}"}
 
-    current_avg = current["Margin %"].mean()
-    previous_avg = previous["Margin %"].mean()
+    current_avg = current["Margin %"].dropna().mean()
+    previous_avg = previous["Margin %"].dropna().mean()
+
+    if pd.isna(current_avg) or pd.isna(previous_avg):
+        return {"summary": f"❌ Margin data is missing or incomplete for segment: {Segment}"}
+
     diff = current_avg - previous_avg
-
     trend = "decreased" if diff < 0 else "increased"
     pct = abs(diff)
     summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
 
     client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
     table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
+    table["Avg Margin %"] = table["Avg Margin %"].round(2)
 
     # Chart
     fig, ax = plt.subplots(figsize=(6, 4))
