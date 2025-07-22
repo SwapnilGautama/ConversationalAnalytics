@@ -1,71 +1,61 @@
+# kpi_engine/margin.py
+
 import pandas as pd
-import datetime
-import matplotlib.pyplot as plt
-import io
-import base64
-from dateutil.relativedelta import relativedelta
-from kpi_engine.margin import compute_margin
 
-def extract_Segment_from_query(query):
-    query = query.lower()
-    keywords = ["transportation", "manufacturing", "utilities", "healthcare", "defense", "aerospace"]  # Add more as needed
-    for k in keywords:
-        if k in query:
-            return k.capitalize()
-    return None
+def load_pnl_data(filepath, sheet_name="LnTPnL"):
+    try:
+        df = pd.read_excel(filepath, sheet_name=sheet_name, engine="openpyxl")
+        return df
+    except Exception as e:
+        raise RuntimeError(f"Failed to load data: {e}")
 
-def run(df_pnl: pd.DataFrame, query: str) -> dict:
-    Segment = extract_Segment_from_query(query)
-    if not Segment:
-        return {"summary": "❌ Could not identify the Segment from the query. Please specify a valid Segment."}
+def preprocess_pnl_data(df):
+    df.columns = df.columns.str.strip()
 
-    if "Segment" not in df_pnl.columns:
-        return {"summary": "❌ 'Segment' column not found in the dataset."}
+    # Dynamically rename columns based on what's present
+    column_map = {}
 
-    df_filtered = df_pnl[df_pnl["Segment"].str.lower() == Segment.lower()].copy()
-    if df_filtered.empty:
-        return {"summary": f"❌ No data found for Segment: {Segment}"}
+    if 'Company Code' in df.columns:
+        column_map['Company Code'] = 'Client'
+    elif 'Company_Code' in df.columns:
+        column_map['Company_Code'] = 'Client'
 
-    df_margin = compute_margin(df_filtered)
-    df_margin["Quarter"] = pd.to_datetime(df_margin["Month"])
-    df_margin["Quarter"] = df_margin["Quarter"].dt.to_period("Q")
+    if 'Amount in INR' in df.columns:
+        column_map['Amount in INR'] = 'Amount'
+    elif 'Amount' in df.columns:
+        column_map['Amount'] = 'Amount'
 
-    latest_quarter = df_margin["Quarter"].max()
-    prev_quarter = (latest_quarter - 1)
+    if 'Month' in df.columns:
+        column_map['Month'] = 'Month'
 
-    current = df_margin[df_margin["Quarter"] == latest_quarter]
-    previous = df_margin[df_margin["Quarter"] == prev_quarter]
+    if 'Type' in df.columns:
+        column_map['Type'] = 'Type'
 
-    if current.empty or previous.empty:
-        return {"summary": f"❌ Not enough quarterly data available for segment: {Segment}"}
+    df = df.rename(columns=column_map)
 
-    current_avg = current["Margin %"].mean()
-    previous_avg = previous["Margin %"].mean()
-    diff = current_avg - previous_avg
+    # Ensure Month is datetime
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
 
-    trend = "decreased" if diff < 0 else "increased"
-    pct = abs(diff)
-    summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
+    # Keep only Cost and Revenue rows
+    df = df[df['Type'].isin(['Cost', 'Revenue'])]
 
-    client_comparison = current.groupby("Client")["Margin %"].mean().sort_values()
-    table = client_comparison.reset_index().rename(columns={"Margin %": "Avg Margin %"})
+    # Convert Amount to numeric and drop invalid rows
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+    df = df.dropna(subset=['Month', 'Amount'])
 
-    # Chart
-    fig, ax = plt.subplots(figsize=(6, 4))
-    client_comparison.plot(kind="barh", ax=ax, color="coral")
-    ax.set_xlabel("Avg Margin %")
-    ax.set_ylabel("Client")
-    ax.set_title(f"Client Margin% in {Segment} Segment - Q{latest_quarter.quarter} {latest_quarter.start_time.year}")
-    plt.tight_layout()
+    return df
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    chart_base64 = base64.b64encode(buf.read()).decode("utf-8")
-    plt.close()
+def compute_margin(df):
+    # Group by Month and Client
+    grouped = df.groupby(['Month', 'Client', 'Type'])['Amount'].sum().unstack().fillna(0)
 
-    return {
-        "summary": summary,
-        "table": table.to_dict(orient="records"),
-        "chart": chart_base64
-    }
+    # Calculate margin and CM%
+    grouped['Margin'] = grouped['Revenue'] - grouped['Cost']
+    grouped['CM%'] = (grouped['Margin'] / grouped['Revenue']) * 100
+
+    # ✅ Add Margin % alias to satisfy question_q1.py expectations
+    grouped['Margin %'] = grouped['CM%']
+
+    grouped = grouped.reset_index()
+
+    return grouped
