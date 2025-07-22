@@ -47,12 +47,14 @@ def preprocess_pnl_data(df):
     return df
 
 def compute_margin(df):
-    # Grouping by Month, Client, and optionally Segment
-    groupby_cols = ['Month', 'Client']
+    # Add Quarter column
+    df['Quarter'] = df['Month'].dt.to_period("Q").astype(str)
+
+    # Grouping by Quarter, Month, Client, and optionally Segment
+    groupby_cols = ['Quarter', 'Month', 'Client']
     if 'Segment' in df.columns:
         groupby_cols.append('Segment')
 
-    # Pivot on 'Type' to get Revenue and Cost side-by-side
     grouped = df.groupby(groupby_cols + ['Type'])['Amount'].sum().unstack().fillna(0)
 
     grouped['Margin'] = grouped.get('Revenue', 0) - grouped.get('Cost', 0)
