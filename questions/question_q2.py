@@ -1,61 +1,66 @@
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
-import io
-import base64
+from kpi_engine import margin as margin_module
 
-def run(pn_df: pd.DataFrame, ut_df: pd.DataFrame, user_question: str):
-    # --- Step 1: Identify the segment from question ---
-    segment_list = pn_df['segment'].dropna().unique().tolist()
-    segment = next((seg for seg in segment_list if seg.lower() in user_question.lower()), None)
+def run(df, user_query=None):
+    # ✅ Recalculate margin table
+    margin_df = margin_module.compute_margin(df)
+
+    # ✅ Get segment from user query
+    segment = None
+    if user_query:
+        for word in user_query.split():
+            if word.lower() in margin_df['Segment'].str.lower().unique():
+                segment = word.capitalize()
+
     if not segment:
-        return "❌ Could not identify a valid segment from your question.", None, None
+        return "❌ Could not identify a valid segment from your question."
 
-    # --- Step 2: Filter for this segment ---
-    df = pn_df[pn_df['segment'].str.lower() == segment.lower()].copy()
-    if df.empty:
-        return f"❌ No data found for segment: {segment}", None, None
+    # ✅ Filter for selected segment
+    segment_df = margin_df[margin_df['Segment'].str.lower() == segment.lower()].copy()
+    if segment_df.empty:
+        return f"❌ No data available for segment '{segment}'."
 
-    # --- Step 3: Ensure 'Quarter' exists and pick latest 2 ---
-    if 'Quarter' not in df.columns:
-        return "❌ 'Quarter' column missing in P&L data.", None, None
+    # ✅ Assign quarter
+    segment_df['Quarter'] = segment_df['Month'].dt.to_period('Q')
 
-    latest_quarters = sorted(df['Quarter'].unique())[-2:]
-    if len(latest_quarters) < 2:
-        return f"Only current quarter data is available for **{segment}** segment. Please add previous quarter data to compare changes.", None, None
+    # ✅ Pivot to get margin by client & quarter
+    pivot = segment_df.pivot_table(
+        index='Client',
+        columns='Quarter',
+        values='Margin',
+        aggfunc='sum',
+        fill_value=0
+    )
 
-    q1, q2 = latest_quarters  # q1 = older, q2 = latest
+    # ✅ Check at least 2 quarters present
+    if pivot.shape[1] < 2:
+        return f"Only current quarter margin data is available for **{segment}** segment. Please add previous quarter data to compare changes."
 
-    # --- Step 4: Revenue by Client for both quarters ---
-    rev_q1 = df[df['Quarter'] == q1].groupby('Client Name')['Revenue'].sum().rename('Revenue_Q1')
-    rev_q2 = df[df['Quarter'] == q2].groupby('Client Name')['Revenue'].sum().rename('Revenue_Q2')
+    # ✅ Use last two quarters
+    pivot = pivot.iloc[:, -2:]
+    q1, q2 = pivot.columns
 
-    revenue_df = pd.concat([rev_q1, rev_q2], axis=1).fillna(0)
-    revenue_df['Revenue_Drop'] = revenue_df['Revenue_Q2'] - revenue_df['Revenue_Q1']
-    revenue_df['Abs_Drop'] = revenue_df['Revenue_Drop'].abs()
+    pivot['Drop'] = pivot[q2] - pivot[q1]
+    pivot['Abs Drop'] = pivot['Drop'].abs()
 
-    # --- Step 5: Sort by absolute drop ---
-    sorted_df = revenue_df.sort_values(by='Abs_Drop', ascending=False)
-    top_drops = sorted_df[sorted_df['Revenue_Drop'] < 0]
+    # ✅ Sort by drop magnitude
+    sorted_df = pivot.sort_values('Abs Drop', ascending=False).reset_index()
 
-    if top_drops.empty:
-        return f"✅ No revenue drop detected for any client in **{segment}** segment between {q1} and {q2}.", None, None
+    # ✅ Display table
+    st.markdown(f"### 💡 Margin Change Analysis for '{segment}' Segment ({q1} → {q2})")
+    display_df = sorted_df[['Client', q1, q2, 'Drop']].rename(
+        columns={q1: f"Margin {q1}", q2: f"Margin {q2}"}
+    )
+    st.dataframe(display_df)
 
-    # --- Step 6: Plot pie chart ---
-    fig, ax = plt.subplots()
-    ax.pie(top_drops['Abs_Drop'], labels=top_drops.index, autopct='%1.1f%%', startangle=90)
-    ax.set_title(f'Revenue Drop Share by Client ({segment})')
-    plt.tight_layout()
+    # ✅ Plot pie chart of absolute drop
+    pie_df = sorted_df[sorted_df['Drop'] < 0].copy()
+    if not pie_df.empty:
+        plt.figure(figsize=(6, 6))
+        plt.pie(pie_df['Abs Drop'], labels=pie_df['Client'], autopct='%1.1f%%', startangle=140)
+        plt.title('🔻 Contribution to Total Margin Drop')
+        st.pyplot(plt.gcf())
 
-    # Save to base64
-    img_buf = io.BytesIO()
-    plt.savefig(img_buf, format="png")
-    img_buf.seek(0)
-    img_base64 = base64.b64encode(img_buf.read()).decode("utf-8")
-    plt.close()
-
-    # --- Step 7: Summary ---
-    summary = f"### 📉 Revenue Drop Analysis for {segment} ({q1} → {q2})\n"
-    summary += f"The following clients in **{segment}** segment experienced a revenue drop.\n\n"
-    summary += f"Total drop: ₹{top_drops['Abs_Drop'].sum():,.0f}\n\n"
-
-    return summary, top_drops[['Revenue_Q1', 'Revenue_Q2', 'Revenue_Drop']], img_base64
+    return ""
