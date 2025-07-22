@@ -41,10 +41,13 @@ def run(df_pnl: pd.DataFrame, query: str) -> dict:
     if current.empty or previous.empty:
         return {"summary": f"❌ Not enough quarterly data available for Segment: {Segment}"}
 
-    current_avg = current["Margin %"].mean()
-    previous_avg = previous["Margin %"].mean()
-    diff = current_avg - previous_avg
+    current_avg = current["Margin %"].mean(skipna=True)
+    previous_avg = previous["Margin %"].mean(skipna=True)
 
+    if pd.isna(current_avg) or pd.isna(previous_avg):
+        return {"summary": f"❌ Margin data is missing or incomplete for segment: {Segment}"}
+
+    diff = current_avg - previous_avg
     trend = "decreased" if diff < 0 else "increased"
     pct = abs(diff)
     summary = f"🔍 In the **{Segment}** Segment, average margin {trend} by **{pct:.2f}%** in the last quarter compared to the previous quarter."
