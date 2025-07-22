@@ -25,23 +25,29 @@ def analyze_margin_drop(segment_input):
 
     # Aggregate by Month and Type
     summary_df = df_filtered.groupby(["MonthStr", "Type"])["Amount in INR"].sum().unstack().fillna(0)
-    summary_df["Margin"] = summary_df["Revenue"] - summary_df["Cost"]
-    summary_df["Margin %"] = (summary_df["Margin"] / summary_df["Cost"]) * 100
+    summary_df["Margin"] = summary_df.get("Revenue", 0) - summary_df.get("Cost", 0)
+    summary_df["Margin %"] = (summary_df["Margin"] / summary_df.get("Cost", 1)) * 100
 
     # MoM movement summary
     if summary_df.shape[0] < 2:
         return "❗Insufficient data for margin comparison", pd.DataFrame()
 
-    rev_diff = summary_df["Revenue"].iloc[1] - summary_df["Revenue"].iloc[0]
-    cost_diff = summary_df["Cost"].iloc[1] - summary_df["Cost"].iloc[0]
+    rev_diff = summary_df.get("Revenue", pd.Series([0,0])).iloc[1] - summary_df.get("Revenue", pd.Series([0,0])).iloc[0]
+    cost_diff = summary_df.get("Cost", pd.Series([0,0])).iloc[1] - summary_df.get("Cost", pd.Series([0,0])).iloc[0]
 
     summary_text = f"""\
 1. **Revenue Change (MoM)**: ₹{rev_diff:,.0f}
 2. **Cost Change (MoM)**: ₹{cost_diff:,.0f}
 """
 
+    # Correct field names (no space)
+    cost_fields = ["Group1", "Group2", "Group3", "Group4"]
+
+    missing_cols = [col for col in cost_fields if col not in df_filtered.columns]
+    if missing_cols:
+        return f"❗Columns not found: {missing_cols}", pd.DataFrame()
+
     # Detailed cost category comparison
-    cost_fields = ["Group 1", "Group 2", "Group 3", "Group 4"]
     cost_df = df_filtered[df_filtered["Type"] == "Cost"]
     monthly_costs = cost_df.groupby(["MonthStr"])[cost_fields].sum()
 
