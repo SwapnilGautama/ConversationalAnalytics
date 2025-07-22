@@ -99,3 +99,5 @@ def analyze_margin_drop(segment_input):
 # Example (replace with actual user input dynamically)
 result = analyze_margin_drop("Plant Engineering")
 result["summary"] if isinstance(result, dict) else result
+# Alias for app.py compatibility
+run = analyze_margin_drop
