@@ -6,7 +6,6 @@ import importlib
 from kpi_engine import margin
 import os
 import pandas as pd
-import inspect
 
 # ✅ Load data from sample_data folder
 @st.cache_data
@@ -29,7 +28,10 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
 
-# ✅ UI Setup
+# ✅ Import correct prompt bank used for semantic matching
+from utils.semantic_matcher import PROMPT_BANK
+
+# Streamlit UI
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 st.title("📊 LTTS BI Assistant")
 
@@ -53,18 +55,17 @@ if user_question:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
         st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
-        # ✅ Dynamic import of correct question module
+        # ✅ Lowercase the QID for correct import
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
 
-        # ✅ Call run with correct parameters
-        run_fn = question_module.run
-        args = inspect.getfullargspec(run_fn).args
-
-        if 'user_question' in args:
-            result = run_fn(df, user_question)
+        # ✅ Pass additional arguments for Q2 only
+        if best_qid.upper() == "Q2":
+            from kpi_engine import utilization
+            ut_filepath = os.path.join("sample_data", "LNTData.xlsx")
+            ut_df = utilization.load_ut_data(ut_filepath)
+            result = question_module.run(df, ut_df, user_question)
         else:
-            result = run_fn(df)
-
+            result = question_module.run(df)
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
