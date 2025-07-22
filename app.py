@@ -6,6 +6,7 @@ import importlib
 from kpi_engine import margin
 import os
 import pandas as pd
+import inspect
 
 # ✅ Load data from sample_data folder
 @st.cache_data
@@ -58,14 +59,14 @@ if user_question:
         # ✅ Lowercase the QID for correct import
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
 
-        # ✅ Pass additional arguments for Q2 only
-        if best_qid.upper() == "Q2":
-            from kpi_engine import utilization
-            ut_filepath = os.path.join("sample_data", "LNTData.xlsx")
-            ut_df = utilization.load_ut_data(ut_filepath)
-            result = question_module.run(df, ut_df, user_question)
+        # ✅ Dynamically inspect the run function parameters
+        run_func = question_module.run
+        run_params = inspect.signature(run_func).parameters
+
+        if len(run_params) == 2:
+            result = run_func(df, user_question)
         else:
-            result = question_module.run(df)
+            result = run_func(df)
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
