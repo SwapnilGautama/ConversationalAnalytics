@@ -1,89 +1,93 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import io
 import base64
 from datetime import datetime
 
 def analyze_margin_drop(segment_input):
-    # Load data
     file_path = "sample_data/LnTPnL.xlsx"
     df = pd.read_excel(file_path)
 
-    # Clean and transform
+    # Clean and filter
     df["Month"] = pd.to_datetime(df["Month"])
     df["MonthStr"] = df["Month"].dt.strftime("%b-%Y")
     df = df[df["Segment"] == segment_input]
 
-    # Get latest 2 months
+    # Identify latest 2 months
     latest_months = sorted(df["Month"].dt.to_period("M").unique())[-2:]
     if len(latest_months) < 2:
-        return f"❗ Not enough data for MoM comparison in segment: {segment_input}", None
+        return f"❗Not enough data for MoM comparison in segment: {segment_input}", pd.DataFrame()
 
     prev_month, curr_month = latest_months
-    df = df[df["Month"].dt.to_period("M").isin([prev_month, curr_month])]
+    df_filtered = df[df["Month"].dt.to_period("M").isin([prev_month, curr_month])]
 
-    # Aggregate data
-    agg_cols = ["Amount in INR"]
-    group_cols = ["Company_Code", "Type", "MonthStr"]
-    df_agg = df.groupby(group_cols)[agg_cols].sum().reset_index()
+    # Revenue & Cost tables
+    df_filtered["Revenue"] = df_filtered[df_filtered["Type"] == "Revenue"]["Amount in INR"]
+    df_filtered["Cost"] = df_filtered[df_filtered["Type"] == "Cost"]["Amount in INR"]
 
-    # Pivot revenue and cost
-    revenue_df = df_agg[df_agg["Type"] == "Revenue"].pivot(index="Company_Code", columns="MonthStr", values="Amount in INR").fillna(0)
-    cost_df = df_agg[df_agg["Type"] == "Cost"].pivot(index="Company_Code", columns="MonthStr", values="Amount in INR").fillna(0)
+    # Pivot tables
+    rev_df = df_filtered[df_filtered["Type"] == "Revenue"].pivot_table(
+        index="Company_code", columns="MonthStr", values="Amount in INR", aggfunc="sum").fillna(0)
+    cost_df = df_filtered[df_filtered["Type"] == "Cost"].pivot_table(
+        index="Company_code", columns="MonthStr", values="Amount in INR", aggfunc="sum").fillna(0)
 
-    rev_cols = list(revenue_df.columns)
+    # Align both DataFrames to common index
+    common_index = rev_df.index.intersection(cost_df.index)
+    rev_df = rev_df.loc[common_index]
+    cost_df = cost_df.loc[common_index]
+
+    # Calculate change
+    rev_cols = list(rev_df.columns)
     cost_cols = list(cost_df.columns)
+    rev_df["Revenue_Change"] = rev_df[rev_cols[1]] - rev_df[rev_cols[0]]
+    cost_df["Cost_Change"] = cost_df[cost_cols[1]] - cost_df[cost_cols[0]]
 
-    # Calculate deltas
-    revenue_df["Revenue_Change"] = revenue_df[rev_cols[1]].values - revenue_df[rev_cols[0]].values
-    cost_df["Cost_Change"] = cost_df[cost_cols[1]].values - cost_df[cost_cols[0]].values
+    # Merge for margin analysis
+    merged_df = pd.concat([rev_df, cost_df], axis=1)
+    merged_df["Margin_Change"] = merged_df["Revenue_Change"] - merged_df["Cost_Change"]
+    merged_df["Margin_%_Prev"] = ((rev_df[rev_cols[0]] - cost_df[cost_cols[0]]) / cost_df[cost_cols[0]]) * 100
+    merged_df["Margin_%_Curr"] = ((rev_df[rev_cols[1]] - cost_df[cost_cols[1]]) / cost_df[cost_cols[1]]) * 100
+    merged_df["Margin_%_Change"] = merged_df["Margin_%_Curr"] - merged_df["Margin_%_Prev"]
+    merged_df = merged_df.sort_values("Margin_%_Change")
 
-    # Merge
-    merged = revenue_df[["Revenue_Change"]].merge(cost_df[["Cost_Change"]], left_index=True, right_index=True)
-    merged["Margin_Change"] = merged["Revenue_Change"] - merged["Cost_Change"]
-    merged = merged.sort_values(by="Margin_Change")
+    # Top contributors to margin drop
+    top_drops = merged_df.head(5)
 
-    # Group-level breakdown
-    cost_groups = ["Group 1", "Group 2", "Group 3", "Group 4"]
-    insights = {}
-    for group in cost_groups:
-        group_df = df[df["Type"] == "Cost"].groupby(["MonthStr", group])["Amount in INR"].sum().unstack().fillna(0)
-        if len(group_df) >= 2:
-            group_df["Change"] = group_df.iloc[-1] - group_df.iloc[-2]
-            top_increase = group_df["Change"].sort_values(ascending=False).head(1)
-            if not top_increase.empty:
-                insights[group] = top_increase.index[0]
+    # Group1-4 cost analysis
+    group_cols = ["Group 1", "Group 2", "Group 3", "Group 4"]
+    cost_grp = df_filtered[df_filtered["Type"] == "Cost"]
+    group_cost_changes = cost_grp.groupby(["MonthStr"])[group_cols].sum().fillna(0)
+    group_cost_diff = group_cost_changes.diff().iloc[-1]
 
-    # Text summary
-    total_rev = df[df["Type"] == "Revenue"].groupby("MonthStr")["Amount in INR"].sum()
-    total_cost = df[df["Type"] == "Cost"].groupby("MonthStr")["Amount in INR"].sum()
+    # Summary
+    total_rev_prev = df_filtered[(df_filtered["Type"] == "Revenue") & (df_filtered["Month"].dt.to_period("M") == prev_month)]["Amount in INR"].sum()
+    total_rev_curr = df_filtered[(df_filtered["Type"] == "Revenue") & (df_filtered["Month"].dt.to_period("M") == curr_month)]["Amount in INR"].sum()
+    total_cost_prev = df_filtered[(df_filtered["Type"] == "Cost") & (df_filtered["Month"].dt.to_period("M") == prev_month)]["Amount in INR"].sum()
+    total_cost_curr = df_filtered[(df_filtered["Type"] == "Cost") & (df_filtered["Month"].dt.to_period("M") == curr_month)]["Amount in INR"].sum()
 
     summary = f"""
-### 🔍 Summary
-- **Revenue movement**: {rev_cols[0]} = ₹{total_rev[rev_cols[0]]:,.0f}, {rev_cols[1]} = ₹{total_rev[rev_cols[1]]:,.0f}
-- **Cost movement**: {cost_cols[0]} = ₹{total_cost[cost_cols[0]]:,.0f}, {cost_cols[1]} = ₹{total_cost[cost_cols[1]]:,.0f}
+🔹 **Revenue moved from ₹{total_rev_prev:,.0f} to ₹{total_rev_curr:,.0f}**
+🔹 **Cost moved from ₹{total_cost_prev:,.0f} to ₹{total_cost_curr:,.0f}**
 
-### 💡 Group cost contributors to increase:
+Top cost contributors to margin drop (Month-on-Month):
 """
-    for group, cause in insights.items():
-        summary += f"- {group}: {cause}\n"
+    top_cost_drivers = group_cost_diff.sort_values(ascending=False).head(5)
+    for group, change in top_cost_drivers.items():
+        summary += f"\n- {group}: +₹{change:,.0f}"
 
-    # Plot
-    plt.figure(figsize=(10, 5))
-    sns.barplot(data=merged.reset_index(), x="Company_Code", y="Margin_Change", palette="coolwarm")
-    plt.title("Margin Change by Client")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
+    return summary, top_drops.reset_index()
 
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    img_base64 = base64.b64encode(buffer.read()).decode()
+def run(user_input):
+    import streamlit as st
+    import re
+    segment_match = re.search(r"(?:in|for)\s+([A-Za-z]+)", user_input, re.IGNORECASE)
+    segment = segment_match.group(1) if segment_match else "Transportation"
 
-    return summary, img_base64
+    summary, table = analyze_margin_drop(segment)
 
-
-# ✅ Wrapper function for chatbot
-def run(segment_input):
-    return analyze_margin_drop(segment_input)
+    st.markdown(f"### Margin Drop Analysis for **{segment}** Segment")
+    st.markdown(summary)
+    if not table.empty:
+        st.dataframe(table)
+    else:
+        st.error("No comparison data available for the latest 2 months.")
