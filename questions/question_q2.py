@@ -18,86 +18,72 @@ def analyze_margin_drop(segment_input):
     # Get latest 2 months
     latest_months = sorted(df["Month"].dt.to_period("M").unique())[-2:]
     if len(latest_months) < 2:
-        return f"❗ Not enough data for MoM comparison in segment: {segment_input}"
+        return f"❗ Not enough data for MoM comparison in segment: {segment_input}", None
 
     prev_month, curr_month = latest_months
     df = df[df["Month"].dt.to_period("M").isin([prev_month, curr_month])]
 
     # Aggregate data
-    agg = df.groupby(["Company_Code", "Type", "MonthStr"])[["Amount in INR"]].sum().reset_index()
-    pivot = agg.pivot_table(index="Company_Code", columns=["Type", "MonthStr"], values="Amount in INR", fill_value=0)
-    pivot.columns = [f"{t}_{m}" for t, m in pivot.columns]
-    pivot = pivot.reset_index()
+    agg_cols = ["Amount in INR"]
+    group_cols = ["Company_Code", "Type", "MonthStr"]
+    df_agg = df.groupby(group_cols)[agg_cols].sum().reset_index()
 
-    # Compute Revenue, Cost, Margin, Margin %
-    try:
-        rev_cols = sorted([c for c in pivot.columns if "Revenue" in c])
-        cost_cols = sorted([c for c in pivot.columns if "Cost" in c])
-        if len(rev_cols) != 2 or len(cost_cols) != 2:
-            raise ValueError(f"Expected 2 revenue and cost columns each, got {rev_cols} and {cost_cols}")
-        
-        pivot["RevDiff"] = pivot[rev_cols[1]].values - pivot[rev_cols[0]].values
-        pivot["CostDiff"] = pivot[cost_cols[1]].values - pivot[cost_cols[0]].values
-        pivot["MarginPrev"] = pivot[rev_cols[0]].values - pivot[cost_cols[0]].values
-        pivot["MarginCurr"] = pivot[rev_cols[1]].values - pivot[cost_cols[1]].values
-        pivot["MarginDrop"] = pivot["MarginPrev"] - pivot["MarginCurr"]
-        pivot["Margin%Prev"] = pivot["MarginPrev"] / pivot[cost_cols[0]].replace(0, 1)
-        pivot["Margin%Curr"] = pivot["MarginCurr"] / pivot[cost_cols[1]].replace(0, 1)
-    except Exception as e:
-        return f"❗ Error during margin computation: {e}"
+    # Pivot revenue and cost
+    revenue_df = df_agg[df_agg["Type"] == "Revenue"].pivot(index="Company_Code", columns="MonthStr", values="Amount in INR").fillna(0)
+    cost_df = df_agg[df_agg["Type"] == "Cost"].pivot(index="Company_Code", columns="MonthStr", values="Amount in INR").fillna(0)
 
-    # Identify clients with margin drop due to cost increase
-    margin_issues = pivot[(pivot["MarginDrop"] > 0) & (pivot["RevDiff"].abs() < pivot["CostDiff"].abs())]
+    rev_cols = list(revenue_df.columns)
+    cost_cols = list(cost_df.columns)
 
-    if margin_issues.empty:
-        return f"✅ No significant margin drops detected in segment {segment_input} for cost increase analysis."
+    # Calculate deltas
+    revenue_df["Revenue_Change"] = revenue_df[rev_cols[1]].values - revenue_df[rev_cols[0]].values
+    cost_df["Cost_Change"] = cost_df[cost_cols[1]].values - cost_df[cost_cols[0]].values
 
-    # Breakdown cost increase by groups
-    df_cost = df[(df["Type"] == "Cost") & (df["Month"].dt.to_period("M") == curr_month)]
-    group_costs = df_cost.groupby("Group1")["Amount in INR"].sum().sort_values(ascending=False)
+    # Merge
+    merged = revenue_df[["Revenue_Change"]].merge(cost_df[["Cost_Change"]], left_index=True, right_index=True)
+    merged["Margin_Change"] = merged["Revenue_Change"] - merged["Cost_Change"]
+    merged = merged.sort_values(by="Margin_Change")
 
-    # Summary
-    rev_movement = df[df["Type"] == "Revenue"].groupby("MonthStr")["Amount in INR"].sum()
-    cost_movement = df[df["Type"] == "Cost"].groupby("MonthStr")["Amount in INR"].sum()
+    # Group-level breakdown
+    cost_groups = ["Group 1", "Group 2", "Group 3", "Group 4"]
+    insights = {}
+    for group in cost_groups:
+        group_df = df[df["Type"] == "Cost"].groupby(["MonthStr", group])["Amount in INR"].sum().unstack().fillna(0)
+        if len(group_df) >= 2:
+            group_df["Change"] = group_df.iloc[-1] - group_df.iloc[-2]
+            top_increase = group_df["Change"].sort_values(ascending=False).head(1)
+            if not top_increase.empty:
+                insights[group] = top_increase.index[0]
+
+    # Text summary
+    total_rev = df[df["Type"] == "Revenue"].groupby("MonthStr")["Amount in INR"].sum()
+    total_cost = df[df["Type"] == "Cost"].groupby("MonthStr")["Amount in INR"].sum()
+
     summary = f"""
-🔹 **Segment: {segment_input}**  
-🔹 Revenue changed from ₹{rev_movement.iloc[0]:,.0f} to ₹{rev_movement.iloc[1]:,.0f}  
-🔹 Cost changed from ₹{cost_movement.iloc[0]:,.0f} to ₹{cost_movement.iloc[1]:,.0f}  
+### 🔍 Summary
+- **Revenue movement**: {rev_cols[0]} = ₹{total_rev[rev_cols[0]]:,.0f}, {rev_cols[1]} = ₹{total_rev[rev_cols[1]]:,.0f}
+- **Cost movement**: {cost_cols[0]} = ₹{total_cost[cost_cols[0]]:,.0f}, {cost_cols[1]} = ₹{total_cost[cost_cols[1]]:,.0f}
 
-📌 Top Cost Groups by Contribution:
+### 💡 Group cost contributors to increase:
 """
-    for g, val in group_costs.head(5).items():
-        summary += f"\n- {g}: ₹{val:,.0f}"
+    for group, cause in insights.items():
+        summary += f"- {group}: {cause}\n"
 
-    # Table Plot
-    table_data = margin_issues[["Company_Code", "Margin%Prev", "Margin%Curr", "MarginDrop"]].sort_values("MarginDrop", ascending=False)
-    fig1, ax1 = plt.subplots(figsize=(8, 4))
-    ax1.axis("off")
-    tbl = ax1.table(cellText=table_data.values, colLabels=table_data.columns, loc='center')
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(8)
+    # Plot
+    plt.figure(figsize=(10, 5))
+    sns.barplot(data=merged.reset_index(), x="Company_Code", y="Margin_Change", palette="coolwarm")
+    plt.title("Margin Change by Client")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
 
-    buf1 = io.BytesIO()
-    plt.savefig(buf1, format="png", bbox_inches="tight")
-    plt.close(fig1)
-    table_encoded = base64.b64encode(buf1.getvalue()).decode("utf-8")
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    img_base64 = base64.b64encode(buffer.read()).decode()
 
-    # Pie Plot
-    fig2, ax2 = plt.subplots()
-    top_clients = table_data.set_index("Company_Code")["MarginDrop"]
-    ax2.pie(top_clients, labels=top_clients.index, autopct='%1.1f%%', startangle=140)
-    ax2.set_title("Margin Drop Contribution by Client")
+    return summary, img_base64
 
-    buf2 = io.BytesIO()
-    plt.savefig(buf2, format="png", bbox_inches="tight")
-    plt.close(fig2)
-    pie_encoded = base64.b64encode(buf2.getvalue()).decode("utf-8")
 
-    return {
-        "summary": summary,
-        "table_base64": table_encoded,
-        "pie_base64": pie_encoded
-    }
-
-# Alias for app.py compatibility
-run = analyze_margin_drop
+# ✅ Wrapper function for chatbot
+def run(segment_input):
+    return analyze_margin_drop(segment_input)
