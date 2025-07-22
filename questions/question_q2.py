@@ -1,115 +1,111 @@
-# ✅ FINAL version of question_q2.py (128 lines) with all fixes applied
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from datetime import datetime
+
 
 def run(pnl_df: pd.DataFrame, segment_filter: str = None):
-    st.info(f"🔎 Running Q2 analysis for segment: **{segment_filter}**")
-
-    # Normalize column names
+    # ✅ Fix: Strip column names to remove trailing spaces before ANY column access
     pnl_df.columns = pnl_df.columns.str.strip()
 
-    # Confirm required columns exist
+    st.info(f"🔎 Running Q2 analysis for segment: **{segment_filter}**")
+
+    # ✅ Basic validations
     required_cols = {'Month', 'Company_Code', 'Segment', 'Type', 'Amount in INR', 'Group1', 'Group2', 'Group3', 'Group4'}
     if not required_cols.issubset(set(pnl_df.columns)):
-        st.error(f"Missing required columns in LnTPnL.xlsx: {required_cols - set(pnl_df.columns)}")
-        return None
-
-    # Convert Month to datetime
-    pnl_df["Month"] = pd.to_datetime(pnl_df["Month"], errors='coerce')
-    pnl_df = pnl_df.dropna(subset=["Month"])
-
-    # Filter latest 2 months
-    recent_months = sorted(pnl_df["Month"].unique())[-2:]
-    if len(recent_months) < 2:
-        st.error("Not enough data to compare last two months.")
-        return None
-
-    current_month, previous_month = recent_months[-1], recent_months[-2]
-
-    # Apply segment filter if provided
-    if segment_filter:
-        segment_filter = segment_filter.lower().strip()
-        matched_segments = [seg for seg in pnl_df["Segment"].unique() if segment_filter in seg.lower()]
-        if not matched_segments:
-            st.warning(f"No segment found matching '{segment_filter}'. Showing data for all segments.")
-        else:
-            pnl_df = pnl_df[pnl_df["Segment"].isin(matched_segments)]
-
-    # Split revenue and cost
-    revenue_df = pnl_df[pnl_df["Type"] == "Revenue"]
-    cost_df = pnl_df[pnl_df["Type"] == "Cost"]
-
-    # Aggregate revenue by month and company
-    revenue_summary = revenue_df.groupby(["Company_Code", "Month"])["Amount in INR"].sum().unstack().fillna(0)
-    revenue_summary.columns = ['Revenue_previous', 'Revenue_current']
-    revenue_summary["Revenue_Change"] = revenue_summary["Revenue_current"] - revenue_summary["Revenue_previous"]
-
-    # Aggregate total cost by month and company
-    total_cost_summary = cost_df.groupby(["Company_Code", "Month"])["Amount in INR"].sum().unstack().fillna(0)
-    total_cost_summary.columns = ['Cost_previous', 'Cost_current']
-    total_cost_summary["Cost_Change"] = total_cost_summary["Cost_current"] - total_cost_summary["Cost_previous"]
-
-    # Aggregate cost groups (Group1–4)
-    cost_groups = []
-    for group_col in ['Group1', 'Group2', 'Group3', 'Group4']:
-        group_cost = (
-            cost_df.groupby(["Company_Code", group_col, "Month"])["Amount in INR"]
-            .sum()
-            .unstack(fill_value=0)
-            .reset_index()
-        )
-        group_cost.columns.name = None
-        group_cost["Group"] = group_col
-        cost_groups.append(group_cost)
-
-    # Combine all groups
-    group_cost_df = pd.concat(cost_groups)
-    group_cost_df = group_cost_df.rename(columns={previous_month: "Amount_previous", current_month: "Amount_current"})
-    group_cost_df["Amount_Change"] = group_cost_df["Amount_current"] - group_cost_df["Amount_previous"]
-
-    # Identify dominant cost driver per company
-    top_cost_contributors = (
-        group_cost_df.groupby("Company_Code")
-        .apply(lambda x: x.loc[x["Amount_Change"].idxmax()])
-        .reset_index(drop=True)
-    )[["Company_Code", "Group", group_col, "Amount_Change"]]
-
-    # Merge revenue + cost + driver
-    merged = pd.concat([revenue_summary, total_cost_summary], axis=1)
-    merged = merged.merge(top_cost_contributors, on="Company_Code", how="left")
-    merged["Margin_current"] = merged["Revenue_current"] - merged["Cost_current"]
-    merged["Margin_previous"] = merged["Revenue_previous"] - merged["Cost_previous"]
-    merged["Margin_Change"] = merged["Margin_current"] - merged["Margin_previous"]
-
-    # Margin % calculation
-    merged["Margin_%"] = ((merged["Revenue_current"] - merged["Cost_current"]) / merged["Cost_current"]) * 100
-
-    # Filter for margin drop cases with nearly constant or slightly dropped revenue
-    drop_cases = merged[
-        (merged["Margin_Change"] < 0) &
-        (merged["Revenue_Change"] > -0.1 * merged["Revenue_previous"]) &
-        (merged["Cost_Change"] > 0)
-    ].sort_values("Margin_Change")
-
-    if drop_cases.empty:
-        st.warning("No margin drop cases identified with stable revenue and rising cost.")
+        missing = required_cols - set(pnl_df.columns)
+        st.error(f"Missing required columns in LnTPnL.xlsx: {missing}")
         return
 
-    # Display results
-    st.subheader(f"🔻 Top {min(5, len(drop_cases))} Clients with Margin Drop Due to Cost Increase")
-    st.dataframe(drop_cases.head(5)[[
-        "Revenue_previous", "Revenue_current", "Revenue_Change",
-        "Cost_previous", "Cost_current", "Cost_Change",
-        "Margin_previous", "Margin_current", "Margin_Change", "Margin_%" ,
-        group_col, "Group", "Amount_Change"
-    ]].style.format("{:.2f}"))
+    # ✅ Convert month to datetime
+    pnl_df['Month'] = pd.to_datetime(pnl_df['Month'], errors='coerce')
 
-    # Plot
-    fig, ax = plt.subplots()
-    drop_cases_sorted = drop_cases.sort_values("Margin_Change").head(5)
-    ax.bar(drop_cases_sorted.index, drop_cases_sorted["Margin_Change"], color="red")
-    ax.set_title(f"Margin Drop - Top Clients ({segment_filter or 'All Segments'})")
-    ax.set_ylabel("Margin Change (INR)")
+    # ✅ Filter only current and previous months
+    latest_month = pnl_df['Month'].max()
+    prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
+
+    df = pnl_df.copy()
+
+    # ✅ Optional segment filtering
+    if segment_filter:
+        df = df[df['Segment'].str.lower().str.contains(segment_filter.lower())]
+
+    # ✅ Filter revenue and cost separately
+    revenue_df = df[df['Type'].str.lower() == 'revenue']
+    cost_df = df[df['Type'].str.lower() == 'cost']
+
+    # ✅ Group cost by Company_Code, Month and group levels
+    cost_grouped = (
+        cost_df.groupby(['Company_Code', 'Month'])[['Amount in INR']]
+        .sum()
+        .reset_index()
+        .rename(columns={'Amount in INR': 'Total_Cost'})
+    )
+
+    # ✅ Group revenue by Company_Code, Month
+    revenue_grouped = (
+        revenue_df.groupby(['Company_Code', 'Month'])[['Amount in INR']]
+        .sum()
+        .reset_index()
+        .rename(columns={'Amount in INR': 'Revenue'})
+    )
+
+    # ✅ Merge cost and revenue
+    merged = pd.merge(cost_grouped, revenue_grouped, on=['Company_Code', 'Month'], how='outer').fillna(0)
+
+    # ✅ Pivot for current and previous month
+    this_month_df = merged[merged['Month'] == latest_month].set_index('Company_Code')
+    prev_month_df = merged[merged['Month'] == prev_month].set_index('Company_Code')
+
+    combined = this_month_df.join(prev_month_df, lsuffix='_curr', rsuffix='_prev', how='outer').fillna(0)
+
+    # ✅ Calculate Margin % for both months
+    combined['Margin%_curr'] = ((combined['Revenue_curr'] - combined['Total_Cost_curr']) / combined['Total_Cost_curr'].replace(0, 1)) * 100
+    combined['Margin%_prev'] = ((combined['Revenue_prev'] - combined['Total_Cost_prev']) / combined['Total_Cost_prev'].replace(0, 1)) * 100
+    combined['Margin_Change'] = combined['Margin%_curr'] - combined['Margin%_prev']
+
+    # ✅ Filter accounts where margin dropped and revenue didn't drop much
+    margin_drop_df = combined[(combined['Margin_Change'] < -5) & ((combined['Revenue_curr'] - combined['Revenue_prev']) > -0.05 * combined['Revenue_prev'])]
+
+    if margin_drop_df.empty:
+        st.warning("No significant margin drop detected with relatively constant revenue.")
+        return
+
+    # ✅ Identify top contributors to cost increase
+    group_cols = ['Group1', 'Group2', 'Group3', 'Group4']
+    cost_trend = cost_df[cost_df['Company_Code'].isin(margin_drop_df.index)]
+
+    summary_costs = (
+        cost_trend[cost_trend['Month'].isin([latest_month, prev_month])]
+        .groupby(['Company_Code', 'Month'] + group_cols)[['Amount in INR']]
+        .sum()
+        .reset_index()
+    )
+
+    # ✅ Create pivot to show changes
+    pivot_costs = summary_costs.pivot_table(
+        index=['Company_Code'] + group_cols,
+        columns='Month',
+        values='Amount in INR',
+        fill_value=0
+    ).reset_index()
+
+    pivot_costs['Cost_Increase'] = pivot_costs[latest_month] - pivot_costs[prev_month]
+    top_cost_increases = pivot_costs.sort_values('Cost_Increase', ascending=False).head(10)
+
+    # ✅ Show summary table
+    st.subheader("📊 Accounts with Margin Drop and Cost Increase")
+    display_df = margin_drop_df[['Revenue_curr', 'Total_Cost_curr', 'Margin%_curr', 'Revenue_prev', 'Total_Cost_prev', 'Margin%_prev', 'Margin_Change']]
+    st.dataframe(display_df.style.format("{:.2f}"))
+
+    st.subheader("📌 Top Cost Groups Driving Margin Drop")
+    st.dataframe(top_cost_increases.style.format("{:.2f}"))
+
+    # ✅ Plotting
+    fig, ax = plt.subplots(figsize=(10, 5))
+    top_cost_increases.set_index('Company_Code')['Cost_Increase'].plot(kind='bar', ax=ax, color='salmon')
+    ax.set_ylabel("Cost Increase (INR)")
+    ax.set_title("Top Cost Increases by Client")
     st.pyplot(fig)
+
+    st.success("✅ Q2 analysis complete.")
