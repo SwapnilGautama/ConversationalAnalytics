@@ -31,12 +31,15 @@ def analyze_margin_drop(segment_input):
 
     # Compute Revenue, Cost, Margin, Margin %
     try:
-        rev_cols = [c for c in pivot.columns if "Revenue" in c]
-        cost_cols = [c for c in pivot.columns if "Cost" in c]
-        pivot["RevDiff"] = pivot[rev_cols[1]] - pivot[rev_cols[0]]
-        pivot["CostDiff"] = pivot[cost_cols[1]] - pivot[cost_cols[0]]
-        pivot["MarginPrev"] = pivot[rev_cols[0]] - pivot[cost_cols[0]]
-        pivot["MarginCurr"] = pivot[rev_cols[1]] - pivot[cost_cols[1]]
+        rev_cols = sorted([c for c in pivot.columns if "Revenue" in c])
+        cost_cols = sorted([c for c in pivot.columns if "Cost" in c])
+        if len(rev_cols) != 2 or len(cost_cols) != 2:
+            raise ValueError(f"Expected 2 revenue and cost columns each, got {rev_cols} and {cost_cols}")
+        
+        pivot["RevDiff"] = pivot[rev_cols[1]].values - pivot[rev_cols[0]].values
+        pivot["CostDiff"] = pivot[cost_cols[1]].values - pivot[cost_cols[0]].values
+        pivot["MarginPrev"] = pivot[rev_cols[0]].values - pivot[cost_cols[0]].values
+        pivot["MarginCurr"] = pivot[rev_cols[1]].values - pivot[cost_cols[1]].values
         pivot["MarginDrop"] = pivot["MarginPrev"] - pivot["MarginCurr"]
         pivot["Margin%Prev"] = pivot["MarginPrev"] / pivot[cost_cols[0]].replace(0, 1)
         pivot["Margin%Curr"] = pivot["MarginCurr"] / pivot[cost_cols[1]].replace(0, 1)
@@ -96,8 +99,5 @@ def analyze_margin_drop(segment_input):
         "pie_base64": pie_encoded
     }
 
-# Example (replace with actual user input dynamically)
-result = analyze_margin_drop("Plant Engineering")
-result["summary"] if isinstance(result, dict) else result
 # Alias for app.py compatibility
 run = analyze_margin_drop
