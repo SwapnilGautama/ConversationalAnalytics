@@ -69,19 +69,20 @@ def run(user_input):
     import streamlit as st
     import re
 
+    user_input = str(user_input)
     segment_match = re.search(r"(?:in|for)\s+([A-Za-z]+)", user_input, re.IGNORECASE)
     segment = segment_match.group(1) if segment_match else "Transportation"
 
-    summary, table = analyze_margin_drop(segment)
-
     st.markdown(f"### Margin Drop Analysis for **{segment}** Segment")
+
+    summary, table = analyze_margin_drop(segment)
 
     if isinstance(summary, str):
         st.markdown(summary)
     else:
-        st.warning("Summary could not be generated properly.")
+        st.warning("⚠️ Could not generate summary.")
 
     if isinstance(table, pd.DataFrame) and not table.empty:
         st.dataframe(table)
     else:
-        st.info("No comparison data available for the latest 2 months.")
+        st.info("ℹ️ No data available for table view.")
