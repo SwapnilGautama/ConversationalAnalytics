@@ -1,55 +1,61 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+import io
+import base64
 
-def run(user_query: str, df: pd.DataFrame) -> dict:
-    # Extract segment name from user_query
-    segment = None
-    for word in user_query.split():
-        if word.lower() in df['Segment'].str.lower().unique():
-            segment = word.title()
-            break
+def run(pn_df: pd.DataFrame, ut_df: pd.DataFrame, user_question: str):
+    # --- Step 1: Identify the segment from question ---
+    segment_list = pn_df['segment'].dropna().unique().tolist()
+    segment = next((seg for seg in segment_list if seg.lower() in user_question.lower()), None)
     if not segment:
-        return {"answer": "Please specify a valid segment name in your query (e.g., Transportation, Healthcare)."}
+        return "❌ Could not identify a valid segment from your question.", None, None
 
-    # Filter only that segment
-    segment_df = df[df['Segment'].str.lower() == segment.lower()]
+    # --- Step 2: Filter for this segment ---
+    df = pn_df[pn_df['segment'].str.lower() == segment.lower()].copy()
+    if df.empty:
+        return f"❌ No data found for segment: {segment}", None, None
 
-    if segment_df.empty:
-        return {"answer": f"No data found for segment '{segment}'."}
+    # --- Step 3: Ensure 'Quarter' exists and pick latest 2 ---
+    if 'Quarter' not in df.columns:
+        return "❌ 'Quarter' column missing in P&L data.", None, None
 
-    # Ensure 'Month' is datetime type
-    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-    segment_df['Month'] = pd.to_datetime(segment_df['Month'], errors='coerce')
+    latest_quarters = sorted(df['Quarter'].unique())[-2:]
+    if len(latest_quarters) < 2:
+        return f"Only current quarter data is available for **{segment}** segment. Please add previous quarter data to compare changes.", None, None
 
-    # Extract Quarter and Year
-    segment_df['Quarter'] = segment_df['Month'].dt.to_period('Q')
+    q1, q2 = latest_quarters  # q1 = older, q2 = latest
 
-    # Group revenue by client and quarter
-    grouped = segment_df.groupby(['Client Name', 'Quarter'])['Revenue'].sum().unstack(fill_value=0)
+    # --- Step 4: Revenue by Client for both quarters ---
+    rev_q1 = df[df['Quarter'] == q1].groupby('Client Name')['Revenue'].sum().rename('Revenue_Q1')
+    rev_q2 = df[df['Quarter'] == q2].groupby('Client Name')['Revenue'].sum().rename('Revenue_Q2')
 
-    # Get the 2 most recent quarters
-    recent_quarters = sorted(grouped.columns)[-2:]
-    if len(recent_quarters) < 2:
-        return {"answer": f"Not enough data for two quarters in '{segment}' segment."}
+    revenue_df = pd.concat([rev_q1, rev_q2], axis=1).fillna(0)
+    revenue_df['Revenue_Drop'] = revenue_df['Revenue_Q2'] - revenue_df['Revenue_Q1']
+    revenue_df['Abs_Drop'] = revenue_df['Revenue_Drop'].abs()
 
-    q_prev, q_curr = recent_quarters
-    grouped['Revenue Drop'] = grouped[q_prev] - grouped[q_curr]
-    grouped['% Drop'] = grouped['Revenue Drop'] / grouped[q_prev].replace(0, pd.NA) * 100
+    # --- Step 5: Sort by absolute drop ---
+    sorted_df = revenue_df.sort_values(by='Abs_Drop', ascending=False)
+    top_drops = sorted_df[sorted_df['Revenue_Drop'] < 0]
 
-    # Sort by biggest drop
-    result = grouped.sort_values(by='Revenue Drop', ascending=False).reset_index()
+    if top_drops.empty:
+        return f"✅ No revenue drop detected for any client in **{segment}** segment between {q1} and {q2}.", None, None
 
-    # Generate summary
-    top_client = result.iloc[0]
-    summary = (
-        f"In the '{segment}' segment, the client with the biggest revenue drop from {q_prev} to {q_curr} "
-        f"is **{top_client['Client Name']}**, whose revenue fell from ₹{top_client[q_prev]:,.0f} to "
-        f"₹{top_client[q_curr]:,.0f} — a drop of ₹{top_client['Revenue Drop']:,.0f} ({top_client['% Drop']:.1f}%)."
-    )
+    # --- Step 6: Plot pie chart ---
+    fig, ax = plt.subplots()
+    ax.pie(top_drops['Abs_Drop'], labels=top_drops.index, autopct='%1.1f%%', startangle=90)
+    ax.set_title(f'Revenue Drop Share by Client ({segment})')
+    plt.tight_layout()
 
-    # Format final table
-    table = result[['Client Name', q_prev, q_curr, 'Revenue Drop', '% Drop']]
+    # Save to base64
+    img_buf = io.BytesIO()
+    plt.savefig(img_buf, format="png")
+    img_buf.seek(0)
+    img_base64 = base64.b64encode(img_buf.read()).decode("utf-8")
+    plt.close()
 
-    return {
-        "answer": summary,
-        "tables": [{"title": f"Client Revenue Comparison in '{segment}' Segment", "df": table}]
-    }
+    # --- Step 7: Summary ---
+    summary = f"### 📉 Revenue Drop Analysis for {segment} ({q1} → {q2})\n"
+    summary += f"The following clients in **{segment}** segment experienced a revenue drop.\n\n"
+    summary += f"Total drop: ₹{top_drops['Abs_Drop'].sum():,.0f}\n\n"
+
+    return summary, top_drops[['Revenue_Q1', 'Revenue_Q2', 'Revenue_Drop']], img_base64
