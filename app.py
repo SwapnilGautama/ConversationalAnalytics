@@ -59,10 +59,12 @@ if user_question:
         # ✅ Call run with correct parameters
         run_fn = question_module.run
         args = inspect.getfullargspec(run_fn).args
-        if len(args) == 2:
+
+        if 'user_question' in args:
             result = run_fn(df, user_question)
         else:
             result = run_fn(df)
+
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
