@@ -29,8 +29,8 @@ def preprocess_pnl_data(df):
     if 'Type' in df.columns:
         column_map['Type'] = 'Type'
 
-    if 'segment' in df.columns:
-        column_map['segment'] = 'segment'  # preserve as-is
+    if 'Segment' in df.columns:
+        column_map['Segment'] = 'Segment'  # preserve as-is
 
     df = df.rename(columns=column_map)
 
