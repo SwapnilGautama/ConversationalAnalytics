@@ -94,3 +94,15 @@ def analyze_margin_change_by_segment(pnl_df, segment_name):
         "table": table,
         "chart": chart_base64
     }
+def run(pnl_df, user_query):
+    # Extract segment name from the query
+    segment_keywords = ["transportation", "plant", "hi-tech", "consumer", "medical", "industrial", "auto", "auto parts", "plant engineering"]
+    matched_segment = None
+    for keyword in segment_keywords:
+        if keyword.lower() in user_query.lower():
+            matched_segment = keyword.title()
+            break
+    if not matched_segment:
+        matched_segment = "Transportation"  # default fallback
+
+    return analyze_margin_change_by_segment(pnl_df, matched_segment)
