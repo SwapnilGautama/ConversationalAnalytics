@@ -32,10 +32,10 @@ def run(df, user_question=None):
     prev_df = segment_df[segment_df['Quarter'] == prev_q]
 
     # Step 5: Prepare comparison table
-    curr_df = curr_df.groupby('Client Name')['CM%'].mean().reset_index().rename(columns={'CM%': 'CM%_current'})
-    prev_df = prev_df.groupby('Client Name')['CM%'].mean().reset_index().rename(columns={'CM%': 'CM%_previous'})
+    curr_df = curr_df.groupby('Client')['CM%'].mean().reset_index().rename(columns={'CM%': 'CM%_current'})
+    prev_df = prev_df.groupby('Client')['CM%'].mean().reset_index().rename(columns={'CM%': 'CM%_previous'})
 
-    comparison = pd.merge(curr_df, prev_df, on='Client Name', how='outer').fillna(0)
+    comparison = pd.merge(curr_df, prev_df, on='Client', how='outer').fillna(0)
     comparison['CM%_Drop'] = comparison['CM%_previous'] - comparison['CM%_current']
     comparison = comparison.sort_values(by='CM%_Drop', ascending=False)
 
@@ -45,7 +45,7 @@ def run(df, user_question=None):
     st.dataframe(worst_clients)
 
     fig, ax = plt.subplots()
-    ax.bar(worst_clients['Client Name'], worst_clients['CM%_Drop'], color='red')
+    ax.bar(worst_clients['Client'], worst_clients['CM%_Drop'], color='red')
     ax.set_ylabel("CM% Drop")
     ax.set_title(f"Margin Drop by Client - {segment}")
     st.pyplot(fig)
