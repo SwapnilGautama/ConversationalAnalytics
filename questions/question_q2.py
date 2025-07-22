@@ -10,9 +10,13 @@ def run(df, user_query=None):
     # ✅ Get segment from user query
     segment = None
     if user_query:
-        for word in user_query.split():
-            if word.lower() in margin_df['Segment'].str.lower().unique():
-                segment = word.capitalize()
+# ✅ Identify matching segment from query (case-insensitive partial match)
+all_segments = margin_df['Segment'].dropna().unique()
+segment = None
+for s in all_segments:
+    if s.lower() in user_query.lower():
+        segment = s
+        break
 
     if not segment:
         return "❌ Could not identify a valid segment from your question."
