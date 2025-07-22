@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer, util
 # Load the model
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# Define your PROMPT BANK
+# Updated PROMPT BANK with dynamic Q2 intent
 PROMPT_BANK = {
     "Q1": [
         "Which accounts had CM% < 30 in the last quarter?",
@@ -15,36 +15,33 @@ PROMPT_BANK = {
         "List clients with margin below threshold"
     ],
     "Q2": [
-        "What caused the margin drop in Transportation?",
-        "Explain margin decline in Transportation segment",
-        "Why did margin fall for Transportation last quarter?",
-        "Root cause for low margin in Transportation",
-        "Transportation margin drop reason"
+        "Which cost caused margin drop last month?",
+        "Which cost increased last month vs previous month?",
+        "What caused margin drop in Transportation?",
+        "Which cost item triggered margin decline last month?",
+        "Why did margin fall last month in Manufacturing?",
+        "Last month's margin dropped — what cost increased?",
+        "Find clients with higher costs and lower margin this month",
+        "Margin dropped in Automotive — which cost increased?",
+        "Identify cost buckets responsible for margin drop",
+        "Segment-wise cost increase that led to margin decline"
     ]
 }
 
-# Create a flat list of (question, qid)
-questions = []
-qids = []
-for qid, qlist in PROMPT_BANK.items():  # ✅ FIXED — use correct variable name
+# Flatten prompt bank into parallel lists
+questions, qids = [], []
+for qid, qlist in PROMPT_BANK.items():
     for q in qlist:
         questions.append(q)
         qids.append(qid)
 
-# Precompute embeddings for all questions
+# Precompute question embeddings
 question_embeddings = model.encode(questions)
 
 def find_best_matching_qid(user_query):
-    # Compute embedding for user query
     query_embedding = model.encode([user_query])[0]
-
-    # Compute similarity scores
     similarities = util.cos_sim(query_embedding, question_embeddings)[0]
-
-    # Find the index of the highest similarity
     best_idx = similarities.argmax().item()
     best_qid = qids[best_idx]
-
-    # Optionally return matched text as well
     matched_question = questions[best_idx]
     return best_qid, matched_question
