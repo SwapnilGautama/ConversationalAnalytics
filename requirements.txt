@@ -5,3 +5,4 @@ openpyxl
 numpy
 matplotlib
 sentence-transformers
+seaborn
