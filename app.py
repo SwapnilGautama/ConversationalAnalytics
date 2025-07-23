@@ -40,7 +40,7 @@ st.markdown("""
 Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 
 ✅ You can ask questions such as:
-- *Which accounts had CM% < 30 in the last quarter?*
+- *Which accounts had CM% had less than 30 in the last quarter?*
 - *What caused the margin drop in Transportation?*
 - *Show UT% trends for the last 2 quarters*
 
