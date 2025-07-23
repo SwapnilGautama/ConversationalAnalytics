@@ -77,10 +77,11 @@ def run(df, user_question=None):
         st.warning("Missing Group4 cost data for selected months.")
         return
 
-    # % Share of total segment cost
-    g4[prev_month] = (g4[prev_month] / seg_cost[prev_month]) * 100
-    g4[latest_month] = (g4[latest_month] / seg_cost[latest_month]) * 100
-    g4['% Change'] = ((g4[latest_month] - g4[prev_month]) / g4[prev_month].replace(0, 0.0001)) * 100
+    # Store actual cost values
+    g4_raw = g4.copy()
+
+    # % change calculation
+    g4['% Change'] = ((g4_raw[latest_month] - g4_raw[prev_month]) / g4_raw[prev_month].replace(0, 0.0001)) * 100
 
     # Rename columns
     g4 = g4.rename(columns={
@@ -89,30 +90,33 @@ def run(df, user_question=None):
     })
 
     # Round & Format
-    g4 = g4.round(2)
     g4_fmt = g4.copy()
-    g4_fmt[g4.columns[0]] = g4[g4.columns[0]].map(lambda x: f"{x:.2f}%")
-    g4_fmt[g4.columns[1]] = g4[g4.columns[1]].map(lambda x: f"{x:.2f}%")
+    g4_fmt[g4.columns[0]] = g4[g4.columns[0]].map(lambda x: f"{x:,.0f}")
+    g4_fmt[g4.columns[1]] = g4[g4.columns[1]].map(lambda x: f"{x:,.0f}")
     g4_fmt['% Change'] = g4['% Change'].map(lambda x: f"{x:.2f}%")
 
-    top8 = g4_fmt.sort_values(by='% Change', ascending=False).head(8).reset_index()
+    # Sort by absolute change (latest - prev) for top 8
+    g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month]).abs()
+    top8_keys = g4_raw.sort_values(by='abs_change', ascending=False).head(8).index
+    g4_fmt_top8 = g4_fmt.loc[top8_keys].reset_index()
 
     # Layout
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (as % of total segment cost)")
-        st.dataframe(top8)
+        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in ₹, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
+        st.dataframe(g4_fmt_top8)
 
     with col2:
-        g4_latest = g4[[g4.columns[1]]].copy().reset_index()
-        g4_latest.columns = ['Group4', 'Share']
-        g4_latest = g4_latest[g4_latest['Share'] > 0]
+        # Pie chart with actual June cost
+        g4_latest_cost = g4_raw[latest_month].copy()
+        g4_latest_cost = g4_latest_cost[g4_latest_cost > 0]
+        g4_latest_cost = g4_latest_cost.sort_values(ascending=False)
 
-        top5 = g4_latest.sort_values(by='Share', ascending=False).head(5)
-        others_share = max(0, 100 - top5['Share'].sum())
-        pie_labels = list(top5['Group4']) + (['Others'] if others_share > 0 else [])
-        pie_values = list(top5['Share']) + ([others_share] if others_share > 0 else [])
+        top5 = g4_latest_cost.head(5)
+        others = g4_latest_cost.iloc[5:].sum()
+        pie_labels = list(top5.index) + (['Others'] if others > 0 else [])
+        pie_values = list(top5.values) + ([others] if others > 0 else [])
 
         fig, ax = plt.subplots()
         ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90)
