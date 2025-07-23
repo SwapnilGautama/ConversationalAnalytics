@@ -1,3 +1,4 @@
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -5,16 +6,16 @@ import streamlit as st
 def run(data, user_question):
     try:
         df = data.copy()
-
-        # Normalize column names (strip spaces, standardize casing)
         df.columns = df.columns.str.strip()
 
         # Rename common inconsistencies
-        if 'Amount' in df.columns:
-            df.rename(columns={'Amount': 'Amount in INR'}, inplace=True)
-
-        if 'amount in inr' in df.columns:
-            df.rename(columns={'amount in inr': 'Amount in INR'}, inplace=True)
+        col_map = {
+            'Amount': 'Amount in INR',
+            'amount in inr': 'Amount in INR',
+            'Company Code': 'Company_code',
+            'company_code': 'Company_code',
+        }
+        df.rename(columns={k: v for k, v in col_map.items() if k in df.columns}, inplace=True)
 
         if 'Month' not in df.columns or 'Amount in INR' not in df.columns:
             st.error("Missing required columns: 'Month' or 'Amount in INR'")
@@ -31,6 +32,14 @@ def run(data, user_question):
             if col not in df.columns:
                 st.error(f"Missing expected column: {col}")
                 return
+
+        if 'Segment' not in df.columns:
+            st.error("Missing expected column: Segment")
+            return
+
+        if 'Company_code' not in df.columns:
+            st.error("Missing expected column: Company_code")
+            return
 
         # Identify Segment
         Segment = None
@@ -59,44 +68,56 @@ def run(data, user_question):
         current_month = cost_by_month.index[-1]
         previous_month = cost_by_month.index[-2]
 
-        cost_diff = cost_by_month[current_month] - cost_by_month[previous_month]
-        rev_diff = rev_by_month[current_month] - rev_by_month[previous_month]
+        cost_current = cost_by_month[current_month]
+        cost_prev = cost_by_month[previous_month]
+        rev_current = rev_by_month[current_month]
+        rev_prev = rev_by_month[previous_month]
 
-        margin_pct_current = (rev_by_month[current_month] - cost_by_month[current_month]) / cost_by_month[current_month] * 100
-        margin_pct_prev = (rev_by_month[previous_month] - cost_by_month[previous_month]) / cost_by_month[previous_month] * 100
+        margin_pct_current = (rev_current - cost_current) / cost_current * 100
+        margin_pct_prev = (rev_prev - cost_prev) / cost_prev * 100
 
+        margin_change_pct = margin_pct_current - margin_pct_prev
+        cost_pct_change = ((cost_current - cost_prev) / cost_prev) * 100
+
+        clients = df['Company_code'].unique()
+        margin_health = []
+
+        for client in clients:
+            sub_cost = df_cost[df_cost['Company_code'] == client].groupby('Month')['Amount in INR'].sum()
+            sub_rev = df_rev[df_rev['Company_code'] == client].groupby('Month')['Amount in INR'].sum()
+            if previous_month in sub_cost and current_month in sub_cost and previous_month in sub_rev and current_month in sub_rev:
+                cm_prev = (sub_rev[previous_month] - sub_cost[previous_month]) / sub_cost[previous_month]
+                cm_curr = (sub_rev[current_month] - sub_cost[current_month]) / sub_cost[current_month]
+                if cm_curr < cm_prev:
+                    margin_health.append(client)
+
+        # HEADER
         st.subheader(f"Margin Drop Analysis for {Segment} Segment")
 
-        # 🔹 TEXT SUMMARY
+        # SUMMARY
         st.markdown("### 🔍 Summary")
         st.markdown(f"""
-        - **Revenue movement**: ₹{rev_diff:,.0f} (from ₹{rev_by_month[previous_month]:,.0f} to ₹{rev_by_month[current_month]:,.0f})
-        - **Cost movement**: ₹{cost_diff:,.0f} (from ₹{cost_by_month[previous_month]:,.0f} to ₹{cost_by_month[current_month]:,.0f})
+        - **Segment margin dropped** by {abs(margin_change_pct):.1f}% (from {margin_pct_prev:.1f}% to {margin_pct_current:.1f}%)  
+        - **{len(margin_health)} out of {len(clients)} clients** ({len(margin_health)/len(clients)*100:.1f}%) saw margin decline  
+        - **Segment cost increased** by {cost_pct_change:.1f}% (₹{cost_prev/1e7:.2f} Cr → ₹{cost_current/1e7:.2f} Cr)
         """)
 
-        # 🔍 COST GROUPS
-        st.markdown("### 📊 Group-wise Cost Increase")
+        # GROUP4 DRIVERS
+        st.markdown("### 🔎 Group 4: Top Increasing Cost Drivers")
 
-        group_summary = []
-        for group in group_cols:
-            monthly_group = df_cost.groupby(['Month'])[group].value_counts().unstack().fillna(0)
-            monthly_group = monthly_group.apply(pd.to_numeric, errors='coerce')
-            if monthly_group.shape[0] < 2:
-                continue
-            increase = (monthly_group.iloc[-1] - monthly_group.iloc[-2]).sum()
-            group_summary.append((group, increase))
+        df_g4 = df_cost[df_cost['Group4'].notna()]
+        g4_costs = df_g4[df_g4['Group4'] != ''].copy()
+        g4_costs = g4_costs[g4_costs['Month'].isin([previous_month, current_month])]
+        pivot = g4_costs.pivot_table(index='Group4', columns='Month', values='Amount in INR', aggfunc='sum').fillna(0)
+        pivot['% Change'] = ((pivot[current_month] - pivot[previous_month]) / pivot[previous_month].replace(0, 1e-5)) * 100
+        pivot = pivot.sort_values('% Change', ascending=False).head(8)
+        pivot = pivot.round(2)
+        pivot.columns = ['May Cost (INR)', 'June Cost (INR)', '% Change']
+        pivot['May Cost (Cr)'] = pivot['May Cost (INR)'] / 1e7
+        pivot['June Cost (Cr)'] = pivot['June Cost (INR)'] / 1e7
+        display_df = pivot[['May Cost (Cr)', 'June Cost (Cr)', '% Change']].reset_index()
 
-        group_df = pd.DataFrame(group_summary, columns=["Group", "Total Increase"])
-        group_df = group_df.sort_values(by="Total Increase", ascending=False)
-
-        st.dataframe(group_df)
-
-        # 📈 CHART
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.bar(group_df['Group'], group_df['Total Increase'], color='steelblue')
-        ax.set_title("Group-wise Cost Increase")
-        ax.set_ylabel("INR Increase")
-        st.pyplot(fig)
+        st.dataframe(display_df.style.format({'May Cost (Cr)': '{:.2f}', 'June Cost (Cr)': '{:.2f}', '% Change': '{:.1f}%'}))
 
     except Exception as e:
-        st.error(f"Error running analysis: {e}")
+        st.error(f"Error running analysis: {str(e)}")
