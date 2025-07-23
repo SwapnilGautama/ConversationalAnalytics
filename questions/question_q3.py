@@ -1,84 +1,65 @@
-# question_q3.py
+# questions/question_q3.py
 
 import pandas as pd
-import streamlit as st
 import matplotlib.pyplot as plt
+import streamlit as st
 
-def run_question():
-    st.subheader("🧾 C&B Cost Comparison by Segment – Quarter over Quarter")
+def run(df, user_query=None):
+    df = df.copy()
 
-    # Load the data
-    df = pd.read_excel("sample_data/LnTPnLSample.xlsx")
+    # --- Filter C&B Costs ---
+    cb_filter = df["Group4"].str.contains("C&B", case=False, na=False)
+    df_cb = df[cb_filter & (df["Type"] == "Cost")].copy()
+    df_cb["Month"] = pd.to_datetime(df_cb["Month"], format="%b %Y")
+    df_cb["Quarter"] = df_cb["Month"].dt.to_period("Q")
+    
+    # --- Get last two quarters ---
+    last_two_quarters = sorted(df_cb["Quarter"].unique())[-2:]
+    q1, q2 = last_two_quarters[0], last_two_quarters[1]
+    df_cb = df_cb[df_cb["Quarter"].isin(last_two_quarters)]
 
-    # Filter for C&B cost
-    cb_df = df[
-        (df["Group4"].str.contains("C&B", case=False, na=False)) &
-        (df["Type"] == "Cost")
-    ].copy()
+    # --- Group by Segment & Quarter ---
+    segment_quarter = df_cb.groupby(["Segment", "Quarter"])["Amount in INR"].sum().unstack().fillna(0)
+    segment_quarter.columns = [str(c) for c in segment_quarter.columns]
+    segment_quarter["% Change"] = ((segment_quarter[str(q2)] - segment_quarter[str(q1)]) / segment_quarter[str(q1)] * 100).round(2)
 
-    # Convert Amount in INR to crores
-    cb_df["Amount_Cr"] = cb_df["Amount in INR"] / 1e7
+    # --- Round values in Crores ---
+    segment_quarter[[str(q1), str(q2)]] = segment_quarter[[str(q1), str(q2)]] / 1e7
+    segment_quarter[[str(q1), str(q2)]] = segment_quarter[[str(q1), str(q2)]].round(2)
 
-    # Convert Month to datetime and assign quarter labels
-    cb_df["Month"] = pd.to_datetime(cb_df["Month"], format="%b %Y")
-    cb_df["Quarter"] = cb_df["Month"].dt.to_period("Q")
+    # --- Prepare Bar Chart ---
+    fig, ax = plt.subplots(figsize=(8, 6))
+    segment_quarter["% Change"].sort_values(ascending=False).plot(kind="barh", ax=ax, color="skyblue")
+    ax.set_title("QoQ % Change in C&B Cost by Segment")
+    ax.set_xlabel("% Change")
+    ax.invert_yaxis()
+    st.pyplot(fig)
 
-    # Pivot table: sum of C&B cost by Segment and Quarter
-    cb_summary = cb_df.pivot_table(
-        index="Segment", 
-        columns="Quarter", 
-        values="Amount_Cr", 
-        aggfunc="sum", 
-        fill_value=0
-    ).reset_index()
+    # --- Summary Insights ---
+    total_cb_q2 = df_cb[df_cb["Quarter"] == q2]["Amount in INR"].sum() / 1e7
+    top3_segments = segment_quarter[str(q2)].sort_values(ascending=False).head(3).index.tolist()
 
-    quarters = sorted(cb_df["Quarter"].unique())
-    if len(quarters) < 2:
-        st.warning("❗Not enough quarters to compare.")
-        return
+    change_df = segment_quarter.copy()
+    increase_segment = change_df["% Change"].idxmax()
+    decrease_segment = change_df["% Change"].idxmin()
 
-    q1, q2 = quarters[-2], quarters[-1]
-    cb_summary["% Change"] = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, pd.NA)) * 100
-    cb_summary.replace([pd.NA, pd.NaT], 0, inplace=True)
+    # Revenue comparison
+    df_rev = df[(df["Type"] == "Revenue") & (df["Quarter"].isin(last_two_quarters))]
+    revenue_q1 = df_rev[df_rev["Quarter"] == q1]["Amount in INR"].sum()
+    revenue_q2 = df_rev[df_rev["Quarter"] == q2]["Amount in INR"].sum()
+    revenue_change = ((revenue_q2 - revenue_q1) / revenue_q1 * 100)
 
-    # Total and top segments
-    total_cb = cb_df.groupby("Segment")["Amount_Cr"].sum().sort_values(ascending=False)
-    top_segments = total_cb.head(3)
+    st.markdown(f"""
+    ### 🔍 C&B Cost Analysis by Segment ({q1} vs {q2})
+    - **Total C&B cost in {q2}**: ₹{total_cb_q2:.2f} Cr. Top segments: {', '.join(top3_segments)}.
+    - **QoQ C&B Change**: Highest increase in **{increase_segment}**, highest drop in **{decrease_segment}**.
+    - **Overall Revenue** changed by **{revenue_change:.2f}%** compared to C&B cost.
+    """)
 
-    # Revenue data for comparison
-    rev_df = df[df["Type"] == "Revenue"].copy()
-    rev_df["Month"] = pd.to_datetime(rev_df["Month"], format="%b %Y")
-    rev_df["Quarter"] = rev_df["Month"].dt.to_period("Q")
-    rev_df["Amount_Cr"] = rev_df["Amount in INR"] / 1e7
-    rev_q = rev_df.groupby("Quarter")["Amount_Cr"].sum()
-    rev_change = ((rev_q[q2] - rev_q[q1]) / rev_q[q1]) * 100 if rev_q[q1] != 0 else 0
-
-    # 🔹 Text Insights
-    st.markdown("### 🧠 Summary Insights")
-    st.markdown(f"1. **Total C&B Cost:** ₹{cb_df['Amount_Cr'].sum():,.2f} Cr. Top 3 segments: {', '.join(top_segments.index)}")
-    st.markdown(f"2. **Quarter-over-Quarter C&B Change:**")
-    for seg, val in cb_summary.sort_values(by="% Change", ascending=False).head(3)[["Segment", "% Change"]].values:
-        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;- {seg}: {val:.1f}% increase")
-    for seg, val in cb_summary.sort_values(by="% Change").head(3)[["Segment", "% Change"]].values:
-        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;- {seg}: {val:.1f}% decrease")
-    st.markdown(f"3. **Overall C&B vs Revenue Change:** C&B changed by {cb_summary['% Change'].mean():.1f}%, Revenue changed by {rev_change:.1f}%")
-
-    # 📊 Table and Chart
-    st.markdown("### 📋 C&B Cost by Segment – Quarter Comparison")
-
-    col1, col2 = st.columns(2)
-
+    # --- Show table and chart side-by-side ---
+    col1, col2 = st.columns([1.2, 1])
     with col1:
-        formatted_df = cb_summary.copy()
-        formatted_df[q1] = formatted_df[q1].apply(lambda x: f"{x:,.2f}")
-        formatted_df[q2] = formatted_df[q2].apply(lambda x: f"{x:,.2f}")
-        formatted_df["% Change"] = formatted_df["% Change"].apply(lambda x: f"{x:,.1f}%")
-        st.dataframe(formatted_df.rename(columns={q1: f"{q1}", q2: f"{q2}"}), use_container_width=True)
+        st.markdown("#### 📊 C&B Cost Change by Segment (in ₹ Cr)")
+        st.dataframe(segment_quarter)
 
-    with col2:
-        chart_df = cb_summary.sort_values(by="% Change", ascending=False)
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.barh(chart_df["Segment"], chart_df["% Change"], color="coral")
-        ax.set_xlabel("% Change in C&B Cost")
-        ax.set_title("C&B % Change by Segment")
-        st.pyplot(fig)
+    return
