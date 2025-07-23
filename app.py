@@ -42,7 +42,7 @@ Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing busine
 ✅ You can ask questions such as:
 - *Which accounts had CM% had less than 30 in the last quarter?*
 - *What caused the margin drop in Transportation?*
-- *Show UT% trends for the last 2 quarters*
+- *How much C&B varied from last quarter to this quarter*
 
 👉 **Start by typing your business question below**:
 """)
