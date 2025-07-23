@@ -2,9 +2,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-def run(query=None, **kwargs):
-    # Extract segment either from kwargs or fallback
-    segment = kwargs.get("segment", "Transportation")
+def run(*args, **kwargs):
+    if len(args) >= 1:
+        query = args[0]
+    else:
+        query = kwargs.get("query", None")
+
+    # Then use `query` as needed
 
     # Load the LnTPnL data
     file_path = "sample_data/LnTPnL.xlsx"
