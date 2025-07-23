@@ -25,15 +25,14 @@ PROMPT_BANK = {
         "Margin dropped in Automotive — which cost increased?",
         "Identify cost buckets responsible for margin drop",
         "Segment-wise cost increase that led to margin decline"
-    ]
-        "Q3": [
+    ],
+    "Q3": [
         "Compare C&B cost by segment over two quarters",
         "Which segments had highest C&B change",
         "Show C&B cost trend by segment",
         "C&B cost comparison Q1 vs Q2 by segment",
         "Segment wise change in C&B cost"
     ]
-
 }
 
 # Flatten prompt bank into parallel lists
