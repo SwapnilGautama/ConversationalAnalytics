@@ -12,8 +12,8 @@ def run(data, user_question):
         col_map = {
             'Amount': 'Amount in INR',
             'amount in inr': 'Amount in INR',
-            'Company Code': 'Company_code',
-            'company_code': 'Company_code',
+            'Company Code': 'Company_Code',
+            'company_Code': 'Company_Code',
         }
         df.rename(columns={k: v for k, v in col_map.items() if k in df.columns}, inplace=True)
 
@@ -37,8 +37,8 @@ def run(data, user_question):
             st.error("Missing expected column: Segment")
             return
 
-        if 'Company_code' not in df.columns:
-            st.error("Missing expected column: Company_code")
+        if 'Company_Code' not in df.columns:
+            st.error("Missing expected column: Company_Code")
             return
 
         # Identify Segment
@@ -79,12 +79,12 @@ def run(data, user_question):
         margin_change_pct = margin_pct_current - margin_pct_prev
         cost_pct_change = ((cost_current - cost_prev) / cost_prev) * 100
 
-        clients = df['Company_code'].unique()
+        clients = df['Company_Code'].unique()
         margin_health = []
 
         for client in clients:
-            sub_cost = df_cost[df_cost['Company_code'] == client].groupby('Month')['Amount in INR'].sum()
-            sub_rev = df_rev[df_rev['Company_code'] == client].groupby('Month')['Amount in INR'].sum()
+            sub_cost = df_cost[df_cost['Company_Code'] == client].groupby('Month')['Amount in INR'].sum()
+            sub_rev = df_rev[df_rev['Company_Code'] == client].groupby('Month')['Amount in INR'].sum()
             if previous_month in sub_cost and current_month in sub_cost and previous_month in sub_rev and current_month in sub_rev:
                 cm_prev = (sub_rev[previous_month] - sub_cost[previous_month]) / sub_cost[previous_month]
                 cm_curr = (sub_rev[current_month] - sub_cost[current_month]) / sub_cost[current_month]
