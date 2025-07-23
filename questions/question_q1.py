@@ -38,40 +38,41 @@ def run(df):
     agg["Cost (₹ Cr)"] = (agg["Cost (₹ Cr)"] / 1e7).round(2)
     agg["Latest Margin %"] = agg["Latest Margin %"].round(2)
 
-    # Filter where margin is below 30%
-    low_margin_df = agg[agg["Latest Margin %"] < 30].copy()
+    # Filter: margin < 30% and revenue > 0
+    filtered_df = agg[(agg["Latest Margin %"] < 30) & (agg["Revenue (₹ Cr)"] > 0)]
 
-    # Sort in ascending order and keep only top 10
-    low_margin_df = low_margin_df.sort_values("Latest Margin %").head(10)
+    # Sort descending and select top 10
+    top_10 = filtered_df.sort_values("Latest Margin %", ascending=False).head(10)
 
-    # 🔹 Summary text
+    # 🔹 Summary
     total_clients = agg["Client"].nunique()
-    low_margin_count = agg[agg["Latest Margin %"] < 30]["Client"].nunique()
+    low_margin_count = filtered_df["Client"].nunique()
     proportion = (low_margin_count / total_clients * 100) if total_clients else 0
 
-    summary = (
-        f"🔍 **In the last quarter**, **{low_margin_count} accounts** had an average margin below **30%**, "
-        f"which is **{proportion:.1f}%** of all **{total_clients} accounts**."
+    st.markdown(
+        f"🔍 **In the last quarter**, **{low_margin_count} accounts** had an average margin below **30%** "
+        f"and non-zero revenue, which is **{proportion:.1f}%** of all **{total_clients} accounts**."
     )
-    st.markdown(summary)
 
     # 🔹 Layout
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.markdown("#### 📋 Accounts with Margin < 30%")
+        st.markdown("#### 📋 Accounts with Margin < 30% (non-zero revenue)")
         st.dataframe(
-            low_margin_df[["Client", "Latest Margin %", "Revenue (₹ Cr)", "Cost (₹ Cr)"]].reset_index(drop=True),
+            top_10[["Client", "Latest Margin %", "Revenue (₹ Cr)", "Cost (₹ Cr)"]].reset_index(drop=True),
             use_container_width=True
         )
 
     with col2:
         st.markdown("#### 📊 Margin % by Client (Bar Chart)")
         fig, ax = plt.subplots()
-        ax.barh(low_margin_df["Client"], low_margin_df["Latest Margin %"], color='tomato')
+        ax.barh(top_10["Client"], top_10["Latest Margin %"], color='tomato')
         ax.set_xlabel("Margin % (Latest Quarter)")
         ax.set_ylabel("Client")
         ax.set_title("Top 10 Clients with Margin < 30%")
+        ax.invert_yaxis()  # Show highest margin on top
+        ax.grid(axis='x', linestyle='--', alpha=0.5)
         plt.tight_layout()
         st.pyplot(fig)
 
