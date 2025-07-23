@@ -8,8 +8,9 @@ def run(df, user_question=None):
 
     # Ensure consistent column names
     df.columns = df.columns.str.strip()
-    
+
     # Extract latest 2 months
+    df['Month'] = pd.to_datetime(df['Month'])
     latest_month = df['Month'].max()
     prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
@@ -40,7 +41,7 @@ def run(df, user_question=None):
     # Margin movement summary
     try:
         margin_change = seg_margin_pct[latest_month] - seg_margin_pct[prev_month]
-        margin_summary = f"{segment} margin {'increased' if margin_change > 0 else 'reduced'} {abs(margin_change):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}, down from {seg_margin_pct[prev_month]:.1f}% to {seg_margin_pct[latest_month]:.1f}%."
+        margin_summary = f"{segment} margin {'increased' if margin_change > 0 else 'reduced'} {abs(margin_change):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}, {'up' if margin_change > 0 else 'down'} from {seg_margin_pct[prev_month]:.1f}% to {seg_margin_pct[latest_month]:.1f}%."
     except:
         margin_summary = "Margin movement data unavailable."
 
@@ -57,7 +58,7 @@ def run(df, user_question=None):
     cost_growth = ((cost_latest - cost_prev) / cost_prev) * 100 if cost_prev else 0
     cost_summary = f"{segment} cost {'increased' if cost_growth > 0 else 'decreased'} by {abs(cost_growth):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}."
 
-    # Insights summary
+    # Display insights
     st.markdown("### 🔍 Key Insights")
     st.markdown(f"- 📉 {margin_summary}")
     st.markdown(f"- 👥 {client_summary}")
@@ -71,14 +72,38 @@ def run(df, user_question=None):
     g4 = g4[[prev_month, latest_month]] if prev_month in g4.columns and latest_month in g4.columns else g4
     g4['% Change'] = ((g4[latest_month] - g4[prev_month]) / g4[prev_month].replace(0, 1)) * 100
 
-    # Format to INR Cr
-    g4[prev_month] = g4[prev_month] / 1e7
-    g4[latest_month] = g4[latest_month] / 1e7
-    g4 = g4.rename(columns={prev_month: f"{prev_month.strftime('%b')}", latest_month: f"{latest_month.strftime('%b')}"})
+    # Normalize to % share for display (not INR Cr)
+    g4[prev_month] = (g4[prev_month] / seg_cost[prev_month]) * 100
+    g4[latest_month] = (g4[latest_month] / seg_cost[latest_month]) * 100
+
+    g4 = g4.rename(columns={
+        prev_month: f"{prev_month.strftime('%b')}",
+        latest_month: f"{latest_month.strftime('%b')}",
+    })
+
+    # Round for display
+    g4 = g4.round(2)
 
     top8 = g4.sort_values(by='% Change', ascending=False).head(8).reset_index()
 
-    st.markdown("### 📊 Top 8 Group4 Cost Increases")
-    st.dataframe(top8)
+    # Display in two columns
+    col1, col2 = st.columns([1, 1])
 
-    return None
+    with col1:
+        st.markdown("### 📊 Top 8 Group4 Cost Increases (as % of total segment cost)")
+        st.dataframe(top8)
+
+    with col2:
+        # Pie chart for top 5 + others
+        g4_latest = g4.reset_index()[[g4.columns[1], 'Group4']]
+        g4_latest = g4_latest.rename(columns={g4.columns[1]: 'Share'})
+
+        top5 = g4_latest.sort_values(by='Share', ascending=False).head(5)
+        others_share = 100 - top5['Share'].sum()
+        pie_labels = list(top5['Group4']) + ['Others']
+        pie_values = list(top5['Share']) + [others_share]
+
+        fig, ax = plt.subplots()
+        ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90)
+        ax.set_title("Top Group4 Cost Types (Share in % - " + latest_month.strftime('%b') + ")")
+        st.pyplot(fig)
