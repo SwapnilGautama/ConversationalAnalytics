@@ -63,3 +63,5 @@ def run_question_q3(data_path):
         ax.set_xlabel('% Change')
         ax.set_title('% Change in C&B Cost by Segment')
         st.pyplot(fig)
+def run(df):
+    analyze_cb_cost_by_segment(df)
