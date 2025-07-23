@@ -7,7 +7,7 @@ import base64
 def run(input_text):
     try:
         # Load data
-        df = pd.read_excel("Sample_Data/LnTPnL.xlsx", sheet_name=0)
+        df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name=0)
 
         # Clean and prepare
         df["Month"] = pd.to_datetime(df["Month"])
