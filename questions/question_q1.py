@@ -40,11 +40,13 @@ def run(df):
 
     # Filter where margin is below 30%
     low_margin_df = agg[agg["Latest Margin %"] < 30].copy()
-    low_margin_df = low_margin_df.sort_values("Latest Margin %")
+
+    # Sort in ascending order and keep only top 10
+    low_margin_df = low_margin_df.sort_values("Latest Margin %").head(10)
 
     # 🔹 Summary text
     total_clients = agg["Client"].nunique()
-    low_margin_count = low_margin_df["Client"].nunique()
+    low_margin_count = agg[agg["Latest Margin %"] < 30]["Client"].nunique()
     proportion = (low_margin_count / total_clients * 100) if total_clients else 0
 
     summary = (
@@ -65,9 +67,8 @@ def run(df):
 
     with col2:
         st.markdown("#### 📊 Margin % by Client (Bar Chart)")
-        top10 = low_margin_df.nsmallest(10, "Latest Margin %")
         fig, ax = plt.subplots()
-        ax.barh(top10["Client"], top10["Latest Margin %"], color='tomato')
+        ax.barh(low_margin_df["Client"], low_margin_df["Latest Margin %"], color='tomato')
         ax.set_xlabel("Margin % (Latest Quarter)")
         ax.set_ylabel("Client")
         ax.set_title("Top 10 Clients with Margin < 30%")
