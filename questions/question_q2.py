@@ -1,96 +1,84 @@
+# question_q2.py
+
 import pandas as pd
+import matplotlib.pyplot as plt
 
-def run(query, df):
-    # Extract segment from query (assumes last word)
-    segment = query.strip().split()[-1]
+def run(df, user_question=None):
+    import streamlit as st
 
-    # Clean columns
+    # Ensure consistent column names
     df.columns = df.columns.str.strip()
     
-    # Filter and standardize
-    df = df[df["Segment"].str.lower() == segment.lower()]
-    df = df[df["Month"].notnull() & df["Company_Code"].notnull()]
-    df["Month"] = pd.to_datetime(df["Month"], format="%b %Y")
+    # Extract latest 2 months
+    latest_month = df['Month'].max()
+    prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
-    # Split Revenue and Cost
-    rev_df = df[df["Type"] == "Revenue"]
-    cost_df = df[df["Type"] == "Cost"]
+    # Segment filter from user input or default
+    segment = "Transportation"
+    if user_question:
+        for seg in df['Segment'].dropna().unique():
+            if seg.lower() in user_question.lower():
+                segment = seg
+                break
 
-    # Monthly totals
-    monthly_rev = rev_df.groupby("Month")["Amount in INR"].sum().sort_index()
-    monthly_cost = cost_df.groupby("Month")["Amount in INR"].sum().sort_index()
+    df = df[df['Segment'] == segment]
 
-    if len(monthly_cost) < 2 or len(monthly_rev) < 2:
-        return f"Not enough monthly data to compute margin trend for segment '{segment}'."
+    # Split revenue and cost
+    revenue_df = df[df['Type'] == 'Revenue']
+    cost_df = df[df['Type'] == 'Cost']
 
-    # Margin % per month
-    margin_pct = ((monthly_rev - monthly_cost) / monthly_cost * 100).round(2)
-    prev_month, curr_month = margin_pct.index[-2], margin_pct.index[-1]
-    prev_margin, curr_margin = margin_pct.iloc[-2], margin_pct.iloc[-1]
+    # Group by Client + Month for Margin calculation
+    revenue_m = revenue_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    cost_m = cost_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    margin_m = (revenue_m - cost_m) / cost_m.replace(0, 1) * 100
 
-    # Summary 1 – Margin movement
-    margin_summary = (
-        f"1. Margin for **{segment}** reduced from **{prev_margin:.2f}% in {prev_month.strftime('%b')}** "
-        f"to **{curr_margin:.2f}% in {curr_month.strftime('%b')}**."
-    )
+    # Segment-level margin %
+    seg_rev = revenue_df.groupby('Month')['Amount'].sum()
+    seg_cost = cost_df.groupby('Month')['Amount'].sum()
+    seg_margin_pct = ((seg_rev - seg_cost) / seg_cost.replace(0, 1)) * 100
 
-    # Summary 2 – Segment health (client margin drop)
-    client_margin = (
-        df.groupby(["Company_Code", "Month", "Type"])["Amount in INR"]
-        .sum()
-        .unstack(fill_value=0)
-        .reset_index()
-    )
-    client_margin["Margin%"] = ((client_margin["Revenue"] - client_margin["Cost"]) / client_margin["Cost"]) * 100
-    pivot = client_margin.pivot(index="Company_Code", columns="Month", values="Margin%").dropna()
-    if len(pivot.columns) < 2:
-        health_summary = "2. Not enough client-level data to assess segment health."
-    else:
-        declining_clients = (pivot[curr_month] < pivot[prev_month]).sum()
-        total_clients = pivot.shape[0]
-        health_summary = (
-            f"2. {declining_clients} of {total_clients} clients (**{(declining_clients/total_clients)*100:.0f}%**) "
-            f"in **{segment}** saw a drop in margin from **{prev_month.strftime('%b')}** to **{curr_month.strftime('%b')}**."
-        )
+    # Margin movement summary
+    try:
+        margin_change = seg_margin_pct[latest_month] - seg_margin_pct[prev_month]
+        margin_summary = f"{segment} margin {'increased' if margin_change > 0 else 'reduced'} {abs(margin_change):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}, down from {seg_margin_pct[prev_month]:.1f}% to {seg_margin_pct[latest_month]:.1f}%."
+    except:
+        margin_summary = "Margin movement data unavailable."
 
-    # Summary 3 – Cost increase
-    cost_change_pct = ((monthly_cost[curr_month] - monthly_cost[prev_month]) / monthly_cost[prev_month]) * 100
-    cost_summary = (
-        f"3. Total cost in **{segment}** increased by **{cost_change_pct:.2f}%** from "
-        f"**{prev_month.strftime('%b')}** to **{curr_month.strftime('%b')}**."
-    )
+    # Client count movement
+    client_margin_prev = ((revenue_m[prev_month] - cost_m[prev_month]) / cost_m[prev_month].replace(0, 1)) * 100
+    client_margin_latest = ((revenue_m[latest_month] - cost_m[latest_month]) / cost_m[latest_month].replace(0, 1)) * 100
+    client_movement = (client_margin_latest < client_margin_prev).sum()
+    total_clients = len(client_margin_prev)
+    client_summary = f"{client_movement} out of {total_clients} clients ({(client_movement/total_clients)*100:.1f}%) in {segment} saw a drop in margin."
 
-    summary = "\n".join([margin_summary, health_summary, cost_summary])
+    # Total cost growth
+    cost_prev = seg_cost.get(prev_month, 0)
+    cost_latest = seg_cost.get(latest_month, 0)
+    cost_growth = ((cost_latest - cost_prev) / cost_prev) * 100 if cost_prev else 0
+    cost_summary = f"{segment} cost {'increased' if cost_growth > 0 else 'decreased'} by {abs(cost_growth):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}."
 
-    # Group4 Top Cost Types
-    group4_df = cost_df[cost_df["Group4"].notnull()]
-    group4_df = group4_df[group4_df["Month"].isin([prev_month, curr_month])]
+    # Insights summary
+    st.markdown("### 🔍 Key Insights")
+    st.markdown(f"- 📉 {margin_summary}")
+    st.markdown(f"- 👥 {client_summary}")
+    st.markdown(f"- 💸 {cost_summary}")
 
-    top_group4 = (
-        group4_df.groupby(["Group4", "Month"])["Amount in INR"]
-        .sum()
-        .unstack(fill_value=0)
-        .round()
-    )
+    # Group4 Cost Analysis
+    group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].copy()
+    group4_df = group4_df.dropna(subset=['Group4'])
 
-    # Avoid divide by zero
-    top_group4["% Change"] = ((top_group4[curr_month] - top_group4[prev_month]) / 
-                              top_group4[prev_month].replace(0, 1)) * 100
+    g4 = group4_df.groupby(['Group4', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    g4 = g4[[prev_month, latest_month]] if prev_month in g4.columns and latest_month in g4.columns else g4
+    g4['% Change'] = ((g4[latest_month] - g4[prev_month]) / g4[prev_month].replace(0, 1)) * 100
 
-    # Sort by % increase
-    top_group4 = top_group4.sort_values(by="% Change", ascending=False).head(8)
+    # Format to INR Cr
+    g4[prev_month] = g4[prev_month] / 1e7
+    g4[latest_month] = g4[latest_month] / 1e7
+    g4 = g4.rename(columns={prev_month: f"{prev_month.strftime('%b')}", latest_month: f"{latest_month.strftime('%b')}"})
 
-    # Convert to crores
-    top_group4[f"{prev_month.strftime('%b')} Cost (Cr)"] = (top_group4[prev_month] / 1e7).round(2)
-    top_group4[f"{curr_month.strftime('%b')} Cost (Cr)"] = (top_group4[curr_month] / 1e7).round(2)
+    top8 = g4.sort_values(by='% Change', ascending=False).head(8).reset_index()
 
-    top_cost_table = top_group4[[
-        f"{prev_month.strftime('%b')} Cost (Cr)",
-        f"{curr_month.strftime('%b')} Cost (Cr)",
-        "% Change"
-    ]].reset_index().rename(columns={"Group4": "Cost Type"})
+    st.markdown("### 📊 Top 8 Group4 Cost Increases")
+    st.dataframe(top8)
 
-    # HTML table
-    table_html = top_cost_table.to_html(index=False)
-
-    return summary + "\n\n### 🔍 Top Group4 Cost Increases\n\n" + table_html
+    return None
