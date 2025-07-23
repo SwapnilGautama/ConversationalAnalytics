@@ -2,8 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-def run(**kwargs):
-    # Extract user input segment
+def run(query=None, **kwargs):
+    # Extract segment either from kwargs or fallback
     segment = kwargs.get("segment", "Transportation")
 
     # Load the LnTPnL data
