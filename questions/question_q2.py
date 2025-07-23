@@ -13,7 +13,7 @@ def run(data, user_question):
             'Amount': 'Amount in INR',
             'amount in inr': 'Amount in INR',
             'Company_Code': 'Company_Code',
-            'company_Code': 'Company_Code',
+            'Company_Code': 'Company_Code',
         }
         df.rename(columns={k: v for k, v in col_map.items() if k in df.columns}, inplace=True)
 
