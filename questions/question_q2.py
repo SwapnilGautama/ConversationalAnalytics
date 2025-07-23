@@ -6,17 +6,17 @@ import matplotlib.pyplot as plt
 def run(df, user_question=None):
     import streamlit as st
 
-    # Ensure consistent column names
+    # Standardize column names
     df.columns = df.columns.str.strip()
 
-    # Convert month column to datetime
+    # Convert month column
     df['Month'] = pd.to_datetime(df['Month'])
 
     # Get latest and previous month
     latest_month = df['Month'].max()
     prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
-    # Segment detection from user input
+    # Segment detection
     segment = "Transportation"
     if user_question:
         for seg in df['Segment'].dropna().unique():
@@ -36,26 +36,26 @@ def run(df, user_question=None):
 
     margin_m = (revenue_m - cost_m) / cost_m.replace(0, 1) * 100
 
-    # Segment margin
+    # Segment-level margin
     seg_rev = revenue_df.groupby('Month')['Amount'].sum()
     seg_cost = cost_df.groupby('Month')['Amount'].sum()
     seg_margin_pct = ((seg_rev - seg_cost) / seg_cost.replace(0, 1)) * 100
 
-    # Insight 1: Margin % change
+    # Insight 1: Margin movement
     try:
         margin_change = seg_margin_pct[latest_month] - seg_margin_pct[prev_month]
         margin_summary = f"{segment} margin {'increased' if margin_change > 0 else 'reduced'} {abs(margin_change):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}, {'up' if margin_change > 0 else 'down'} from {seg_margin_pct[prev_month]:.1f}% to {seg_margin_pct[latest_month]:.1f}%."
     except:
         margin_summary = "Margin movement data unavailable."
 
-    # Insight 2: Client margin drop
+    # Insight 2: Client margin drops
     client_margin_prev = ((revenue_m[prev_month] - cost_m[prev_month]) / cost_m[prev_month].replace(0, 1)) * 100
     client_margin_latest = ((revenue_m[latest_month] - cost_m[latest_month]) / cost_m[latest_month].replace(0, 1)) * 100
     client_movement = (client_margin_latest < client_margin_prev).sum()
     total_clients = len(client_margin_prev)
     client_summary = f"{client_movement} out of {total_clients} clients ({(client_movement/total_clients)*100:.1f}%) in {segment} saw a drop in margin."
 
-    # Insight 3: Cost increase
+    # Insight 3: Segment cost growth
     cost_prev = seg_cost.get(prev_month, 0)
     cost_latest = seg_cost.get(latest_month, 0)
     cost_growth = ((cost_latest - cost_prev) / cost_prev) * 100 if cost_prev else 0
@@ -67,51 +67,43 @@ def run(df, user_question=None):
     st.markdown(f"- 👥 {client_summary}")
     st.markdown(f"- 💸 {cost_summary}")
 
-    # Group4 Cost Analysis
-    group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].copy()
-    group4_df = group4_df.dropna(subset=['Group4'])
-
+    # Group4 analysis
+    group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].dropna(subset=['Group4'])
     g4 = group4_df.groupby(['Group4', 'Month'])['Amount'].sum().unstack(fill_value=0)
 
     if prev_month not in g4.columns or latest_month not in g4.columns:
         st.warning("Missing Group4 cost data for selected months.")
         return
 
-    # Store actual cost values
     g4_raw = g4.copy()
-
-    # % change calculation
     g4['% Change'] = ((g4_raw[latest_month] - g4_raw[prev_month]) / g4_raw[prev_month].replace(0, 0.0001)) * 100
 
-    # Rename columns
-    g4 = g4.rename(columns={
-        prev_month: f"{prev_month.strftime('%b')}",
-        latest_month: f"{latest_month.strftime('%b')}"
+    # Identify top 8 drivers by absolute increase
+    g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month]).abs()
+    top8 = g4_raw.sort_values(by='abs_change', ascending=False).head(8)
+
+    # Final table
+    table_df = pd.DataFrame({
+        'Group4': top8.index,
+        'May': top8[prev_month] / 1e7,  # convert to ₹ Crores
+        'Jun': top8[latest_month] / 1e7,
+        '% Change': g4.loc[top8.index, '% Change']
     })
 
-    # Round & Format
-    g4_fmt = g4.copy()
-    g4_fmt[g4.columns[0]] = g4[g4.columns[0]].map(lambda x: f"{x:,.0f}")
-    g4_fmt[g4.columns[1]] = g4[g4.columns[1]].map(lambda x: f"{x:,.0f}")
-    g4_fmt['% Change'] = g4['% Change'].map(lambda x: f"{x:.2f}%")
+    table_df['May'] = table_df['May'].map(lambda x: f"{x:,.2f}")
+    table_df['Jun'] = table_df['Jun'].map(lambda x: f"{x:,.2f}")
+    table_df['% Change'] = table_df['% Change'].map(lambda x: f"{x:.2f}%")
 
-    # Sort by absolute change (latest - prev) for top 8
-    g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month]).abs()
-    top8_keys = g4_raw.sort_values(by='abs_change', ascending=False).head(8).index
-    g4_fmt_top8 = g4_fmt.loc[top8_keys].reset_index()
-
-    # Layout
+    # Layout: Table and Pie side-by-side
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in ₹, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
-        st.dataframe(g4_fmt_top8)
+        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in ₹ Cr, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
+        st.dataframe(table_df)
 
     with col2:
-        # Pie chart with actual June cost
-        g4_latest_cost = g4_raw[latest_month].copy()
-        g4_latest_cost = g4_latest_cost[g4_latest_cost > 0]
-        g4_latest_cost = g4_latest_cost.sort_values(ascending=False)
+        g4_latest_cost = g4_raw[latest_month]
+        g4_latest_cost = g4_latest_cost[g4_latest_cost > 0].sort_values(ascending=False)
 
         top5 = g4_latest_cost.head(5)
         others = g4_latest_cost.iloc[5:].sum()
