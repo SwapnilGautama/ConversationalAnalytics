@@ -9,9 +9,18 @@ import re
 
 def extract_threshold(user_question, default_threshold=30):
     if user_question:
-        match = re.search(r"margin\s*<\s*(\d+)", user_question.lower())
-        if match:
-            return float(match.group(1))
+        # Try patterns: < 30, less than 30, below 40%, under 25 percent
+        patterns = [
+            r"margin\s*<\s*(\d+)",                      # "margin < 30"
+            r"less than\s*(\d+)",                       # "less than 40"
+            r"below\s*(\d+)",                           # "below 50%"
+            r"under\s*(\d+)",                           # "under 25 percent"
+            r"margin.*?(\d+)\s*%"                       # "margin below 30%"
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, user_question.lower())
+            if match:
+                return float(match.group(1))
     return default_threshold
 
 def run(df, user_question=None):
