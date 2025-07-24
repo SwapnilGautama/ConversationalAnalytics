@@ -1,4 +1,4 @@
-# question_q4.py
+# question_q4.py (Enhanced)
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 def run(df, user_question=None):
     import streamlit as st
 
-    # Standardize columns
     df.columns = df.columns.str.strip()
 
     # ✅ Fix for 'Amount in INR'
@@ -15,7 +14,6 @@ def run(df, user_question=None):
         if col.strip().lower() in ['amount in inr', 'amountinr', 'amount']:
             amount_col = col
             break
-
     if not amount_col:
         st.error("❌ Column not found: Amount in INR")
         return
@@ -28,7 +26,7 @@ def run(df, user_question=None):
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
-    # ✅ Monthly aggregation (Total)
+    # ✅ Monthly aggregation
     cb_monthly = df_cb.groupby(df_cb['Month'].dt.to_period('M'))[amount_col].sum()
     rev_monthly = df_rev.groupby(df_rev['Month'].dt.to_period('M'))[amount_col].sum()
 
@@ -42,7 +40,7 @@ def run(df, user_question=None):
     df_summary['MoM Revenue Change (%)'] = df_summary['Revenue (INR Cr)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # ✅ Segment-level analysis for margin drop vs C&B increase
+    # ✅ Segment-level margin drop + C&B increase logic
     latest_month = df['Month'].max()
     prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
@@ -54,18 +52,26 @@ def run(df, user_question=None):
         cost = sub_df[sub_df['Type'].str.lower() == 'cost'][amount_col].sum()
         return ((rev - cost) / cost * 100) if cost else 0
 
-    segment_margin_change = []
+    segment_insights = []
     segments = df['Segment'].dropna().unique()
-    for seg in segments:
-        cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
-        cb_before = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
-        margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
-        margin_before = margin_calc(df_prev[df_prev['Segment'] == seg])
-        if cb_now > cb_before and margin_now < margin_before:
-            segment_margin_change.append((seg, round(margin_before,1), round(margin_now,1)))
 
-    # ✅ Display text insights
+    for seg in segments:
+        # Margin %
+        margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
+        margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
+
+        # C&B cost
+        cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
+        cb_prev = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
+
+        if cb_now > cb_prev and margin_now < margin_prev:
+            segment_insights.append(
+                f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ₹{cb_prev/1e7:.1f} Cr to ₹{cb_now/1e7:.1f} Cr"
+            )
+
+    # ✅ Display insights
     st.markdown("### 📊 MoM Trend of C&B % of Revenue")
+
     if df_summary.shape[0] >= 2:
         last = df_summary.index[-1]
         prev = df_summary.index[-2]
@@ -74,22 +80,24 @@ def run(df, user_question=None):
         st.markdown(
             f"📌 In **{last.strftime('%b %Y')}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev.strftime('%b %Y')}**."
         )
-        if segment_margin_change:
-            list_text = ", ".join([f"**{seg}** (↓ from {b}% to {a}%)" for seg, b, a in segment_margin_change])
-            st.markdown(f"🔻 Segments where **margin % dropped** despite increase in C&B: {list_text}")
+        if segment_insights:
+            st.markdown("🔍 Segments with margin drop and C&B increase:")
+            for insight in segment_insights:
+                st.markdown(f"- {insight}")
 
-    # ✅ Display table and chart side by side
+    # ✅ Table and chart side by side
     col1, col2 = st.columns([1, 1])
-
     with col1:
-        st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}))
+        st.dataframe(df_summary.reset_index(drop=False).rename(columns={'Month': 'Period'}), hide_index=True)
 
     with col2:
-        fig, ax1 = plt.subplots(figsize=(6, 4))
+        fig, ax1 = plt.subplots(figsize=(6.5, 4))
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], color='lightgreen', label='Revenue')
+        bar_width = 20  # Wider bars
+        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=bar_width,
+                color='lightgreen', label='Revenue')
         ax1.set_ylabel("Revenue (INR Cr)", color='green')
 
         ax2 = ax1.twinx()
