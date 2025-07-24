@@ -1,83 +1,56 @@
-# app.py
-
 import streamlit as st
-from utils.semantic_matcher import find_best_matching_qid, PROMPT_BANK
-import importlib
-from kpi_engine import margin
-import os
-import pandas as pd
-import inspect
+import openai
+import difflib
+from backend import get_answer  # your existing backend function
 
-# ✅ Add your custom PROMPT BANK here
-PROMPT_BANK = [
-    "_List accounts with margin % less than 30% in the last quarter_",
-    "_Which cost triggered the Margin drop last month as compared to its previous month in Transportation?_",
-    "_How much C&B varied from last quarter to this quarter?_",
-    "_What is M-o-M trend of C&B cost % w.r.t total revenue?_"
+st.set_page_config(layout="wide")
+st.title("📊 AI Business Insights Assistant")
+
+# ✅ Prompt questions
+prompt_questions = [
+    "What is the current margin % for each client?",
+    "Which cost triggered the margin drop last month in Transportation?",
+    "How does C&B cost compare across quarters by segment?",
+    "What is the M-o-M trend of C&B cost % with respect to total revenue?",
+    "What is the client-wise revenue and cost summary for the last quarter?",
+    "Highlight clients where realized rate has dropped sharply.",
+    "Which segment has the most volatile margin %?",
+    "Show the YoY revenue trend by client.",
+    "Where has indirect cost grown disproportionately?",
+    "Compare billed vs realized rate across clients."
 ]
 
-# ✅ Load data from sample_data folder
-@st.cache_data
-def load_data():
-    filepath = os.path.join("sample_data", "LnTPnL.xlsx")
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"File not found at path: {filepath}")
-    df = margin.load_pnl_data(filepath)
-    df = margin.preprocess_pnl_data(df)
-    if df.empty:
-        raise ValueError("Loaded P&L data is empty after preprocessing.")
-    return df
+# ✅ User input with live suggestions
+user_input = st.text_input("Ask your business question:")
 
-try:
-    df = load_data()
-except Exception as e:
-    st.error(f"❌ Failed to load data: {e}")
-    st.stop()
+# ✅ Suggest closest match from prompt questions
+if user_input:
+    suggestions = difflib.get_close_matches(user_input, prompt_questions, n=3, cutoff=0.3)
+    if suggestions:
+        st.markdown("#### 💡 Suggestions:")
+        for q in suggestions:
+            if st.button(f"👉 {q}"):
+                user_input = q
+                st.experimental_rerun()
 
-# Streamlit page config
-st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
-st.title("📊 LTTS BI Assistant")
+# ✅ Run only when input exists
+if user_input:
+    with st.spinner("Generating insights..."):
+        response = get_answer(user_input)
+    st.markdown("### 🧠 Insights")
+    st.write(response["text"])
 
-# Description
-st.markdown("""
-Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
-""")
+    if "table" in response:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 📋 Table")
+            st.dataframe(response["table"])
+        with col2:
+            if "chart" in response:
+                st.markdown("### 📊 Chart")
+                st.pyplot(response["chart"])
 
-# Input box
-user_question = st.text_input("👉 Start by typing your business question:")
-
-# Render result if input exists
-if user_question:
-    try:
-        best_qid, matched_prompt = find_best_matching_qid(user_question)
-        st.info(f"🔍 Running analysis for: **{matched_prompt}**")
-
-        # ✅ Import question logic
-        question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
-        run_func = question_module.run
-        run_params = inspect.signature(run_func).parameters
-
-        # ✅ Run with or without question param
-        if len(run_params) == 2:
-            result = run_func(df, user_question)
-        else:
-            result = run_func(df)
-
-        st.success("✅ Analysis complete.")
-        if isinstance(result, pd.DataFrame):
-            st.dataframe(result)
-        elif isinstance(result, str):
-            st.markdown(result)
-        else:
-            st.write(result)
-
-    except ModuleNotFoundError as e:
-        st.error(f"❌ Could not load analysis script for {best_qid}: {e}")
-    except Exception as e:
-        st.error(f"❌ Error running analysis: {e}")
-
-# Always display the prompt bank
-st.markdown("---")
-st.markdown("💡 **Try asking:**")
-for prompt in PROMPT_BANK:
-    st.markdown(f"- {prompt}")
+# ✅ Show prompt questions at the bottom
+st.markdown("### 🤖 Sample Questions")
+for q in prompt_questions:
+    st.markdown(f"- *{q}*")
