@@ -32,7 +32,15 @@ PROMPT_BANK = {
         "Show C&B cost trend by segment",
         "C&B cost comparison Q1 vs Q2 by segment",
         "Segment wise change in C&B cost"
+    ],
+        "Q4": [
+        "What is the MoM trend of C&B cost?",
+        "C&B vs revenue monthly trend",
+        "Month over month comparison of C&B with revenue",
+        "C&B cost as percentage of revenue trend",
+        "Compare C&B cost % with revenue monthly"
     ]
+
 }
 
 # Flatten prompt bank into parallel lists
