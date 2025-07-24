@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 
 def run(df):
     try:
+        # Clean column names
+        df.columns = df.columns.str.strip()
+
         # Only filter rows relevant to C&B cost
         df = df[df['Group3'].str.contains("C&B", case=False, na=False)]
 
@@ -62,5 +65,6 @@ def run(df):
             ax.set_xlabel('% Change')
             ax.set_title('% Change in C&B Cost by Segment')
             st.pyplot(fig)
+
     except Exception as e:
         st.error(f"An error occurred in Q3: {e}")
