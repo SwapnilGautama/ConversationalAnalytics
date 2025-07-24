@@ -1,46 +1,47 @@
+# question_q7.py
+
 import pandas as pd
+import matplotlib.pyplot as plt
+import streamlit as st
 
-def question_7_realized_rate_drop(pnl_df: pd.DataFrame, ut_df: pd.DataFrame, threshold: float = 3.0) -> dict:
-    """
-    Identifies accounts where realized rate dropped more than a given threshold from last quarter to current quarter.
-    
-    Args:
-        pnl_df (pd.DataFrame): P&L data containing 'Final Customer name', 'Quarter', 'Revenue'
-        ut_df (pd.DataFrame): UT data containing 'Final Customer name', 'Quarter', 'HC'
-        threshold (float): The dollar value drop to flag (default is $3)
-        
-    Returns:
-        dict: Dictionary with summary, table (DataFrame), and logic explanation.
-    """
-    # Merge P&L and UT data to compute realized rate = Revenue / HC
-    merged_df = pd.merge(
-        pnl_df,
-        ut_df,
-        on=["Final Customer name", "Quarter"],
-        how="inner",
-        suffixes=("_pnl", "_ut")
-    )
+def compute_fte(total_hours):
+    # Convert total billable hours to FTE (8 hours/day * 21 working days)
+    return total_hours / (8 * 21)
 
-    merged_df["Realized Rate"] = merged_df["Revenue"] / merged_df["HC"]
-    
-    # Pivot to get previous and current quarter for rate comparison
-    pivot_df = merged_df.pivot(index="Final Customer name", columns="Quarter", values="Realized Rate").reset_index()
-    pivot_df.columns.name = None
+def run(df, user_question):
+    # Load the correct dataset
+    df = pd.read_excel("sample_data/LNTData.xlsx")
 
-    # Assume last 2 quarters are sorted and labeled like 'FY25Q4', 'FY26Q1'
-    last_two_quarters = sorted([col for col in pivot_df.columns if col != "Final Customer name"])[-2:]
-    
-    pivot_df["Rate Drop"] = pivot_df[last_two_quarters[1]] - pivot_df[last_two_quarters[0]]
-    
-    flagged = pivot_df[pivot_df["Rate Drop"] < -threshold].copy()
-    
-    summary = (
-        f"{len(flagged)} account(s) had a realized rate drop greater than ${threshold} "
-        f"from {last_two_quarters[0]} to {last_two_quarters[1]}."
-    )
-    
-    return {
-        "summary": summary,
-        "table": flagged[["Final Customer name", last_two_quarters[0], last_two_quarters[1], "Rate Drop"]],
-        "insight_logic": f"Compared realized rate (Revenue / HC) between {last_two_quarters[0]} and {last_two_quarters[1]}, flagged if drop > ${threshold}."
-    }
+    # Convert date to proper datetime
+    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
+
+    # Drop rows with missing data in key columns
+    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'TotalBillableHours'])
+
+    # Compute FTE
+    df['FTE'] = df['TotalBillableHours'].astype(float).apply(compute_fte)
+
+    # Create Month field
+    df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
+
+    # Group by Month and FinalCustomerName
+    monthly_fte = df.groupby(['FinalCustomerName', 'Month'])['FTE'].sum().reset_index()
+
+    # Pivot for visualization
+    fte_pivot = monthly_fte.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
+
+    # Plot line chart of top 6 clients by average FTE
+    top_clients = fte_pivot.mean().sort_values(ascending=False).head(6).index
+    chart_data = fte_pivot[top_clients]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    chart_data.plot(ax=ax, marker='o')
+    ax.set_title("MoM FTE Trends by Client (Top 6)", fontsize=14)
+    ax.set_xlabel("Month")
+    ax.set_ylabel("FTE (Headcount)")
+    ax.grid(True)
+    st.pyplot(fig)
+
+    # Return the raw table as well
+    st.markdown("### 📋 Raw FTE Table")
+    return monthly_fte
