@@ -43,6 +43,9 @@ def run(df, user_question=None):
     cb_summary = cb_summary.sort_index(axis=1)
     q1, q2 = cb_summary.columns[-2], cb_summary.columns[-1]
 
+    # Convert to INR Crores
+    cb_summary = cb_summary / 1e7
+
     # Insights
     summary = []
     for seg in cb_summary.index:
@@ -61,12 +64,20 @@ def run(df, user_question=None):
     cb_summary_display['% Change'] = cb_summary_display['% Change'].map(lambda x: f"{x:.2f}%")
     cb_summary_display.columns = [str(col) for col in cb_summary_display.columns]
 
-    st.dataframe(cb_summary_display)
+    # Side-by-side layout
+    col1, col2 = st.columns(2)
 
-    # Plot
-    fig, ax = plt.subplots(figsize=(8, 5))
-    cb_summary['% Change'] = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
-    cb_summary['% Change'].sort_values().plot(kind='barh', ax=ax)
-    ax.set_xlabel('% Change in C&B Cost')
-    ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
-    st.pyplot(fig)
+    with col1:
+        st.markdown("#### 🧾 C&B Cost (INR Cr) and % Change")
+        st.dataframe(cb_summary_display)
+
+    with col2:
+        # Prepare chart
+        fig, ax = plt.subplots(figsize=(6, 6))
+        bar_data = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
+        colors = ['red' if seg == 'Media & Technology' else 'skyblue' for seg in bar_data.index]
+        bar_data.sort_values().plot(kind='barh', ax=ax, color=colors)
+        ax.set_xlabel('% Change in C&B Cost')
+        ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
+        ax.set_xlim(-100, 100)
+        st.pyplot(fig)
