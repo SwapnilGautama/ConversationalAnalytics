@@ -20,6 +20,8 @@ def run(df, user_question):
     df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
 
     monthly_fte = df.groupby(['FinalCustomerName', 'Month'])['FTE'].sum().reset_index()
+    monthly_fte['FTE'] = monthly_fte['FTE'].round(1)
+
     fte_pivot = monthly_fte.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
 
     # Select top 6 clients by average FTE
@@ -65,7 +67,7 @@ def run(df, user_question):
 
         for idx, client in enumerate(top_clients):
             y = chart_data[client].values
-            if len(x) >= 4:  # smoothing works well with 4+ points
+            if len(x) >= 4:
                 x_smooth = np.linspace(x.min(), x.max(), 300)
                 spline = make_interp_spline(x, y, k=3)
                 y_smooth = spline(x_smooth)
@@ -82,4 +84,4 @@ def run(df, user_question):
         ax.grid(False)
         st.pyplot(fig)
 
-    return monthly_fte
+    return  # no duplicate table returned
