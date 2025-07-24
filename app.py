@@ -43,8 +43,11 @@ st.markdown("""
 Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 """)
 
-# Input box
-user_question = st.text_input("👉 Start by typing your business question:")
+# 👉 Input box with autocomplete suggestions
+user_question = st.text_input(
+    label="👉 Start by typing your business question:",
+    placeholder="e.g. List accounts with margin % less than 30% in the last quarter",
+)
 
 # Render result if input exists
 if user_question:
@@ -76,7 +79,7 @@ if user_question:
     except Exception as e:
         st.error(f"❌ Error running analysis: {e}")
 
-# Always display the prompt bank
+# Always display the prompt bank (bottom)
 st.markdown("---")
 st.markdown("💡 **Try asking:**")
 for prompt in PROMPT_BANK:
