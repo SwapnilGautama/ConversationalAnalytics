@@ -13,7 +13,8 @@ PROMPT_BANK = [
     "_List accounts with margin % less than 30% in the last quarter_",
     "_Which cost triggered the Margin drop last month as compared to its previous month in Transportation?_",
     "_How much C&B varied from last quarter to this quarter?_",
-    "_What is M-o-M trend of C&B cost % w.r.t total revenue?_"
+    "_What is M-o-M trend of C&B cost % w.r.t total revenue?_",
+    "_What is FTE trend over months?_"
 ]
 
 # ✅ Load data from sample_data folder
