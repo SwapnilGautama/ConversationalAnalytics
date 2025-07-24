@@ -67,11 +67,12 @@ def run(df):
     with col2:
         st.markdown("#### 📊 Margin % by Client (Bar Chart)")
         fig, ax = plt.subplots()
-        ax.barh(top_10["Client"], top_10["Latest Margin %"], color='tomato')
+        ax.barh(top_10["Client"], top_10["Latest Margin %"], color='#E7F3FF', edgecolor='#D3D3D3', linewidth=0.8)
         ax.set_xlabel("Margin % (Latest Quarter)")
         ax.set_ylabel("Client")
         ax.set_title("Top 10 Clients with Margin < 30%")
-        ax.invert_yaxis()  # Show highest margin on top
+        ax.set_xlim(-100, 100)
+        ax.invert_yaxis()
         ax.grid(axis='x', linestyle='--', alpha=0.5)
         plt.tight_layout()
         st.pyplot(fig)
