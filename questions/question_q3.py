@@ -26,6 +26,7 @@ def run(df, user_question=None):
 
     # C&B filter
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
+    df_rev = df[df['Type'].str.lower() == 'revenue']
 
     # Get quarter info
     latest_month = df_cb['Month'].max()
@@ -34,34 +35,49 @@ def run(df, user_question=None):
     # Group by Segment and Quarter
     df_cb['Quarter'] = df_cb['Month'].dt.to_period('Q')
     cb_summary = df_cb.groupby(['Segment', 'Quarter'])[amount_col].sum().unstack(fill_value=0)
+    df_rev['Quarter'] = df_rev['Month'].dt.to_period('Q')
+    rev_summary = df_rev.groupby(['Segment', 'Quarter'])[amount_col].sum().unstack(fill_value=0)
 
-    if cb_summary.shape[1] < 2:
+    if cb_summary.shape[1] < 2 or rev_summary.shape[1] < 2:
         st.warning("Not enough quarterly data to compare.")
         return
 
-    # Ensure correct quarter order
-    cb_summary = cb_summary.sort_index(axis=1)
+    cb_summary = cb_summary.sort_index(axis=1) / 1e7
+    rev_summary = rev_summary.sort_index(axis=1) / 1e7
     q1, q2 = cb_summary.columns[-2], cb_summary.columns[-1]
 
-    # Convert to INR Crores
-    cb_summary = cb_summary / 1e7
+    # 🔹 Commentary block
+    total_cb_q1 = cb_summary[q1].sum()
+    total_cb_q2 = cb_summary[q2].sum()
+    total_rev_q1 = rev_summary[q1].sum()
+    total_rev_q2 = rev_summary[q2].sum()
+    cb_change = ((total_cb_q2 - total_cb_q1) / total_cb_q1) * 100 if total_cb_q1 else 0
+    rev_change = ((total_rev_q2 - total_rev_q1) / total_rev_q1) * 100 if total_rev_q1 else 0
 
-    # 🔹 New Insight Section
-    total_q1 = cb_summary[q1].sum()
-    total_q2 = cb_summary[q2].sum()
-    overall_change = ((total_q2 - total_q1) / total_q1) * 100 if total_q1 else 0
-    increased_segments = cb_summary[cb_summary[q2] > cb_summary[q1]].index.tolist()
+    flagged_segments = []
+    for seg in cb_summary.index:
+        cb_q1 = cb_summary.loc[seg, q1]
+        cb_q2 = cb_summary.loc[seg, q2]
+        rev_q1 = rev_summary.loc[seg, q1] if seg in rev_summary.index else 0
+        rev_q2 = rev_summary.loc[seg, q2] if seg in rev_summary.index else 0
+        cb_growth = ((cb_q2 - cb_q1) / cb_q1 * 100) if cb_q1 else 0
+        rev_growth = ((rev_q2 - rev_q1) / rev_q1 * 100) if rev_q1 else 0
+        if cb_q2 > cb_q1 and rev_growth < cb_growth:
+            flagged_segments.append(seg)
 
-    st.markdown("### 📊 C&B Cost Insights")
-    st.markdown(f"- 💰 **Overall C&B change** from {q1} to {q2}: **{overall_change:+.1f}%**")
-    if increased_segments:
-        st.markdown(f"- 📈 **Segments with increased C&B**: {', '.join(increased_segments)}")
+    st.markdown("### 📊 C&B and Revenue Quarter-over-Quarter")
+    st.markdown(f"- 💰 **C&B changed by** {cb_change:+.1f}% from {q1} to {q2}")
+    st.markdown(f"- 📈 **Revenue changed by** {rev_change:+.1f}% from {q1} to {q2}")
+    if flagged_segments:
+        st.markdown(f"- ⚠️ **Segments where C&B increased faster than Revenue**: {', '.join(flagged_segments)}")
     else:
-        st.markdown("- ✅ No segments recorded an increase in C&B.")
+        st.markdown("- ✅ No segments had disproportionate C&B increase")
 
     # Table output
     cb_summary_display = cb_summary.copy()
     cb_summary_display['% Change'] = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
+    cb_summary_display[q1] = cb_summary_display[q1].round(1)
+    cb_summary_display[q2] = cb_summary_display[q2].round(1)
     cb_summary_display['% Change'] = cb_summary_display['% Change'].map(lambda x: f"{x:.2f}%")
     cb_summary_display.columns = [str(col) for col in cb_summary_display.columns]
 
