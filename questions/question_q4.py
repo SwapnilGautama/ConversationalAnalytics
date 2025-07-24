@@ -95,14 +95,24 @@ def run(df, user_question=None):
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        bar_width = 20  # Wider bars
+        bar_width = 20
         ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=bar_width,
-                color='lightgreen', label='Revenue')
+                color='lightgrey', label='Revenue')  # 🔸 updated color
         ax1.set_ylabel("Revenue (INR Cr)", color='green')
+
+        # 👇 soft grey borders for left axis
+        for spine in ax1.spines.values():
+            spine.set_linewidth(0.5)
+            spine.set_edgecolor('#cccccc')
 
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'], color='blue', marker='o', label='C&B %')
         ax2.set_ylabel("C&B % of Revenue", color='blue')
+
+        # 👇 soft grey borders for right axis
+        for spine in ax2.spines.values():
+            spine.set_linewidth(0.5)
+            spine.set_edgecolor('#cccccc')
 
         ax1.set_title("MoM Revenue vs C&B % of Revenue")
         fig.tight_layout()
