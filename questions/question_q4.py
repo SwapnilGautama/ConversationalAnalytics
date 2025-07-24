@@ -1,4 +1,4 @@
-# question_q4.py (Enhanced)
+# question_q4.py (Enhanced with custom chart colors)
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -56,11 +56,8 @@ def run(df, user_question=None):
     segments = df['Segment'].dropna().unique()
 
     for seg in segments:
-        # Margin %
         margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
         margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
-
-        # C&B cost
         cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
         cb_prev = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
 
@@ -95,21 +92,22 @@ def run(df, user_question=None):
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        bar_width = 20
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=bar_width,
-                color='lightgrey', label='Revenue')  # 🔸 updated color
-        ax1.set_ylabel("Revenue (INR Cr)", color='#E7F3FF')
+        bar_color = '#E7F3FF'
+        line_color = '#EAF8EF'
 
-        # 👇 soft grey borders for left axis
+        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=20,
+                color=bar_color, label='Revenue')
+        ax1.set_ylabel("Revenue (INR Cr)", color=bar_color)
+
         for spine in ax1.spines.values():
             spine.set_linewidth(0.5)
             spine.set_edgecolor('#cccccc')
 
         ax2 = ax1.twinx()
-        ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'], color='#EAF8EF', marker='o', label='C&B %')
-        ax2.set_ylabel("C&B % of Revenue", color='#EAF8EF')
+        ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
+                 color=line_color, marker='o', label='C&B %')
+        ax2.set_ylabel("C&B % of Revenue", color=line_color)
 
-        # 👇 soft grey borders for right axis
         for spine in ax2.spines.values():
             spine.set_linewidth(0.5)
             spine.set_edgecolor('#cccccc')
