@@ -8,6 +8,14 @@ import os
 import pandas as pd
 import inspect
 
+# ✅ Add your custom PROMPT BANK here
+PROMPT_BANK = [
+    "_List accounts with margin % less than 30% in the last quarter_",
+    "_Which cost triggered the Margin drop last month as compared to its previous month in Transportation?_",
+    "_How much C&B varied from last quarter to this quarter?_",
+    "_What is M-o-M trend of C&B cost % w.r.t total revenue?_"
+]
+
 # ✅ Load data from sample_data folder
 @st.cache_data
 def load_data():
@@ -68,7 +76,7 @@ if user_question:
     except Exception as e:
         st.error(f"❌ Error running analysis: {e}")
 
-# Always display the prompt bank (moves below results if a question is asked)
+# Always display the prompt bank
 st.markdown("---")
 st.markdown("💡 **Try asking:**")
 for prompt in PROMPT_BANK:
