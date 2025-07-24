@@ -37,11 +37,50 @@ except Exception as e:
 
 # Streamlit page config
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
-st.title("📊 LTTS BI Assistant")
+
+# ✅ Title with Google-style multi-colored font
+st.markdown("""
+<h1 style="font-family: 'Segoe UI', sans-serif; font-size: 40px;">
+  <span style="color:#4285F4;">C</span>
+  <span style="color:#EA4335;">o</span>
+  <span style="color:#FBBC05;">n</span>
+  <span style="color:#34A853;">v</span>
+  <span style="color:#4285F4;">e</span>
+  <span style="color:#EA4335;">r</span>
+  <span style="color:#FBBC05;">s</span>
+  <span style="color:#34A853;">a</span>
+  <span style="color:#4285F4;">t</span>
+  <span style="color:#EA4335;">i</span>
+  <span style="color:#FBBC05;">o</span>
+  <span style="color:#34A853;">n</span>
+  <span style="color:#4285F4;">a</span>
+  <span style="color:#EA4335;">l</span>
+  &nbsp;
+  <span style="color:#FBBC05;">A</span>
+  <span style="color:#34A853;">n</span>
+  <span style="color:#4285F4;">a</span>
+  <span style="color:#EA4335;">l</span>
+  <span style="color:#FBBC05;">y</span>
+  <span style="color:#34A853;">t</span>
+  <span style="color:#4285F4;">i</span>
+  <span style="color:#EA4335;">c</span>
+  <span style="color:#FBBC05;">s</span>
+  &nbsp;
+  <span style="color:#34A853;">A</span>
+  <span style="color:#4285F4;">s</span>
+  <span style="color:#EA4335;">s</span>
+  <span style="color:#FBBC05;">i</span>
+  <span style="color:#34A853;">s</span>
+  <span style="color:#4285F4;">t</span>
+  <span style="color:#EA4335;">a</span>
+  <span style="color:#FBBC05;">n</span>
+  <span style="color:#34A853;">t</span>
+</h1>
+""", unsafe_allow_html=True)
 
 # Description
 st.markdown("""
-Welcome to the **Conversational Analytics Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 """)
 
 # 👉 Input box with autocomplete suggestions
