@@ -4,6 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
+from scipy.interpolate import make_interp_spline
+import numpy as np
 
 def compute_fte(total_hours):
     return total_hours / (8 * 21)
@@ -56,18 +58,28 @@ def run(df, user_question):
             spine.set_color('#D3D3D3')
             spine.set_linewidth(0.6)
 
-        # Pastel smooth lines
+        # Smoothed pastel lines
         pastel_palette = sns.color_palette("pastel", len(top_clients))
+        x = np.arange(len(chart_data.index))
+        x_labels = chart_data.index
+
         for idx, client in enumerate(top_clients):
-            ax.plot(chart_data.index, chart_data[client], label=client,
-                    marker='o', linewidth=2, color=pastel_palette[idx])
+            y = chart_data[client].values
+            if len(x) >= 4:  # smoothing works well with 4+ points
+                x_smooth = np.linspace(x.min(), x.max(), 300)
+                spline = make_interp_spline(x, y, k=3)
+                y_smooth = spline(x_smooth)
+                ax.plot(x_smooth, y_smooth, label=client, color=pastel_palette[idx], linewidth=2)
+            else:
+                ax.plot(x, y, label=client, color=pastel_palette[idx], linewidth=2)
 
         ax.set_title("Monthly FTE (Smoothed Trend)", fontsize=13)
         ax.set_xlabel("Month")
         ax.set_ylabel("FTE (Headcount)")
+        ax.set_xticks(x)
+        ax.set_xticklabels(x_labels, rotation=45)
         ax.legend(loc='upper left', fontsize=8)
         ax.grid(False)
-        plt.xticks(rotation=45)
         st.pyplot(fig)
 
     return monthly_fte
