@@ -46,17 +46,18 @@ def run(df, user_question=None):
     # Convert to INR Crores
     cb_summary = cb_summary / 1e7
 
-    # Insights
-    summary = []
-    for seg in cb_summary.index:
-        old = cb_summary.loc[seg, q1]
-        new = cb_summary.loc[seg, q2]
-        change_pct = ((new - old) / old * 100) if old != 0 else 0
-        summary.append(f"{seg}: {change_pct:+.1f}% change in C&B from {q1} to {q2}")
+    # 🔹 New Insight Section
+    total_q1 = cb_summary[q1].sum()
+    total_q2 = cb_summary[q2].sum()
+    overall_change = ((total_q2 - total_q1) / total_q1) * 100 if total_q1 else 0
+    increased_segments = cb_summary[cb_summary[q2] > cb_summary[q1]].index.tolist()
 
-    st.markdown("### 📊 C&B Cost Variation by Segment")
-    for line in summary:
-        st.markdown(f"- {line}")
+    st.markdown("### 📊 C&B Cost Insights")
+    st.markdown(f"- 💰 **Overall C&B change** from {q1} to {q2}: **{overall_change:+.1f}%**")
+    if increased_segments:
+        st.markdown(f"- 📈 **Segments with increased C&B**: {', '.join(increased_segments)}")
+    else:
+        st.markdown("- ✅ No segments recorded an increase in C&B.")
 
     # Table output
     cb_summary_display = cb_summary.copy()
