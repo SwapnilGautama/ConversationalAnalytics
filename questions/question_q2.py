@@ -110,7 +110,10 @@ def run(df, user_question=None):
         pie_labels = list(top5.index) + (['Others'] if others > 0 else [])
         pie_values = list(top5.values) + ([others] if others > 0 else [])
 
+        # Pastel color palette
+        pastel_colors = ['#AEC6CF', '#FFB347', '#77DD77', '#FF6961', '#CBAACB', '#FFFACD']
+
         fig, ax = plt.subplots()
-        ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90)
+        ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90, colors=pastel_colors[:len(pie_values)])
         ax.set_title(f"Top Group4 Cost Types – {latest_month.strftime('%b')}")
         st.pyplot(fig)
