@@ -102,7 +102,7 @@ def run(df, user_question=None):
         for spine in ax.spines.values():
             spine.set_color('#D3D3D3')
             spine.set_linewidth(0.6)
-        ax.barh(top_10["Client"], top_10["Latest Margin %"], color='#E7F3FF', edgecolor='none')
+        ax.barh(top_10["Client"], top_10["Latest Margin %"], color='#EAF8EF', edgecolor='none')
         ax.set_xlabel(f"Margin % ({time_label})")
         ax.set_ylabel("Client")
         ax.set_title(f"Top 10 Clients with Margin < {threshold}%")
