@@ -33,14 +33,23 @@ PROMPT_BANK = {
         "C&B cost comparison Q1 vs Q2 by segment",
         "Segment wise change in C&B cost"
     ],
-        "Q4": [
+    "Q4": [
         "What is the MoM trend of C&B cost?",
         "C&B vs revenue monthly trend",
         "Month over month comparison of C&B with revenue",
         "C&B cost as percentage of revenue trend",
         "Compare C&B cost % with revenue monthly"
+    ],
+    "Q7": [
+        "What is M-o-M HC for an account",
+        "Show monthly headcount trend per client",
+        "FTE trend over months",
+        "Client wise MoM headcount movement",
+        "Monthly total billable hours per account",
+        "MoM FTE for customers",
+        "Headcount trend month over month",
+        "Month-wise headcount per client"
     ]
-
 }
 
 # Flatten prompt bank into parallel lists
