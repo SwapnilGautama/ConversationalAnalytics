@@ -77,7 +77,12 @@ def run(df, user_question=None):
         bar_data = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
         colors = ['red' if seg == 'Media & Technology' else 'skyblue' for seg in bar_data.index]
         bar_data.sort_values().plot(kind='barh', ax=ax, color=colors)
-        ax.set_xlabel('% Change in C&B Cost')
-        ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
-        ax.set_xlim(-100, 100)
-        st.pyplot(fig)
+
+       # Remove plot outline (spines)
+       for spine in ax.spines.values():
+           spine.set_visible(False)
+
+       ax.set_xlabel('% Change in C&B Cost')
+       ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
+       ax.set_xlim(-100, 100)
+       st.pyplot(fig)
