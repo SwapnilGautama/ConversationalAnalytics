@@ -98,7 +98,7 @@ def run(df, user_question=None):
         bar_width = 20
         ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=bar_width,
                 color='lightgrey', label='Revenue')  # 🔸 updated color
-        ax1.set_ylabel("Revenue (INR Cr)", color='green')
+        ax1.set_ylabel("Revenue (INR Cr)", color='#E7F3FF')
 
         # 👇 soft grey borders for left axis
         for spine in ax1.spines.values():
@@ -106,8 +106,8 @@ def run(df, user_question=None):
             spine.set_edgecolor('#cccccc')
 
         ax2 = ax1.twinx()
-        ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'], color='blue', marker='o', label='C&B %')
-        ax2.set_ylabel("C&B % of Revenue", color='blue')
+        ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'], color='#EAF8EF', marker='o', label='C&B %')
+        ax2.set_ylabel("C&B % of Revenue", color='#EAF8EF')
 
         # 👇 soft grey borders for right axis
         for spine in ax2.spines.values():
