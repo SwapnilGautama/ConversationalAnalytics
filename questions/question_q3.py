@@ -76,7 +76,7 @@ def run(df, user_question=None):
         # Prepare chart
         fig, ax = plt.subplots(figsize=(6, 6))
         bar_data = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
-        colors = ['#F8F9FA' if seg == 'Media & Technology' else '#E7F3FF' for seg in bar_data.index]
+        colors = ['#EAF8EF' if seg == 'Media & Technology' else '#E7F3FF' for seg in bar_data.index]
         bar_data.sort_values().plot(kind='barh', ax=ax, color=colors)
 
         # 👇 Updated border styling
