@@ -52,12 +52,13 @@ def run(df, user_question=None):
     overall_change = ((total_q2 - total_q1) / total_q1) * 100 if total_q1 else 0
     increased_segments = cb_summary[cb_summary[q2] > cb_summary[q1]].index.tolist()
 
-    st.markdown("### 📊 C&B Cost Insights")
-    st.markdown(f"- 💰 **Overall C&B change** from {q1} to {q2}: **{overall_change:+.1f}%**")
-    if increased_segments:
-        st.markdown(f"- 📈 **Segments with increased C&B**: {', '.join(increased_segments)}")
+    st.markdown("### 📊 C&B and Revenue Quarter-over-Quarter")
+    st.markdown(f"- 💰 **C&B changed by** {cb_change:+.1f}% from {q1} to {q2}")
+    st.markdown(f"- 📈 **Revenue changed by** {rev_change:+.1f}% from {q1} to {q2}")
+    if flagged_segments:
+        st.markdown(f"- ⚠️ **Segments where C&B increased faster than Revenue**: {', '.join(flagged_segments)}")
     else:
-        st.markdown("- ✅ No segments recorded an increase in C&B.")
+        st.markdown("- ✅ No segments had disproportionate C&B increase")
 
     # Table output
     cb_summary_display = cb_summary.copy()
