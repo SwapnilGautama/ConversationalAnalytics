@@ -41,7 +41,7 @@ st.title("📊 LTTS BI Assistant")
 
 # Description
 st.markdown("""
-Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+Welcome to the **Conversational Analytics Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 """)
 
 # 👉 Input box with autocomplete suggestions
