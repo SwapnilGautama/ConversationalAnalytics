@@ -93,7 +93,7 @@ def run(df, user_question=None):
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
         bar_color = '#E7F3FF'
-        line_color = '#EAF8EF'
+        line_color = '#FFB3BA'
 
         ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=20,
                 color=bar_color, label='Revenue')
