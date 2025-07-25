@@ -15,7 +15,7 @@ def compute_margin(df):
                            aggfunc="sum").reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
-    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"]) * 100
+    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"].replace(0, pd.NA)) * 100
     return pivot
 
 def extract_threshold(user_question, default_threshold=30):
@@ -135,36 +135,34 @@ def run(df, user_question=None):
 
     # ✅ DYNAMIC CHART: C&B % of Revenue
     st.markdown("#### 📉 C&B Cost as % of Revenue (for low-margin accounts over last 3 months)")
-    df_cb = df[(df["Group3"] == "C&B") & df["Client"].isin(filtered_df["Client"])].copy()
+    df_cb = df[(df["Group3"] == "C&B")].copy()
+    df_cb["Month"] = pd.to_datetime(df_cb["Month"])
+    rev_df = df[(df["Type"] == "Revenue")].copy()
+    rev_df["Month"] = pd.to_datetime(rev_df["Month"])
 
-    if not df_cb.empty:
-        df_cb["Month"] = pd.to_datetime(df_cb["Month"])
-        rev_df = df[(df["Type"] == "Revenue") & df["Client"].isin(filtered_df["Client"])].copy()
-        rev_df["Month"] = pd.to_datetime(rev_df["Month"])
+    cb_pivot = df_cb.groupby(["Month", "Client"])["Amount"].sum().reset_index()
+    rev_pivot = rev_df.groupby(["Month", "Client"])["Amount"].sum().reset_index()
 
-        cb_pivot = df_cb.groupby(["Month", "Client"])["Amount"].sum().reset_index()
-        rev_pivot = rev_df.groupby(["Month", "Client"])["Amount"].sum().reset_index()
+    merged = pd.merge(cb_pivot, rev_pivot, on=["Month", "Client"], suffixes=("_CB", "_Revenue"))
+    merged = merged[merged["Client"].isin(filtered_df["Client"]) & (merged["Amount_Revenue"] > 0)]
 
-        merged = pd.merge(cb_pivot, rev_pivot, on=["Month", "Client"], suffixes=("_CB", "_Revenue"))
-        merged = merged[merged["Amount_Revenue"] > 0]  # safeguard division by 0
+    if not merged.empty:
+        merged["CB_pct_of_Rev"] = (merged["Amount_CB"] / merged["Amount_Revenue"]) * 100
+        merged["Month"] = merged["Month"].dt.strftime("%b %Y")
 
-        if not merged.empty:
-            merged["CB_pct_of_Rev"] = (merged["Amount_CB"] / merged["Amount_Revenue"]) * 100
-            merged["Month"] = merged["Month"].dt.strftime("%b %Y")
+        fig_cb, ax_cb = plt.subplots(figsize=(8, 4))
+        for client in merged["Client"].unique():
+            data = merged[merged["Client"] == client]
+            ax_cb.plot(data["Month"], data["CB_pct_of_Rev"], marker="o", label=client)
 
-            fig_cb, ax_cb = plt.subplots(figsize=(8, 4))
-            for client in merged["Client"].unique():
-                data = merged[merged["Client"] == client]
-                ax_cb.plot(data["Month"], data["CB_pct_of_Rev"], marker="o", label=client)
-
-            ax_cb.set_ylabel("C&B as % of Revenue")
-            ax_cb.set_xlabel("Month")
-            ax_cb.set_title("C&B Cost % of Revenue (for low-margin clients)")
-            ax_cb.set_ylim(0, merged["CB_pct_of_Rev"].max() * 1.1)
-            ax_cb.grid(True, linestyle="--", linewidth=0.5)
-            for spine in ax_cb.spines.values():
-                spine.set_color('#D3D3D3')
-                spine.set_linewidth(0.6)
-            st.pyplot(fig_cb)
+        ax_cb.set_ylabel("C&B as % of Revenue")
+        ax_cb.set_xlabel("Month")
+        ax_cb.set_title("C&B Cost % of Revenue (for low-margin clients)")
+        ax_cb.set_ylim(0, merged["CB_pct_of_Rev"].max() * 1.1)
+        ax_cb.grid(True, linestyle="--", linewidth=0.5)
+        for spine in ax_cb.spines.values():
+            spine.set_color('#D3D3D3')
+            spine.set_linewidth(0.6)
+        st.pyplot(fig_cb)
 
     return None
