@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+import numpy as np
 
 def run(df, user_question=None):
     import streamlit as st
@@ -81,7 +82,7 @@ def run(df, user_question=None):
     total_row.name = 'Total'
     merged = pd.concat([merged, total_row.to_frame().T])
 
-    # Formatting
+    # Format
     def fmt(x): return f"{x:,.1f}"
     def fmt_pct(x): return f"{x:.2f}%" if pd.notnull(x) else "—"
     styled = merged.copy()
@@ -90,7 +91,6 @@ def run(df, user_question=None):
     styled[['% C&B Change', '% Rev Change', 'C&B vs Revenue Growth (pp)']] = \
         styled[['% C&B Change', '% Rev Change', 'C&B vs Revenue Growth (pp)']].applymap(fmt_pct)
 
-    # Conditional formatting
     def highlight_mismatch(val):
         try:
             return 'background-color: #ffe6e6' if float(val.strip('%')) > 0 else ''
@@ -105,23 +105,46 @@ def run(df, user_question=None):
             .set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     )
 
-    # Chart
-    fig, ax = plt.subplots(figsize=(6, 6))
-    bar_data = ((cb_summary[latest_q] - cb_summary[prev_q]) / cb_summary[prev_q].replace(0, 1)) * 100
-    bar_data = bar_data.sort_values()
+    # Charts
+    col1, col2 = st.columns(2)
 
-    norm = mcolors.TwoSlopeNorm(vmin=-100, vcenter=0, vmax=100)
-    colors = [
-        cm.Reds(norm(val)) if val < 0 else cm.Greens(norm(val))
-        for val in bar_data
-    ]
+    with col1:
+        fig1, ax1 = plt.subplots(figsize=(6, 4))
+        bar_data = ((cb_summary[latest_q] - cb_summary[prev_q]) / cb_summary[prev_q].replace(0, 1)) * 100
+        bar_data = bar_data.sort_values()
 
-    bar_data.plot(kind='barh', ax=ax, color=colors)
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.5)
-        spine.set_edgecolor('#cccccc')
+        norm = mcolors.TwoSlopeNorm(vmin=-100, vcenter=0, vmax=100)
+        colors = [
+            cm.Reds(norm(val)) if val < 0 else cm.Greens(norm(val))
+            for val in bar_data
+        ]
+        bar_data.plot(kind='barh', ax=ax1, color=colors)
+        for spine in ax1.spines.values():
+            spine.set_linewidth(0.5)
+            spine.set_edgecolor('#cccccc')
+        ax1.set_xlabel('% Change in C&B Cost')
+        ax1.set_title(f'C&B Change by Segment: {prev_q} vs {latest_q}')
+        ax1.set_xlim(-100, 100)
+        st.pyplot(fig1)
 
-    ax.set_xlabel('% Change in C&B Cost')
-    ax.set_title(f'C&B Change by Segment: {prev_q} vs {latest_q}')
-    ax.set_xlim(-100, 100)
-    st.pyplot(fig)
+    with col2:
+        cb_ratio_q1 = (cb_summary[prev_q] / rev_summary[prev_q].replace(0, np.nan)) * 100
+        cb_ratio_q2 = (cb_summary[latest_q] / rev_summary[latest_q].replace(0, np.nan)) * 100
+
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        index = cb_ratio_q1.index
+        bar_width = 0.35
+        x = np.arange(len(index))
+
+        ax2.bar(x - bar_width / 2, cb_ratio_q1, width=bar_width, label=str(prev_q), color='#a8dadc', edgecolor='#ccc')
+        ax2.bar(x + bar_width / 2, cb_ratio_q2, width=bar_width, label=str(latest_q), color='#457b9d', edgecolor='#ccc')
+
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(index, rotation=45, ha='right')
+        ax2.set_ylabel('C&B / Revenue (%)')
+        ax2.set_title('Quarterly C&B as % of Revenue')
+        ax2.legend()
+        for spine in ax2.spines.values():
+            spine.set_linewidth(0.5)
+            spine.set_edgecolor('#cccccc')
+        st.pyplot(fig2)
