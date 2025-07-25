@@ -1,3 +1,5 @@
+# margin.py
+
 import pandas as pd
 
 def load_pnl_data(filepath, sheet_name="LnTPnL"):
@@ -57,8 +59,9 @@ def compute_margin(df):
 
     grouped = df.groupby(groupby_cols + ['Type'])['Amount'].sum().unstack().fillna(0)
 
-    grouped['Margin'] = grouped.get('Revenue', 0) - grouped.get('Cost', 0)
-    grouped['CM%'] = (grouped['Margin'] / grouped.get('Revenue', 1).replace(0, 1)) * 100
-    grouped['Margin %'] = grouped['CM%']
+    grouped['Revenue'] = grouped.get('Revenue', 0)
+    grouped['Cost'] = grouped.get('Cost', 0)
+    grouped['Margin'] = grouped['Revenue'] - grouped['Cost']
+    grouped['Margin %'] = (grouped['Margin'] / grouped['Revenue'].replace(0, 1)) * 100
 
     return grouped.reset_index()
