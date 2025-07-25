@@ -1,4 +1,4 @@
-# question_q4.py (Updated for USD + Million)
+# question_q4.py (Updated for 'Amount in USD' and values in Million USD)
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,10 +8,10 @@ def run(df, user_question=None):
 
     df.columns = df.columns.str.strip()
 
-    # ✅ Detect 'Amount in USD' field
+    # ✅ Fix for 'Amount in USD'
     amount_col = None
     for col in df.columns:
-        if col.strip().lower() in ['amount in usd', 'amountinusd']:
+        if col.strip().lower() in ['amount in usd', 'amountinusd', 'amount']:
             amount_col = col
             break
     if not amount_col:
@@ -97,7 +97,7 @@ def run(df, user_question=None):
 
         ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20,
                 color=bar_color, label='Revenue')
-        ax1.set_ylabel("Revenue (Million USD)", color='black')
+        ax1.set_ylabel("Revenue (Million USD)", color=bar_color)
 
         for spine in ax1.spines.values():
             spine.set_linewidth(0.5)
@@ -106,7 +106,7 @@ def run(df, user_question=None):
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
                  color=line_color, marker='o', label='C&B %')
-        ax2.set_ylabel("C&B % of Revenue", color='black')
+        ax2.set_ylabel("C&B % of Revenue", color=line_color)
 
         for spine in ax2.spines.values():
             spine.set_linewidth(0.5)
