@@ -10,11 +10,11 @@ import inspect
 
 # ✅ Add your custom PROMPT BANK here
 PROMPT_BANK = [
-    "_List accounts with margin % less than 30% in the last quarter_",
-    "_Which cost caused margin drop last month in Transportation?_",
-    "_How much C&B varied from last quarter to this quarter?_",
-    "_What is M-o-M trend of C&B cost % w.r.t total revenue?_",
-    "_What is FTE trend over months?_"
+    "List accounts with margin % less than 30% in the last quarter",
+    "Which cost caused margin drop last month in Transportation?",
+    "How much C&B varied from last quarter to this quarter?",
+    "What is M-o-M trend of C&B cost % w.r.t total revenue?",
+    "What is FTE trend over months?"
 ]
 
 # ✅ Load data from sample_data folder
@@ -83,10 +83,18 @@ st.markdown("""
 Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 """)
 
+# 🔁 Auto-fill logic for prompt clicks
+if "autofill_text" not in st.session_state:
+    st.session_state.autofill_text = ""
+
+def handle_click(prompt):
+    st.session_state.autofill_text = prompt
+
 # 👉 Input box with autocomplete suggestions
 user_question = st.text_input(
     label="👉 Start by typing your business question:",
     placeholder="e.g. List accounts with margin % less than 30% in the last quarter",
+    value=st.session_state.autofill_text
 )
 
 # Render result if input exists
@@ -122,5 +130,7 @@ if user_question:
 # Always display the prompt bank (bottom)
 st.markdown("---")
 st.markdown("💡 **Try asking:**")
+
 for prompt in PROMPT_BANK:
-    st.markdown(f"- {prompt}")
+    if st.button(prompt):
+        handle_click(prompt)
