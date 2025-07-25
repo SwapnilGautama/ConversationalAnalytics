@@ -66,15 +66,15 @@ def run(df, user_question=None):
 
     agg.rename(columns={
         "Margin %": "Latest Margin %",
-        "Revenue": "Revenue (USD Cr)",
-        "Cost": "Cost (USD Cr)"
+        "Revenue": "Revenue (Million USD)",
+        "Cost": "Cost (Million USD)"
     }, inplace=True)
 
-    agg["Revenue (USD Cr)"] = (agg["Revenue (USD Cr)"] / 1e7).round(2)
-    agg["Cost (USD Cr)"] = (agg["Cost (USD Cr)"] / 1e7).round(2)
+    agg["Revenue (Million USD)"] = (agg["Revenue (Million USD)"] / 1e6).round(2)
+    agg["Cost (Million USD)"] = (agg["Cost (Million USD)"] / 1e6).round(2)
     agg["Latest Margin %"] = agg["Latest Margin %"].round(2)
 
-    filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (USD Cr)"] > 0)]
+    filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (Million USD)"] > 0)]
 
     top_10 = filtered_df.sort_values("Latest Margin %", ascending=False).head(10)
 
@@ -92,7 +92,7 @@ def run(df, user_question=None):
     with col1:
         st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
         st.dataframe(
-            top_10[["Client", "Latest Margin %", "Revenue (USD Cr)", "Cost (USD Cr)"]].reset_index(drop=True),
+            top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]].reset_index(drop=True),
             use_container_width=True
         )
 
