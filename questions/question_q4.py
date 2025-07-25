@@ -1,4 +1,4 @@
-# question_q4.py (Enhanced with custom chart colors)
+# question_q4.py (Updated for USD + Million)
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,14 +8,14 @@ def run(df, user_question=None):
 
     df.columns = df.columns.str.strip()
 
-    # ✅ Fix for 'Amount in INR'
+    # ✅ Detect 'Amount in USD' field
     amount_col = None
     for col in df.columns:
-        if col.strip().lower() in ['amount in inr', 'amountinr', 'amount']:
+        if col.strip().lower() in ['amount in usd', 'amountinusd']:
             amount_col = col
             break
     if not amount_col:
-        st.error("❌ Column not found: Amount in INR")
+        st.error("❌ Column not found: Amount in USD")
         return
 
     # ✅ Ensure Month is datetime
@@ -31,13 +31,13 @@ def run(df, user_question=None):
     rev_monthly = df_rev.groupby(df_rev['Month'].dt.to_period('M'))[amount_col].sum()
 
     df_summary = pd.DataFrame({
-        'C&B (INR Cr)': cb_monthly / 1e7,
-        'Revenue (INR Cr)': rev_monthly / 1e7
+        'C&B (Million USD)': cb_monthly / 1e6,
+        'Revenue (Million USD)': rev_monthly / 1e6
     }).dropna()
 
-    df_summary['C&B % of Revenue'] = (df_summary['C&B (INR Cr)'] / df_summary['Revenue (INR Cr)']) * 100
-    df_summary['MoM C&B Change (%)'] = df_summary['C&B (INR Cr)'].pct_change() * 100
-    df_summary['MoM Revenue Change (%)'] = df_summary['Revenue (INR Cr)'].pct_change() * 100
+    df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
+    df_summary['MoM C&B Change (%)'] = df_summary['C&B (Million USD)'].pct_change() * 100
+    df_summary['MoM Revenue Change (%)'] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
     # ✅ Segment-level margin drop + C&B increase logic
@@ -63,7 +63,7 @@ def run(df, user_question=None):
 
         if cb_now > cb_prev and margin_now < margin_prev:
             segment_insights.append(
-                f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ₹{cb_prev/1e7:.1f} Cr to ₹{cb_now/1e7:.1f} Cr"
+                f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
             )
 
     # ✅ Display insights
@@ -95,9 +95,9 @@ def run(df, user_question=None):
         bar_color = '#E7F3FF'
         line_color = '#FFB3BA'
 
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (INR Cr)'], width=20,
+        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20,
                 color=bar_color, label='Revenue')
-        ax1.set_ylabel("Revenue (INR Cr)", color=bar_color)
+        ax1.set_ylabel("Revenue (Million USD)", color='black')
 
         for spine in ax1.spines.values():
             spine.set_linewidth(0.5)
@@ -106,7 +106,7 @@ def run(df, user_question=None):
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
                  color=line_color, marker='o', label='C&B %')
-        ax2.set_ylabel("C&B % of Revenue", color=line_color)
+        ax2.set_ylabel("C&B % of Revenue", color='black')
 
         for spine in ax2.spines.values():
             spine.set_linewidth(0.5)
