@@ -3,6 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 
 def run(df, user_question=None):
     import streamlit as st
@@ -77,24 +78,22 @@ def run(df, user_question=None):
         # Prepare chart
         fig, ax = plt.subplots(figsize=(6, 6))
         bar_data = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
-        sorted_bar = bar_data.sort_values()
+        bar_data = bar_data.sort_values()
 
-        # Gradient color logic
-        norm = plt.Normalize(sorted_bar.min(), sorted_bar.max())
-        cmap_pos = plt.cm.Greens
-        cmap_neg = plt.cm.Reds
+        # Apply gradient coloring
+        norm = mcolors.TwoSlopeNorm(vmin=-100, vcenter=0, vmax=100)
+        cmap_red = cm.get_cmap('Reds')
+        cmap_green = cm.get_cmap('Greens')
+        colors = [cmap_red(norm(val)) if val < 0 else cmap_green(norm(val)) for val in bar_data]
 
-        def get_color(val):
-            return cmap_pos(norm(val)) if val >= 0 else cmap_neg(norm(val))
+        bar_data.plot(kind='barh', ax=ax, color=colors)
 
-        colors = [get_color(v) for v in sorted_bar]
-
-        sorted_bar.plot(kind='barh', ax=ax, color=colors)
-
+        # 👇 Axis & border styling
         for spine in ax.spines.values():
             spine.set_linewidth(0.5)
             spine.set_edgecolor('#cccccc')
 
         ax.set_xlabel('% Change in C&B Cost')
         ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
+        ax.set_xlim(-100, 100)
         st.pyplot(fig)
