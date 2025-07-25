@@ -115,7 +115,6 @@ user_question = st.text_input(
 if user_question:
     try:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
-        st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
         run_func = question_module.run
