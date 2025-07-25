@@ -1,10 +1,15 @@
-# question_q4.py (Updated for 'Amount in USD' and values in Million USD)
+# question_q4.py (Final version with 'Amount in USD', Million USD, chart styling, and ppt download)
 
 import pandas as pd
 import matplotlib.pyplot as plt
 
 def run(df, user_question=None):
     import streamlit as st
+    from io import BytesIO
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.dml.color import RGBColor
 
     df.columns = df.columns.str.strip()
 
@@ -18,7 +23,6 @@ def run(df, user_question=None):
         st.error("❌ Column not found: Amount in USD")
         return
 
-    # ✅ Ensure Month is datetime
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
 
@@ -92,8 +96,8 @@ def run(df, user_question=None):
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        bar_color = '#E7F3FF'
-        line_color = '#FFB3BA'
+        bar_color = '#FFFACD'  # pastel yellow
+        line_color = '#ADD8E6'  # pastel blue
 
         ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20,
                 color=bar_color, label='Revenue')
@@ -115,3 +119,30 @@ def run(df, user_question=None):
         ax1.set_title("MoM Revenue vs C&B % of Revenue")
         fig.tight_layout()
         st.pyplot(fig)
+
+    # ✅ PPTX Export
+    if st.button("📥 Download as PPT"):
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        title = slide.shapes.title
+        title.text = "C&B MoM Trend Summary"
+
+        content = "\n".join([
+            f"In {last.strftime('%b %Y')}, C&B cost changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev.strftime('%b %Y')}.",
+            "Segments with margin drop & rising C&B:" if segment_insights else "No segments met the criteria."
+        ] + [i.replace("**", "") for i in segment_insights])
+
+        textbox = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(8), Inches(2))
+        tf = textbox.text_frame
+        tf.text = content
+        tf.paragraphs[0].font.size = Pt(14)
+
+        # Add chart image
+        img_stream = BytesIO()
+        fig.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        slide.shapes.add_picture(img_stream, Inches(1), Inches(3), Inches(7), Inches(3.5))
+
+        output = BytesIO()
+        prs.save(output)
+        st.download_button("Download PPT", data=output.getvalue(), file_name="C&B_Trend_Summary.pptx")
