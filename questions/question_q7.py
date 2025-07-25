@@ -7,22 +7,20 @@ import seaborn as sns
 from scipy.interpolate import make_interp_spline
 import numpy as np
 
-def compute_fte(total_hours):
-    return total_hours / (8 * 21)
-
 def run(df, user_question):
     # Load correct dataset
     df = pd.read_excel("sample_data/LNTData.xlsx")
 
     df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'TotalBillableHours'])
-    df['FTE'] = df['TotalBillableHours'].astype(float).apply(compute_fte)
+    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'PSNo'])
     df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
 
-    monthly_fte = df.groupby(['FinalCustomerName', 'Month'])['FTE'].sum().reset_index()
-    monthly_fte['FTE'] = monthly_fte['FTE'].round(1)
+    # ✅ Compute headcount as count of PSNo
+    monthly_headcount = df.groupby(['FinalCustomerName', 'Month'])['PSNo'].nunique().reset_index()
+    monthly_headcount = monthly_headcount.rename(columns={'PSNo': 'FTE'})
+    monthly_headcount['FTE'] = monthly_headcount['FTE'].round(1)
 
-    fte_pivot = monthly_fte.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
+    fte_pivot = monthly_headcount.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
 
     # Select top 6 clients by average FTE
     top_clients = fte_pivot.mean().sort_values(ascending=False).head(6).index
@@ -47,7 +45,7 @@ def run(df, user_question):
     with col1:
         st.markdown("### 📋 MoM FTE per Client")
         st.dataframe(
-            monthly_fte.rename(columns={"FinalCustomerName": "Client", "FTE": "FTE (Headcount)"}),
+            monthly_headcount.rename(columns={"FinalCustomerName": "Client", "FTE": "FTE (Headcount)"}),
             use_container_width=True
         )
 
