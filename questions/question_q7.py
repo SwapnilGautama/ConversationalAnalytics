@@ -7,22 +7,22 @@ import seaborn as sns
 from scipy.interpolate import make_interp_spline
 import numpy as np
 
-def compute_fte(total_hours):
-    return total_hours / (8 * 21)
-
 def run(df, user_question):
+    # Load correct dataset
     df = pd.read_excel("sample_data/LNTData.xlsx")
 
     df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'TotalBillableHours'])
-    df['FTE'] = df['TotalBillableHours'].astype(float).apply(compute_fte)
+    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'PSNo'])
     df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
 
-    monthly_fte = df.groupby(['FinalCustomerName', 'Month'])['FTE'].sum().reset_index()
-    monthly_fte['FTE'] = monthly_fte['FTE'].round(1)
+    # ✅ Compute headcount as count of PSNo
+    monthly_headcount = df.groupby(['FinalCustomerName', 'Month'])['PSNo'].nunique().reset_index()
+    monthly_headcount = monthly_headcount.rename(columns={'PSNo': 'FTE'})
+    monthly_headcount['FTE'] = monthly_headcount['FTE'].round(1)
 
-    fte_pivot = monthly_fte.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
+    fte_pivot = monthly_headcount.pivot(index='Month', columns='FinalCustomerName', values='FTE').fillna(0)
 
+    # Select top 6 clients by average FTE
     top_clients = fte_pivot.mean().sort_values(ascending=False).head(6).index
     chart_data = fte_pivot[top_clients]
 
@@ -39,14 +39,16 @@ def run(df, user_question):
         f"({pct_change:.1f}%)**."
     )
 
-    # 🔢 Additional Insight: Billability & Location Split
-    total = len(df)
-    billable_pct = (df['Status'].str.lower() == 'billable').sum() / total * 100
-    onsite_pct = (df['Onsite/Offshore'].str.lower() == 'onsite').sum() / total * 100
+    # ➕ Additional Insight: % Billable / Non-Billable and Onsite / Offshore
+    total_count = df['PSNo'].nunique()
+    billable_pct = df[df['Status'] == 'Billable']['PSNo'].nunique() / total_count * 100 if total_count else 0
+    nonbillable_pct = df[df['Status'] == 'Non Billable']['PSNo'].nunique() / total_count * 100 if total_count else 0
+    onsite_pct = df[df['Onsite/Offshore'] == 'Onsite']['PSNo'].nunique() / total_count * 100 if total_count else 0
+    offshore_pct = df[df['Onsite/Offshore'] == 'Offshore']['PSNo'].nunique() / total_count * 100 if total_count else 0
 
     st.markdown(
-        f"🧾 **Headcount Composition:** {billable_pct:.1f}% Billable / {100 - billable_pct:.1f}% Non-Billable, "
-        f"{onsite_pct:.1f}% Onsite / {100 - onsite_pct:.1f}% Offshore."
+        f"🔍 **Headcount Breakdown**: **{billable_pct:.1f}% Billable**, **{nonbillable_pct:.1f}% Non-Billable**, "
+        f"**{onsite_pct:.1f}% Onsite**, **{offshore_pct:.1f}% Offshore**."
     )
 
     # 🔄 Layout
@@ -55,17 +57,20 @@ def run(df, user_question):
     with col1:
         st.markdown("### 📋 MoM FTE per Client")
         st.dataframe(
-            monthly_fte.rename(columns={"FinalCustomerName": "Client", "FTE": "FTE (Headcount)"}),
+            monthly_headcount.rename(columns={"FinalCustomerName": "Client", "FTE": "FTE (Headcount)"}),
             use_container_width=True
         )
 
     with col2:
         st.markdown("### 📈 MoM FTE Trend (Top 6 Clients)")
         fig, ax = plt.subplots(figsize=(8, 5))
+
+        # Soft grey border
         for spine in ax.spines.values():
             spine.set_color('#D3D3D3')
             spine.set_linewidth(0.6)
 
+        # Smoothed pastel lines
         pastel_palette = sns.color_palette("pastel", len(top_clients))
         x = np.arange(len(chart_data.index))
         x_labels = chart_data.index
@@ -89,34 +94,28 @@ def run(df, user_question):
         ax.grid(False)
         st.pyplot(fig)
 
-    # 📊 Bar Charts: Billable/Non-Billable and Onsite/Offshore
-    st.markdown("### 🧭 Headcount Composition (Charts)")
+    # ➕ Two new stacked bar charts
+    st.markdown("### 📊 Headcount Composition by Month")
 
-    comp_df = pd.DataFrame({
-        'Category': ['Billable', 'Non-Billable', 'Onsite', 'Offshore'],
-        'Count': [
-            (df['Status'].str.lower() == 'billable').sum(),
-            (df['Status'].str.lower() == 'non billable').sum(),
-            (df['Onsite/Offshore'].str.lower() == 'onsite').sum(),
-            (df['Onsite/Offshore'].str.lower() == 'offshore').sum()
-        ]
-    })
+    stacked_data = df.groupby(['Month', 'Status'])['PSNo'].nunique().unstack().fillna(0)
+    stacked_data2 = df.groupby(['Month', 'Onsite/Offshore'])['PSNo'].nunique().unstack().fillna(0)
 
-    fig2, axes = plt.subplots(1, 2, figsize=(10, 4))
-    colors1 = ['#cce5cc', '#e6f0e6']
-    colors2 = ['#cce5ff', '#e6f0ff']
-    borders = ['#D3D3D3'] * 2
+    fig1, axs = plt.subplots(1, 2, figsize=(14, 5))
 
-    axes[0].bar(['Billable', 'Non-Billable'], comp_df['Count'][:2], color=colors1, edgecolor=borders)
-    axes[0].set_title("Billable vs Non-Billable")
-    axes[0].set_ylabel("Headcount")
+    # Chart 1 - Billable vs Non-Billable
+    stacked_data.plot(kind='bar', stacked=True, ax=axs[0], color=['#B0E57C', '#FFE0B2'], edgecolor='#D3D3D3')
+    axs[0].set_title("Monthly Billable vs Non-Billable")
+    axs[0].set_xlabel("Month")
+    axs[0].set_ylabel("Headcount")
+    axs[0].legend(loc='upper left', fontsize=8)
+    axs[0].tick_params(axis='x', rotation=45)
 
-    axes[1].bar(['Onsite', 'Offshore'], comp_df['Count'][2:], color=colors2, edgecolor=borders)
-    axes[1].set_title("Onsite vs Offshore")
-    axes[1].set_ylabel("Headcount")
+    # Chart 2 - Onsite vs Offshore
+    stacked_data2.plot(kind='bar', stacked=True, ax=axs[1], color=['#ADD8E6', '#FFDAB9'], edgecolor='#D3D3D3')
+    axs[1].set_title("Monthly Onsite vs Offshore")
+    axs[1].set_xlabel("Month")
+    axs[1].set_ylabel("Headcount")
+    axs[1].legend(loc='upper left', fontsize=8)
+    axs[1].tick_params(axis='x', rotation=45)
 
-    for ax in axes:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-    st.pyplot(fig2)
+    st.pyplot(fig1)
