@@ -72,8 +72,11 @@ def run(df, user_question=None):
 
     g4_raw = g4.copy()
     g4['% Change'] = ((g4_raw[latest_month] - g4_raw[prev_month]) / g4_raw[prev_month].replace(0, 0.0001)) * 100
-    g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month]).abs()
-    top8 = g4_raw.sort_values(by='abs_change', ascending=False).head(8)
+    g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month])
+
+    # ✅ Filter only positive increases (costs that went up)
+    g4_positive_increase = g4_raw[g4_raw['abs_change'] > 0].copy()
+    top8 = g4_positive_increase.sort_values(by='abs_change', ascending=False).head(8)
 
     table_df = pd.DataFrame({
         'May (Mn USD)': top8[prev_month] / 1e6,
