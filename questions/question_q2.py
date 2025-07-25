@@ -2,6 +2,7 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 
 def run(df, user_question=None):
     import streamlit as st
@@ -61,6 +62,16 @@ def run(df, user_question=None):
     cost_growth = ((cost_latest - cost_prev) / cost_prev) * 100 if cost_prev else 0
     cost_summary = f"{segment} cost {'increased' if cost_growth > 0 else 'decreased'} by {abs(cost_growth):.1f}% from {prev_month.strftime('%b')} to {latest_month.strftime('%b')}."
 
+    # Extract dynamic % threshold from question if available
+    margin_threshold = "a certain"
+    if user_question:
+        match = re.search(r'less than (\d+)%', user_question)
+        if match:
+            margin_threshold = f"less than {match.group(1)}%"
+
+    # Display status bar
+    st.info(f"🔍 Running analysis for: **Show me accounts with {margin_threshold} margin**")
+
     # Display insights
     st.markdown("### 🔍 Key Insights")
     st.markdown(f"- 📉 {margin_summary}")
@@ -110,9 +121,7 @@ def run(df, user_question=None):
         pie_labels = list(top5.index) + (['Others'] if others > 0 else [])
         pie_values = list(top5.values) + ([others] if others > 0 else [])
 
-        # Pastel color palette
         pastel_colors = ['#AEC6CF', '#FFB347', '#77DD77', '#FF6961', '#CBAACB', '#FFFACD']
-
         fig, ax = plt.subplots()
         ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90, colors=pastel_colors[:len(pie_values)])
         ax.set_title(f"Top Group4 Cost Types – {latest_month.strftime('%b')}")
