@@ -66,15 +66,15 @@ def run(df, user_question=None):
 
     agg.rename(columns={
         "Margin %": "Latest Margin %",
-        "Revenue": "Revenue (₹ Cr)",
-        "Cost": "Cost (₹ Cr)"
+        "Revenue": "Revenue (USD Cr)",
+        "Cost": "Cost (USD Cr)"
     }, inplace=True)
 
-    agg["Revenue (₹ Cr)"] = (agg["Revenue (₹ Cr)"] / 1e7).round(2)
-    agg["Cost (₹ Cr)"] = (agg["Cost (₹ Cr)"] / 1e7).round(2)
+    agg["Revenue (USD Cr)"] = (agg["Revenue (USD Cr)"] / 1e7).round(2)
+    agg["Cost (USD Cr)"] = (agg["Cost (USD Cr)"] / 1e7).round(2)
     agg["Latest Margin %"] = agg["Latest Margin %"].round(2)
 
-    filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (₹ Cr)"] > 0)]
+    filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (USD Cr)"] > 0)]
 
     top_10 = filtered_df.sort_values("Latest Margin %", ascending=False).head(10)
 
@@ -92,7 +92,7 @@ def run(df, user_question=None):
     with col1:
         st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
         st.dataframe(
-            top_10[["Client", "Latest Margin %", "Revenue (₹ Cr)", "Cost (₹ Cr)"]].reset_index(drop=True),
+            top_10[["Client", "Latest Margin %", "Revenue (USD Cr)", "Cost (USD Cr)"]].reset_index(drop=True),
             use_container_width=True
         )
 
@@ -105,11 +105,9 @@ def run(df, user_question=None):
         colors = []
         for val in margins:
             if val >= 0:
-                # Pastel green gradient (light to dark)
                 green_intensity = 0.9 - (val / margins.max()) * 0.6 if margins.max() != 0 else 0.9
                 colors.append((green_intensity, 1.0, green_intensity))
             else:
-                # Pastel red gradient (light to dark)
                 red_intensity = 0.9 - (abs(val) / abs(margins.min())) * 0.6 if margins.min() != 0 else 0.9
                 colors.append((1.0, red_intensity, red_intensity))
 
