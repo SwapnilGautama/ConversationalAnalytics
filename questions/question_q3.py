@@ -12,12 +12,12 @@ def run(df, user_question=None):
     # Choose correct amount column
     amount_col = None
     for col in df.columns:
-        if col.strip().lower() in ['amount in inr', 'amountinr', 'amount']:
+        if col.strip().lower() in ['amount in usd', 'amountinusd', 'amount']:
             amount_col = col
             break
 
     if not amount_col:
-        st.error("❌ Column not found: Amount in INR")
+        st.error("❌ Column not found: Amount in USD")
         return
 
     # Convert Month column
@@ -43,7 +43,7 @@ def run(df, user_question=None):
     cb_summary = cb_summary.sort_index(axis=1)
     q1, q2 = cb_summary.columns[-2], cb_summary.columns[-1]
 
-    # Convert to INR Crores
+    # Convert to INR Crores (still labeled as INR Cr — you may rename to USD if needed)
     cb_summary = cb_summary / 1e7
 
     # 🔹 New Insight Section
@@ -69,7 +69,7 @@ def run(df, user_question=None):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 🧾 C&B Cost (INR Cr) and % Change")
+        st.markdown("#### 🧾 C&B Cost (USD Cr) and % Change")
         st.dataframe(cb_summary_display)
 
     with col2:
