@@ -43,8 +43,8 @@ def run(df, user_question=None):
     cb_summary = cb_summary.sort_index(axis=1)
     q1, q2 = cb_summary.columns[-2], cb_summary.columns[-1]
 
-    # Convert to INR Crores (still labeled as INR Cr — you may rename to USD if needed)
-    cb_summary = cb_summary / 1e7
+    # Convert to Million USD (was INR Cr before)
+    cb_summary = cb_summary / 1e6
 
     # 🔹 New Insight Section
     total_q1 = cb_summary[q1].sum()
@@ -69,7 +69,7 @@ def run(df, user_question=None):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 🧾 C&B Cost (USD Cr) and % Change")
+        st.markdown("#### 🧾 C&B Cost (Million USD) and % Change")
         st.dataframe(cb_summary_display)
 
     with col2:
