@@ -7,6 +7,7 @@ import matplotlib.cm as cm
 
 def run(df, user_question=None):
     import streamlit as st
+    import streamlit.components.v1 as components
 
     # Standardize column names
     df.columns = df.columns.str.strip()
@@ -83,24 +84,33 @@ def run(df, user_question=None):
     display_df = merged[[f'{prev_q} C&B', f'{latest_q} C&B', f'{prev_q} Revenue', f'{latest_q} Revenue',
                          '% C&B Change', '% Rev Change', 'C&B vs Rev Growth (pp)']].copy()
 
-    display_df.columns = ['C&B Q1', 'C&B Q2', 'Revenue Q1', 'Revenue Q2',
+    display_df.columns = ['C&B Q1 (Mn USD)', 'C&B Q2 (Mn USD)', 'Revenue Q1 (Mn USD)', 'Revenue Q2 (Mn USD)',
                           '% C&B Change', '% Revenue Change', 'C&B Growth vs Revenue Growth (pp)']
 
     # Add Totals Row
-    total_row = display_df.sum(numeric_only=True)
+    total_row = display_df.drop(columns=['% C&B Change', '% Revenue Change', 'C&B Growth vs Revenue Growth (pp)']).sum(numeric_only=True)
+    total_row['% C&B Change'] = ((total_row['C&B Q2 (Mn USD)'] - total_row['C&B Q1 (Mn USD)']) / (total_row['C&B Q1 (Mn USD)'] or 1)) * 100
+    total_row['% Revenue Change'] = ((total_row['Revenue Q2 (Mn USD)'] - total_row['Revenue Q1 (Mn USD)']) / (total_row['Revenue Q1 (Mn USD)'] or 1)) * 100
+    total_row['C&B Growth vs Revenue Growth (pp)'] = total_row['% C&B Change'] - total_row['% Revenue Change']
     total_row.name = 'Total'
     display_df = pd.concat([display_df, pd.DataFrame([total_row])])
 
-    # Format %
-    for col in ['% C&B Change', '% Revenue Change', 'C&B Growth vs Revenue Growth (pp)']:
-        display_df[col] = display_df[col].map(lambda x: f"{x:.2f}%" if pd.notnull(x) else "—")
+    # Formatting
+    numeric_cols = ['C&B Q1 (Mn USD)', 'C&B Q2 (Mn USD)', 'Revenue Q1 (Mn USD)', 'Revenue Q2 (Mn USD)']
+    for col in numeric_cols:
+        display_df[col] = display_df[col].map(lambda x: f"{x:,.1f}" if pd.notnull(x) else "—")
 
-    # Show table and chart
+    for col in ['% C&B Change', '% Revenue Change', 'C&B Growth vs Revenue Growth (pp)']:
+        display_df[col] = display_df[col].map(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x)
+
+    # Display with style to wrap headers
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("#### 🧾 C&B vs Revenue Comparison by Segment")
-        st.dataframe(display_df)
+        st.dataframe(display_df.style.set_table_styles([
+            {'selector': 'th', 'props': [('white-space', 'normal'), ('word-wrap', 'break-word')]}
+        ]), use_container_width=True)
 
     with col2:
         bar_data = ((cb_df[latest_q] - cb_df[prev_q]) / cb_df[prev_q].replace(0, 1)) * 100
