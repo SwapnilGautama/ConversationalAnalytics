@@ -31,15 +31,15 @@ def run(df, user_question=None):
     cost_df = df[df['Type'] == 'Cost']
 
     # Margin by client
-    revenue_m = revenue_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
-    cost_m = cost_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    revenue_m = revenue_df.groupby(['Client', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
+    cost_m = cost_df.groupby(['Client', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
 
-    margin_m = (revenue_m - cost_m) / cost_m.replace(0, 1) * 100
+    margin_m = (revenue_m - cost_m) / revenue_m.replace(0, 1) * 100
 
     # Segment-level margin
-    seg_rev = revenue_df.groupby('Month')['Amount'].sum()
-    seg_cost = cost_df.groupby('Month')['Amount'].sum()
-    seg_margin_pct = ((seg_rev - seg_cost) / seg_cost.replace(0, 1)) * 100
+    seg_rev = revenue_df.groupby('Month')['Amount in USD'].sum()
+    seg_cost = cost_df.groupby('Month')['Amount in USD'].sum()
+    seg_margin_pct = ((seg_rev - seg_cost) / seg_rev.replace(0, 1)) * 100
 
     # Insight 1: Margin movement
     try:
@@ -49,8 +49,8 @@ def run(df, user_question=None):
         margin_summary = "Margin movement data unavailable."
 
     # Insight 2: Client margin drops
-    client_margin_prev = ((revenue_m[prev_month] - cost_m[prev_month]) / cost_m[prev_month].replace(0, 1)) * 100
-    client_margin_latest = ((revenue_m[latest_month] - cost_m[latest_month]) / cost_m[latest_month].replace(0, 1)) * 100
+    client_margin_prev = ((revenue_m[prev_month] - cost_m[prev_month]) / revenue_m[prev_month].replace(0, 1)) * 100
+    client_margin_latest = ((revenue_m[latest_month] - cost_m[latest_month]) / revenue_m[latest_month].replace(0, 1)) * 100
     client_movement = (client_margin_latest < client_margin_prev).sum()
     total_clients = len(client_margin_prev)
     client_summary = f"{client_movement} out of {total_clients} clients ({(client_movement/total_clients)*100:.1f}%) in {segment} saw a drop in margin."
@@ -68,8 +68,8 @@ def run(df, user_question=None):
     st.markdown(f"- 💸 {cost_summary}")
 
     # Group4 analysis
-    group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].dropna(subset=['Group4'])
-    g4 = group4_df.groupby(['Group4', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    group4_df = cost_df[['Month', 'Client', 'Amount in USD', 'Group4']].dropna(subset=['Group4'])
+    g4 = group4_df.groupby(['Group4', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
 
     if prev_month not in g4.columns or latest_month not in g4.columns:
         st.warning("Missing Group4 cost data for selected months.")
@@ -85,20 +85,20 @@ def run(df, user_question=None):
     # Final table
     table_df = pd.DataFrame({
         'Group4': top8.index,
-        'May': top8[prev_month] / 1e7,  # convert to ₹ Crores
-        'Jun': top8[latest_month] / 1e7,
+        'May (Mn USD)': top8[prev_month] / 1e6,
+        'Jun (Mn USD)': top8[latest_month] / 1e6,
         '% Change': g4.loc[top8.index, '% Change']
     })
 
-    table_df['May'] = table_df['May'].map(lambda x: f"{x:,.2f}")
-    table_df['Jun'] = table_df['Jun'].map(lambda x: f"{x:,.2f}")
+    table_df['May (Mn USD)'] = table_df['May (Mn USD)'].map(lambda x: f"{x:,.2f}")
+    table_df['Jun (Mn USD)'] = table_df['Jun (Mn USD)'].map(lambda x: f"{x:,.2f}")
     table_df['% Change'] = table_df['% Change'].map(lambda x: f"{x:.2f}%")
 
     # Layout: Table and Pie side-by-side
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in ₹ Cr, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
+        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in Mn USD, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
         st.dataframe(table_df)
 
     with col2:
