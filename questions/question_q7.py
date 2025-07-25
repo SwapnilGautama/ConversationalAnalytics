@@ -1,22 +1,14 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
-from io import BytesIO
 import seaborn as sns
 
-def run_question():
+def run(df, user_question):
     st.title("Q7. Accounts with Realized Rate Drop")
-    
-    # Load data
-    uploaded_file = st.file_uploader("Upload LNTData Excel File", type=["xlsx"])
-    if uploaded_file is None:
-        st.stop()
-
-    df = pd.read_excel(uploaded_file)
 
     # Standardize column names
     df.columns = df.columns.str.strip()
-    df['Date_a'] = pd.to_datetime(df['Date_a'])
+    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
     df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
 
     # Drop rows with missing critical values
@@ -34,7 +26,7 @@ def run_question():
     # Step 2: Pivot to compare current and previous quarter realized rates
     agg_df['Quarter'] = pd.to_datetime(agg_df['Month']).dt.to_period('Q')
     latest_quarter = agg_df['Quarter'].max()
-    prev_quarter = (latest_quarter - 1)
+    prev_quarter = latest_quarter - 1
 
     curr_q = agg_df[agg_df['Quarter'] == latest_quarter]
     prev_q = agg_df[agg_df['Quarter'] == prev_quarter]
@@ -67,16 +59,15 @@ def run_question():
     st.markdown("---")
     st.subheader("Headcount Composition Over Time")
 
-    # Compute monthly headcount breakdown
+    # Monthly breakdown: Billable vs Non-Billable
     count_df = df.groupby(['Month', 'Status']).agg({'PSNo': pd.Series.nunique}).reset_index()
-    pivot_status = count_df.pivot(index='Month', columns='Status', values='PSNo').fillna(0)
-    pivot_status = pivot_status.sort_index()
+    pivot_status = count_df.pivot(index='Month', columns='Status', values='PSNo').fillna(0).sort_index()
 
+    # Monthly breakdown: Onsite vs Offshore
     count_df2 = df.groupby(['Month', 'Onsite/Offshore']).agg({'PSNo': pd.Series.nunique}).reset_index()
-    pivot_location = count_df2.pivot(index='Month', columns='Onsite/Offshore', values='PSNo').fillna(0)
-    pivot_location = pivot_location.sort_index()
+    pivot_location = count_df2.pivot(index='Month', columns='Onsite/Offshore', values='PSNo').fillna(0).sort_index()
 
-    # Compute percentages for text summary
+    # Summary for latest month
     latest_month = df['Month'].max()
     recent = df[df['Month'] == latest_month]
     total = recent['PSNo'].nunique()
@@ -86,30 +77,30 @@ def run_question():
     st.markdown(f"- 👨‍💼 In {latest_month}, **{billable_pct:.1f}%** of headcount is Billable")
     st.markdown(f"- 🌐 In {latest_month}, **{onsite_pct:.1f}%** of headcount is Onsite")
 
-    # Plot side-by-side stacked bar charts
-    fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharex=True)
+    # Charts
+    st.subheader("Monthly Headcount Split (Stacked View)")
+    fig, axes = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
 
     pastel_green = sns.color_palette("Greens", n_colors=3)[1]
     pastel_red = sns.color_palette("Reds", n_colors=3)[1]
     pastel_blue = sns.color_palette("Blues", n_colors=3)[1]
     pastel_orange = sns.color_palette("Oranges", n_colors=3)[1]
-    grey_border = "#999999"
+    grey_border = "#cccccc"
 
-    # Chart 1: Billable vs Non Billable
+    # Chart 1: Billable vs Non-Billable
     pivot_status.plot(kind='bar', stacked=True, ax=axes[0],
                       color=[pastel_green, pastel_red], edgecolor=grey_border)
-    axes[0].set_title("Headcount Split: Billable vs Non-Billable")
+    axes[0].set_title("Billable vs Non-Billable (Monthly)")
     axes[0].set_xlabel("Month")
     axes[0].set_ylabel("Headcount")
-    axes[0].legend(title="Status")
+    axes[0].legend(title="Status", loc="upper left")
 
     # Chart 2: Onsite vs Offshore
     pivot_location.plot(kind='bar', stacked=True, ax=axes[1],
                         color=[pastel_blue, pastel_orange], edgecolor=grey_border)
-    axes[1].set_title("Headcount Split: Onsite vs Offshore")
+    axes[1].set_title("Onsite vs Offshore (Monthly)")
     axes[1].set_xlabel("Month")
-    axes[1].set_ylabel("Headcount")
-    axes[1].legend(title="Location")
+    axes[1].legend(title="Location", loc="upper left")
 
     plt.tight_layout()
     st.pyplot(fig)
