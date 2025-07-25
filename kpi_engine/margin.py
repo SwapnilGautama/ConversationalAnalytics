@@ -1,4 +1,5 @@
-# margin.py
+# ✅ UPDATED: margin.py
+# Replaces "Amount in INR" with "Amount in USD"
 
 import pandas as pd
 
@@ -20,8 +21,8 @@ def preprocess_pnl_data(df):
     elif 'Company_Code' in df.columns:
         column_map['Company_Code'] = 'Client'
 
-    if 'Amount in INR' in df.columns:
-        column_map['Amount in INR'] = 'Amount'
+    if 'Amount in USD' in df.columns:
+        column_map['Amount in USD'] = 'Amount'
     elif 'Amount' in df.columns:
         column_map['Amount'] = 'Amount'
 
