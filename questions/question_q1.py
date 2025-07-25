@@ -1,12 +1,22 @@
 # questions/question_q1.py
 
 import pandas as pd
-from kpi_engine.margin import compute_margin
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import re
+
+def compute_margin(df):
+    df = df.copy()
+    pivot = df.pivot_table(index=["Month", "Client"], 
+                           columns="Type", 
+                           values="Amount", 
+                           aggfunc="sum").reset_index()
+    pivot["Revenue"] = pivot.get("Revenue", 0)
+    pivot["Cost"] = pivot.get("Cost", 0)
+    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Cost"]) * 100
+    return pivot
 
 def extract_threshold(user_question, default_threshold=30):
     if user_question:
