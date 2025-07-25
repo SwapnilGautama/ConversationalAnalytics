@@ -1,5 +1,3 @@
-# questions/question_q1.py
-
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
@@ -15,8 +13,6 @@ def compute_margin(df):
                            aggfunc="sum").reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
-    
-    # ✅ Updated Margin % formula
     pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"]) * 100
     return pivot
 
@@ -111,8 +107,6 @@ def run(df, user_question=None):
     with col2:
         st.markdown("#### 📊 Margin % by Client (Bar Chart)")
         fig, ax = plt.subplots()
-
-        # Generate gradient pastel green-red colors
         margins = top_10["Latest Margin %"]
         colors = []
         for val in margins:
@@ -136,5 +130,34 @@ def run(df, user_question=None):
         ax.grid(False)
         plt.tight_layout()
         st.pyplot(fig)
+
+    # ✅ NEW DYNAMIC CHART: C&B as % of Revenue
+    st.markdown("#### 📉 C&B Cost as % of Revenue (for low-margin accounts over last 3 months)")
+    df_cb = df[(df["Group3"] == "C&B") & df["Client"].isin(filtered_df["Client"])]
+
+    if not df_cb.empty:
+        df_cb = df_cb.copy()
+        df_cb["Month"] = pd.to_datetime(df_cb["Month"])
+        cb_pivot = df_cb.pivot_table(index=["Month", "Client"], values="Amount", aggfunc="sum").reset_index()
+        rev_pivot = df[df["Type"] == "Revenue"].groupby(["Month", "Client"])["Amount"].sum().reset_index()
+        merged = pd.merge(cb_pivot, rev_pivot, on=["Month", "Client"], suffixes=("_CB", "_Revenue"))
+
+        merged["CB_pct_of_Rev"] = (merged["Amount_CB"] / merged["Amount_Revenue"]) * 100
+        merged["Month"] = merged["Month"].dt.strftime("%b %Y")
+
+        fig_cb, ax_cb = plt.subplots(figsize=(8, 4))
+        for client in merged["Client"].unique():
+            data = merged[merged["Client"] == client]
+            ax_cb.plot(data["Month"], data["CB_pct_of_Rev"], marker="o", label=client)
+
+        ax_cb.set_ylabel("C&B as % of Revenue")
+        ax_cb.set_xlabel("Month")
+        ax_cb.set_title("C&B Cost % of Revenue (for low-margin clients)")
+        ax_cb.set_ylim(0, merged["CB_pct_of_Rev"].max() * 1.1)
+        ax_cb.grid(True, linestyle="--", linewidth=0.5)
+        for spine in ax_cb.spines.values():
+            spine.set_color('#D3D3D3')
+            spine.set_linewidth(0.6)
+        st.pyplot(fig_cb)
 
     return None
