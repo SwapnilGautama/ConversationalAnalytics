@@ -15,7 +15,9 @@ def compute_margin(df):
                            aggfunc="sum").reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
-    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Cost"]) * 100
+    
+    # ✅ Updated Margin % formula
+    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"]) * 100
     return pivot
 
 def extract_threshold(user_question, default_threshold=30):
