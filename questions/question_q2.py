@@ -31,14 +31,14 @@ def run(df, user_question=None):
     cost_df = df[df['Type'] == 'Cost']
 
     # Margin by client
-    revenue_m = revenue_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
-    cost_m = cost_df.groupby(['Client', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    revenue_m = revenue_df.groupby(['Client', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
+    cost_m = cost_df.groupby(['Client', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
 
     margin_m = (revenue_m - cost_m) / cost_m.replace(0, 1) * 100
 
     # Segment-level margin
-    seg_rev = revenue_df.groupby('Month')['Amount'].sum()
-    seg_cost = cost_df.groupby('Month')['Amount'].sum()
+    seg_rev = revenue_df.groupby('Month')['Amount in USD'].sum()
+    seg_cost = cost_df.groupby('Month')['Amount in USD'].sum()
     seg_margin_pct = ((seg_rev - seg_cost) / seg_cost.replace(0, 1)) * 100
 
     # Insight 1: Margin movement
@@ -68,8 +68,8 @@ def run(df, user_question=None):
     st.markdown(f"- 💸 {cost_summary}")
 
     # Group4 analysis
-    group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].dropna(subset=['Group4'])
-    g4 = group4_df.groupby(['Group4', 'Month'])['Amount'].sum().unstack(fill_value=0)
+    group4_df = cost_df[['Month', 'Client', 'Amount in USD', 'Group4']].dropna(subset=['Group4'])
+    g4 = group4_df.groupby(['Group4', 'Month'])['Amount in USD'].sum().unstack(fill_value=0)
 
     if prev_month not in g4.columns or latest_month not in g4.columns:
         st.warning("Missing Group4 cost data for selected months.")
