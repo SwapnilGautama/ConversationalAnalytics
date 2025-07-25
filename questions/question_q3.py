@@ -2,6 +2,7 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 def run(df, user_question=None):
     import streamlit as st
@@ -43,7 +44,7 @@ def run(df, user_question=None):
     cb_summary = cb_summary.sort_index(axis=1)
     q1, q2 = cb_summary.columns[-2], cb_summary.columns[-1]
 
-    # Convert to Million USD (was INR Cr before)
+    # Convert to Million USD
     cb_summary = cb_summary / 1e6
 
     # 🔹 New Insight Section
@@ -76,15 +77,24 @@ def run(df, user_question=None):
         # Prepare chart
         fig, ax = plt.subplots(figsize=(6, 6))
         bar_data = ((cb_summary[q2] - cb_summary[q1]) / cb_summary[q1].replace(0, 1)) * 100
-        colors = ['#EAF8EF' if seg == 'Media & Technology' else '#E7F3FF' for seg in bar_data.index]
-        bar_data.sort_values().plot(kind='barh', ax=ax, color=colors)
+        sorted_bar = bar_data.sort_values()
 
-        # 👇 Updated border styling
+        # Gradient color logic
+        norm = plt.Normalize(sorted_bar.min(), sorted_bar.max())
+        cmap_pos = plt.cm.Greens
+        cmap_neg = plt.cm.Reds
+
+        def get_color(val):
+            return cmap_pos(norm(val)) if val >= 0 else cmap_neg(norm(val))
+
+        colors = [get_color(v) for v in sorted_bar]
+
+        sorted_bar.plot(kind='barh', ax=ax, color=colors)
+
         for spine in ax.spines.values():
             spine.set_linewidth(0.5)
             spine.set_edgecolor('#cccccc')
 
         ax.set_xlabel('% Change in C&B Cost')
         ax.set_title(f'C&B Change by Segment: {q1} vs {q2}')
-        ax.set_xlim(-100, 100)
         st.pyplot(fig)
