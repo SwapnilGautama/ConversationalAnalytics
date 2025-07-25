@@ -65,12 +65,10 @@ def run(df, user_question):
         st.markdown("### 📈 MoM FTE Trend (Top 6 Clients)")
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        # Soft grey border
         for spine in ax.spines.values():
             spine.set_color('#D3D3D3')
             spine.set_linewidth(0.6)
 
-        # Smoothed pastel lines
         pastel_palette = sns.color_palette("pastel", len(top_clients))
         x = np.arange(len(chart_data.index))
         x_labels = chart_data.index
@@ -101,6 +99,13 @@ def run(df, user_question):
     stacked_data2 = df.groupby(['Month', 'Onsite/Offshore'])['PSNo'].nunique().unstack().fillna(0)
 
     fig1, axs = plt.subplots(1, 2, figsize=(14, 5))
+
+    for spine in axs[0].spines.values():
+        spine.set_color('#D3D3D3')
+        spine.set_linewidth(0.6)
+    for spine in axs[1].spines.values():
+        spine.set_color('#D3D3D3')
+        spine.set_linewidth(0.6)
 
     # Chart 1 - Billable vs Non-Billable
     stacked_data.plot(kind='bar', stacked=True, ax=axs[0], color=['#B0E57C', '#FFE0B2'], edgecolor='#D3D3D3')
