@@ -7,6 +7,7 @@ from kpi_engine import margin
 import os
 import pandas as pd
 import inspect
+import base64
 
 # ✅ Add your custom PROMPT BANK here
 PROMPT_BANK = [
@@ -37,6 +38,19 @@ except Exception as e:
 
 # Streamlit page config
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
+
+# ✅ Centered Scalability Engineers logo
+def display_logo():
+    logo_path = "sample_data/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"<div style='text-align: center'><img src='data:image/png;base64,{logo_base64}' width='300'/></div>",
+            unsafe_allow_html=True
+        )
+
+display_logo()
 
 # ✅ Title with pastel Google-style multi-colored font
 st.markdown("""
@@ -103,12 +117,10 @@ if user_question:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
         st.info(f"🔍 Running analysis for: **{matched_prompt}**")
 
-        # ✅ Import question logic
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
         run_func = question_module.run
         run_params = inspect.signature(run_func).parameters
 
-        # ✅ Run with or without question param
         if len(run_params) == 2:
             result = run_func(df, user_question)
         else:
@@ -132,5 +144,4 @@ st.markdown("---")
 st.markdown("💡 **Try asking:**")
 
 for prompt in PROMPT_BANK:
-    if st.button(prompt):
-        handle_click(prompt)
+    st.button(prompt, on_click=handle_click, args=(prompt,))
