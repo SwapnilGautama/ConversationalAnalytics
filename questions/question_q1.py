@@ -146,6 +146,7 @@ def run(df, user_question=None):
         rev_pivot = rev_df.groupby(["Month", "Client"])["Amount"].sum().reset_index()
 
         merged = pd.merge(cb_pivot, rev_pivot, on=["Month", "Client"], suffixes=("_CB", "_Revenue"))
+        merged = merged[merged["Amount_Revenue"] > 0]  # safeguard division by 0
 
         if not merged.empty:
             merged["CB_pct_of_Rev"] = (merged["Amount_CB"] / merged["Amount_Revenue"]) * 100
