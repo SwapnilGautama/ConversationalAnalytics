@@ -137,7 +137,7 @@ def run(df, user_question=None):
         x = np.arange(len(index))
 
         ax2.bar(x - bar_width / 2, cb_ratio_q1, width=bar_width, label=str(prev_q), color='#a8dadc', edgecolor='#ccc')
-        ax2.bar(x + bar_width / 2, cb_ratio_q2, width=bar_width, label=str(latest_q), color='#457b9d', edgecolor='#ccc')
+        ax2.bar(x + bar_width / 2, cb_ratio_q2, width=bar_width, label=str(latest_q), color='#fff9b0', edgecolor='#ccc')
 
         ax2.set_xticks(x)
         ax2.set_xticklabels(index, rotation=45, ha='right')
