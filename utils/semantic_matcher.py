@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer, util
 # Load the model
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# Updated PROMPT BANK with dynamic Q2 intent
+# Updated PROMPT BANK with dynamic Q2 and extended Q4 intents
 PROMPT_BANK = {
     "Q1": [
         "Which accounts had CM% < 30 in the last quarter?",
@@ -38,7 +38,17 @@ PROMPT_BANK = {
         "C&B vs revenue monthly trend",
         "Month over month comparison of C&B with revenue",
         "C&B cost as percentage of revenue trend",
-        "Compare C&B cost % with revenue monthly"
+        "Compare C&B cost % with revenue monthly",
+        "What is the YoY, QoQ, MoM revenue trend?",
+        "YoY revenue trend by account",
+        "How has revenue changed quarter over quarter",
+        "Monthly revenue comparison by client",
+        "Revenue trends for each BU or DU",
+        "Revenue trend analysis by DU or BU",
+        "Show revenue trend without time filter",
+        "Client wise revenue change trends",
+        "Trend of revenue growth",
+        "Compare revenue over time"
     ],
     "Q7": [
         "What is M-o-M HC for an account",
