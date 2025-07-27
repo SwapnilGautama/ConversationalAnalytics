@@ -1,4 +1,4 @@
-# question_q4.py — C&B vs Revenue trend (MoM/QoQ/YoY toggle)
+# ✅ FULL UPDATED CODE: question_q4.py with DU/BU tables added per tab
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -29,7 +29,6 @@ def run(df, user_question=None):
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
-    # Select frequency
     freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
 
     if freq_option == 'MoM':
@@ -64,7 +63,6 @@ def run(df, user_question=None):
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # Segment-level margin drop + C&B increase logic (MoM only)
     segment_insights = []
     if freq_option == 'MoM':
         latest_month = df['Month'].max()
@@ -104,7 +102,7 @@ def run(df, user_question=None):
             for insight in segment_insights:
                 st.markdown(f"- {insight}")
 
-    # Table and chart side by side
+    # Main Table and Chart
     col1, col2 = st.columns([1, 1])
     with col1:
         st.dataframe(df_summary.reset_index(drop=False).rename(columns={'Month': 'Period'}), hide_index=True)
@@ -138,7 +136,23 @@ def run(df, user_question=None):
         fig.tight_layout()
         st.pyplot(fig)
 
-    # Export as PPT
+    # ➕ DU and BU tables
+    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
+    df_rev['Period'] = period
+
+    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("#### Revenue by BU (Million USD)")
+        st.dataframe(pivot_bu.round(1).reset_index())
+
+    with col4:
+        st.markdown("#### Revenue by DU (Million USD)")
+        st.dataframe(pivot_du.round(1).reset_index())
+
+    # PPT Export
     if st.button("📥 Download as PPT"):
         prs = Presentation()
         slide = prs.slides.add_slide(prs.slide_layouts[5])
