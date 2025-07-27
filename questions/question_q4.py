@@ -1,4 +1,4 @@
-# question_q4.py (Final version with 'Amount in USD', Million USD, chart styling, and ppt download)
+# question_q4.py — C&B vs Revenue trend (MoM/QoQ/YoY toggle)
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,67 +26,85 @@ def run(df, user_question=None):
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
 
-    # ✅ Filter C&B and Revenue
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
-    # ✅ Monthly aggregation
-    cb_monthly = df_cb.groupby(df_cb['Month'].dt.to_period('M'))[amount_col].sum()
-    rev_monthly = df_rev.groupby(df_rev['Month'].dt.to_period('M'))[amount_col].sum()
+    # Select frequency
+    freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
+
+    if freq_option == 'MoM':
+        period = df['Month'].dt.to_period('M')
+        title_str = "MoM Revenue vs C&B % of Revenue"
+        cb_label = "MoM C&B Change (%)"
+        rev_label = "MoM Revenue Change (%)"
+        slide_title = "C&B MoM Trend Summary"
+    elif freq_option == 'QoQ':
+        period = df['Month'].dt.to_period('Q')
+        title_str = "QoQ Revenue vs C&B % of Revenue"
+        cb_label = "QoQ C&B Change (%)"
+        rev_label = "QoQ Revenue Change (%)"
+        slide_title = "C&B QoQ Trend Summary"
+    else:
+        period = df['Month'].dt.to_period('Y')
+        title_str = "YoY Revenue vs C&B % of Revenue"
+        cb_label = "YoY C&B Change (%)"
+        rev_label = "YoY Revenue Change (%)"
+        slide_title = "C&B YoY Trend Summary"
+
+    cb_agg = df_cb.groupby(period)[amount_col].sum()
+    rev_agg = df_rev.groupby(period)[amount_col].sum()
 
     df_summary = pd.DataFrame({
-        'C&B (Million USD)': cb_monthly / 1e6,
-        'Revenue (Million USD)': rev_monthly / 1e6
+        'C&B (Million USD)': cb_agg / 1e6,
+        'Revenue (Million USD)': rev_agg / 1e6
     }).dropna()
 
     df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
-    df_summary['MoM C&B Change (%)'] = df_summary['C&B (Million USD)'].pct_change() * 100
-    df_summary['MoM Revenue Change (%)'] = df_summary['Revenue (Million USD)'].pct_change() * 100
+    df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
+    df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # ✅ Segment-level margin drop + C&B increase logic
-    latest_month = df['Month'].max()
-    prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
-
-    df_latest = df[df['Month'].dt.to_period('M') == latest_month.to_period('M')]
-    df_prev = df[df['Month'].dt.to_period('M') == prev_month.to_period('M')]
-
-    def margin_calc(sub_df):
-        rev = sub_df[sub_df['Type'].str.lower() == 'revenue'][amount_col].sum()
-        cost = sub_df[sub_df['Type'].str.lower() == 'cost'][amount_col].sum()
-        return ((rev - cost) / cost * 100) if cost else 0
-
+    # Segment-level margin drop + C&B increase logic (MoM only)
     segment_insights = []
-    segments = df['Segment'].dropna().unique()
+    if freq_option == 'MoM':
+        latest_month = df['Month'].max()
+        prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
-    for seg in segments:
-        margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
-        margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
-        cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
-        cb_prev = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
+        df_latest = df[df['Month'].dt.to_period('M') == latest_month.to_period('M')]
+        df_prev = df[df['Month'].dt.to_period('M') == prev_month.to_period('M')]
 
-        if cb_now > cb_prev and margin_now < margin_prev:
-            segment_insights.append(
-                f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
-            )
+        def margin_calc(sub_df):
+            rev = sub_df[sub_df['Type'].str.lower() == 'revenue'][amount_col].sum()
+            cost = sub_df[sub_df['Type'].str.lower() == 'cost'][amount_col].sum()
+            return ((rev - cost) / cost * 100) if cost else 0
 
-    # ✅ Display insights
-    st.markdown("### 📊 MoM Trend of C&B % of Revenue")
+        segments = df['Segment'].dropna().unique()
+        for seg in segments:
+            margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
+            margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
+            cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
+            cb_prev = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
 
+            if cb_now > cb_prev and margin_now < margin_prev:
+                segment_insights.append(
+                    f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
+                )
+
+    st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
         last = df_summary.index[-1]
         prev = df_summary.index[-2]
-        cb_chg = df_summary.loc[last, 'MoM C&B Change (%)']
-        rev_chg = df_summary.loc[last, 'MoM Revenue Change (%)']
+        cb_chg = df_summary.loc[last, cb_label]
+        rev_chg = df_summary.loc[last, rev_label]
         st.markdown(
-            f"📌 In **{last.strftime('%b %Y')}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev.strftime('%b %Y')}**."
+            f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
         if segment_insights:
             st.markdown("🔍 Segments with margin drop and C&B increase:")
             for insight in segment_insights:
                 st.markdown(f"- {insight}")
 
-    # ✅ Table and chart side by side
+    # Table and chart side by side
     col1, col2 = st.columns([1, 1])
     with col1:
         st.dataframe(df_summary.reset_index(drop=False).rename(columns={'Month': 'Period'}), hide_index=True)
@@ -116,19 +134,19 @@ def run(df, user_question=None):
             spine.set_linewidth(0.5)
             spine.set_edgecolor('#cccccc')
 
-        ax1.set_title("MoM Revenue vs C&B % of Revenue")
+        ax1.set_title(title_str)
         fig.tight_layout()
         st.pyplot(fig)
 
-    # ✅ PPTX Export
+    # Export as PPT
     if st.button("📥 Download as PPT"):
         prs = Presentation()
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         title = slide.shapes.title
-        title.text = "C&B MoM Trend Summary"
+        title.text = slide_title
 
         content = "\n".join([
-            f"In {last.strftime('%b %Y')}, C&B cost changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev.strftime('%b %Y')}.",
+            f"In {last}, C&B cost changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev}.",
             "Segments with margin drop & rising C&B:" if segment_insights else "No segments met the criteria."
         ] + [i.replace("**", "") for i in segment_insights])
 
@@ -137,7 +155,6 @@ def run(df, user_question=None):
         tf.text = content
         tf.paragraphs[0].font.size = Pt(14)
 
-        # Add chart image
         img_stream = BytesIO()
         fig.savefig(img_stream, format='png')
         img_stream.seek(0)
