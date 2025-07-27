@@ -1,4 +1,4 @@
-# ✅ FULL UPDATED CODE: question_q4.py with DU/BU tables added per tab
+# ✅ FULL FINAL CODE for question_q4.py with DU/BU Tables and Line Charts per Tab
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -23,18 +23,9 @@ def run(df, user_question=None):
         st.error("❌ Column not found: Amount in USD")
         return
 
-    # Rename DU and BU fields based on Exec DU / DG
-    if 'Exec DU' in df.columns:
-        df['DU'] = df['Exec DU']
-    else:
-        st.warning("⚠️ 'Exec DU' field not found.")
-        df['DU'] = 'Unknown'
-
-    if 'Exec DG' in df.columns:
-        df['BU'] = df['Exec DG']
-    else:
-        st.warning("⚠️ 'Exec DG' field not found.")
-        df['BU'] = 'Unknown'
+    # Add DU and BU fields from Exec DU/DG
+    df['DU'] = df.get('Exec DU', 'Unknown')
+    df['BU'] = df.get('Exec DG', 'Unknown')
 
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
@@ -76,6 +67,7 @@ def run(df, user_question=None):
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
+    # Segment Insights
     segment_insights = []
     if freq_option == 'MoM':
         latest_month = df['Month'].max()
@@ -101,6 +93,7 @@ def run(df, user_question=None):
                     f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
                 )
 
+    # Chart and Summary Display
     st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
         last = df_summary.index[-1]
@@ -132,27 +125,18 @@ def run(df, user_question=None):
                 color=bar_color, label='Revenue')
         ax1.set_ylabel("Revenue (Million USD)", color=bar_color)
 
-        for spine in ax1.spines.values():
-            spine.set_linewidth(0.5)
-            spine.set_edgecolor('#cccccc')
-
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
                  color=line_color, marker='o', label='C&B %')
         ax2.set_ylabel("C&B % of Revenue", color=line_color)
 
-        for spine in ax2.spines.values():
-            spine.set_linewidth(0.5)
-            spine.set_edgecolor('#cccccc')
-
         ax1.set_title(title_str)
         fig.tight_layout()
         st.pyplot(fig)
 
-    # ➕ DU and BU tables
+    # ➕ DU and BU Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
-
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
     pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
 
@@ -164,6 +148,30 @@ def run(df, user_question=None):
     with col4:
         st.markdown("#### Revenue by DU (Million USD)")
         st.dataframe(pivot_du.round(1).reset_index())
+
+    # ➕ DU and BU Line Charts
+    st.markdown("### 📈 Revenue Trend by BU and DU")
+    col5, col6 = st.columns(2)
+
+    with col5:
+        fig_bu, ax_bu = plt.subplots()
+        for col in pivot_bu.columns:
+            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=2)
+        ax_bu.set_title("BU Revenue Trend")
+        ax_bu.set_ylabel("Revenue (M USD)")
+        ax_bu.grid(True, linestyle='--', alpha=0.3)
+        ax_bu.legend(fontsize=6)
+        st.pyplot(fig_bu)
+
+    with col6:
+        fig_du, ax_du = plt.subplots()
+        for col in pivot_du.columns:
+            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=2)
+        ax_du.set_title("DU Revenue Trend")
+        ax_du.set_ylabel("Revenue (M USD)")
+        ax_du.grid(True, linestyle='--', alpha=0.3)
+        ax_du.legend(fontsize=6)
+        st.pyplot(fig_du)
 
     # PPT Export
     if st.button("📥 Download as PPT"):
