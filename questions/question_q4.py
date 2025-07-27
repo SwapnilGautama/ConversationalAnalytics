@@ -23,6 +23,19 @@ def run(df, user_question=None):
         st.error("❌ Column not found: Amount in USD")
         return
 
+    # Rename DU and BU fields based on Exec DU / DG
+    if 'Exec DU' in df.columns:
+        df['DU'] = df['Exec DU']
+    else:
+        st.warning("⚠️ 'Exec DU' field not found.")
+        df['DU'] = 'Unknown'
+
+    if 'Exec DG' in df.columns:
+        df['BU'] = df['Exec DG']
+    else:
+        st.warning("⚠️ 'Exec DG' field not found.")
+        df['BU'] = 'Unknown'
+
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
 
