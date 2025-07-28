@@ -4,7 +4,7 @@ import seaborn as sns
 import streamlit as st
 from io import BytesIO
 
-def run_question():
+def run():
     st.subheader("Fresher UT% Monthly Trends by Bucket")
 
     # Load data
@@ -67,5 +67,5 @@ def run_question():
         line.set_linewidth(1.5)
 
     st.pyplot(fig)
-    run = run_question
+   
 
