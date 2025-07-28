@@ -3,14 +3,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
-def run(prompt=None):  # ✅ Accept the prompt argument
+def run(prompt=None):
     # Load data
     @st.cache_data
     def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Corrected filename
+        df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Correct filename
         df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
         df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
-        df['Quarter'] = df['Date_a'].dt.to_period("Q")
+        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)  # ✅ Convert Period to string
         df['Year'] = df['Date_a'].dt.year
         df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
         df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
