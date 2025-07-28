@@ -18,11 +18,12 @@ PROMPT_BANK = [
     "What is the UT trend for last 2 quarters for a DU/BU/account?"
 ]
 
-# Display prompt buttons in 2 columns
-col1, col2 = st.columns(2)
-for i, prompt in enumerate(PROMPT_BANK):
-    with col1 if i % 2 == 0 else col2:
-        st.button(prompt, on_click=handle_click, args=(prompt,))
+# 🔁 Auto-fill logic for prompt clicks
+if "autofill_text" not in st.session_state:
+    st.session_state.autofill_text = ""
+
+def handle_click(prompt):
+    st.session_state.autofill_text = prompt
 
 # ✅ Load data from sample_data folder
 @st.cache_data
@@ -103,13 +104,6 @@ st.markdown("""
 Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 """)
 
-# 🔁 Auto-fill logic for prompt clicks
-if "autofill_text" not in st.session_state:
-    st.session_state.autofill_text = ""
-
-def handle_click(prompt):
-    st.session_state.autofill_text = prompt
-
 # 👉 Input box with autocomplete suggestions
 user_question = st.text_input(
     label="👉 Start by typing your business question:",
@@ -148,5 +142,8 @@ if user_question:
 st.markdown("---")
 st.markdown("💡 **Try asking:**")
 
-for prompt in PROMPT_BANK:
-    st.button(prompt, on_click=handle_click, args=(prompt,))
+# ✅ Display prompt buttons in 2 columns
+col1, col2 = st.columns(2)
+for i, prompt in enumerate(PROMPT_BANK):
+    with col1 if i % 2 == 0 else col2:
+        st.button(prompt, on_click=handle_click, args=(prompt,))
