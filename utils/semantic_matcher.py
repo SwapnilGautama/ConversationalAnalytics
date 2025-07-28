@@ -59,6 +59,18 @@ PROMPT_BANK = {
         "MoM FTE for customers",
         "Headcount trend month over month",
         "Month-wise headcount per client"
+    ],
+    "Q8": [
+        "What is the UT trend for last 2 quarters for a DU/BU/account?",
+        "Show utilization by account",
+        "How is utilization % trending?",
+        "Compare utilization quarter over quarter",
+        "What is total UT% by BU this year?",
+        "Utilization YoY trend",
+        "Which DU has the highest UT this quarter?",
+        "Utilization rate over time for each account",
+        "Quarterly utilization % per segment",
+        "Trend of utilization over time"
     ]
 }
 
