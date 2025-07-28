@@ -77,10 +77,9 @@ def run(user_query: str = ""):
 
     with col2:
         st.subheader("🌐 UT% Trend by Fresher Category")
-        plt.figure(figsize=(8, 4))
-        ax = plt.gca()
+        fig, ax = plt.subplots(figsize=(8, 4))
         for cat in table_df.columns[1:]:
-            sns.lineplot(data=table_df, x="MonthName", y=cat, label=cat, linewidth=2)
+            sns.lineplot(data=table_df, x="MonthName", y=cat, label=cat, linewidth=2, ax=ax)
         plt.xlabel("Month")
         plt.ylabel("UT%")
         plt.title("Fresher UT% Trends (Monthly)")
@@ -89,4 +88,5 @@ def run(user_query: str = ""):
         ax.spines["left"].set_color("#ccc")
         ax.spines["bottom"].set_color("#ccc")
         plt.grid(False)
-        st.pyplot(plt)
+        plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0., fontsize="small")
+        st.pyplot(fig)
