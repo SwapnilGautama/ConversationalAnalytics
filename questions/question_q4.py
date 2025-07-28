@@ -1,7 +1,6 @@
-# ✅ FINAL Q4 CODE: Enhanced visuals + DU/BU breakdown + clean charts
+# ✅ FINAL Q4 CODE: Cleaned up DU/BU charts, added smooth lines and lighter visuals
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 
 def run(df, user_question=None):
     import streamlit as st
@@ -9,26 +8,24 @@ def run(df, user_question=None):
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
+    from scipy.interpolate import make_interp_spline
+    import numpy as np
 
     df.columns = df.columns.str.strip()
 
-    # 🔍 Detect amount field
     amount_col = next((col for col in df.columns if col.lower().strip() in ['amount', 'amount in usd', 'amountinusd']), None)
     if not amount_col:
         st.error("❌ Column not found: Amount in USD")
         return
 
-    # ✅ Add BU and DU
     df['DU'] = df.get('Exec DU', 'Unknown')
     df['BU'] = df.get('Exec DG', 'Unknown')
-
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
 
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
-    # 🕒 Frequency Toggle
     freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
 
     if freq_option == 'MoM':
@@ -63,31 +60,6 @@ def run(df, user_question=None):
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # 🔎 Segment margin drop analysis
-    segment_insights = []
-    if freq_option == 'MoM':
-        latest_month = df['Month'].max()
-        prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
-
-        df_latest = df[df['Month'].dt.to_period('M') == latest_month.to_period('M')]
-        df_prev = df[df['Month'].dt.to_period('M') == prev_month.to_period('M')]
-
-        def margin_calc(sub_df):
-            rev = sub_df[sub_df['Type'].str.lower() == 'revenue'][amount_col].sum()
-            cost = sub_df[sub_df['Type'].str.lower() == 'cost'][amount_col].sum()
-            return ((rev - cost) / cost * 100) if cost else 0
-
-        for seg in df['Segment'].dropna().unique():
-            margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
-            margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
-            cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
-            cb_prev = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == prev_month.to_period('M'))][amount_col].sum()
-
-            if cb_now > cb_prev and margin_now < margin_prev:
-                segment_insights.append(
-                    f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
-                )
-
     # 📊 Summary Block
     st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
@@ -97,10 +69,6 @@ def run(df, user_question=None):
         st.markdown(
             f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
-        if segment_insights:
-            st.markdown("🔍 Segments with margin drop and C&B increase:")
-            for insight in segment_insights:
-                st.markdown(f"- {insight}")
 
     # 📈 Summary Table and Chart
     col1, col2 = st.columns([1, 1])
@@ -112,8 +80,7 @@ def run(df, user_question=None):
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'],
-                width=20, color='#FFFACD')  # pastel yellow
+        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20, color='#FFFACD')
         ax1.set_ylabel("Revenue (Million USD)", color='gray')
 
         ax2 = ax1.twinx()
@@ -146,30 +113,61 @@ def run(df, user_question=None):
         st.dataframe(pivot_du.round(1).reset_index())
 
     # 📈 BU Chart
-    st.markdown("### 📈 Revenue Trend by BU")
-    fig_bu, ax_bu = plt.subplots(figsize=(6.5, 3.2))
+    st.markdown("### 📈 Revenue Trend by BU and DU")
+    fig_bu, ax_bu = plt.subplots(figsize=(7, 3))
     for col in pivot_bu.columns:
-        ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.1)
+        x = np.arange(len(pivot_bu.index))
+        y = pivot_bu[col].values
+        if len(x) > 3:
+            xnew = np.linspace(x.min(), x.max(), 200)
+            spl = make_interp_spline(x, y, k=2)
+            y_smooth = spl(xnew)
+            ax_bu.plot(pivot_bu.index.to_timestamp()[x.min():x.max():len(x)], y, label=col, linewidth=1.2)
+        else:
+            ax_bu.plot(pivot_bu.index.to_timestamp(), y, label=col, linewidth=1.2)
     ax_bu.set_title("BU Revenue Trend")
     ax_bu.set_ylabel("Revenue (M USD)")
-    ax_bu.legend(fontsize=6, loc='upper left')
     for spine in ax_bu.spines.values():
         spine.set_color('lightgray')
-    ax_bu.grid(False)
+    ax_bu.legend(fontsize=6, loc='upper left')
     st.pyplot(fig_bu)
 
-    # 📈 DU Chart (moved down, legend below, thinner lines)
-    st.markdown("### 📈 Revenue Trend by DU")
-    fig_du, ax_du = plt.subplots(figsize=(6.5, 3.2))
+    # 📈 DU Chart – Full width, soft colors, better legend
+    fig_du, ax_du = plt.subplots(figsize=(8, 3.5))
     for col in pivot_du.columns:
-        x_vals = pivot_du.index.to_timestamp()
-        y_vals = pivot_du[col].values
-        ax_du.plot(x_vals, y_vals, label=col, linewidth=1.1)
+        x = np.arange(len(pivot_du.index))
+        y = pivot_du[col].values
+        if len(x) > 3:
+            xnew = np.linspace(x.min(), x.max(), 200)
+            spl = make_interp_spline(x, y, k=2)
+            y_smooth = spl(xnew)
+            ax_du.plot(pivot_du.index.to_timestamp()[x.min():x.max():len(x)], y, label=col, linewidth=1.2)
+        else:
+            ax_du.plot(pivot_du.index.to_timestamp(), y, label=col, linewidth=1.2)
     ax_du.set_title("DU Revenue Trend")
     ax_du.set_ylabel("Revenue (M USD)")
-    ax_du.legend(loc='lower center', bbox_to_anchor=(0.5, -0.35), ncol=3, fontsize=6)
     for spine in ax_du.spines.values():
         spine.set_color('lightgray')
-    ax_du.grid(False)
-    fig_du.tight_layout()
+    ax_du.legend(fontsize=6, loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=False)
     st.pyplot(fig_du)
+
+    # 📤 PPT Export
+    if st.button("📥 Download as PPT"):
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.title.text = slide_title
+
+        content = f"In {last}, C&B changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev}."
+        textbox = slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(8), Inches(2))
+        tf = textbox.text_frame
+        tf.text = content
+        tf.paragraphs[0].font.size = Pt(14)
+
+        img_stream = BytesIO()
+        fig.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        slide.shapes.add_picture(img_stream, Inches(1), Inches(3), Inches(7), Inches(3.5))
+
+        output = BytesIO()
+        prs.save(output)
+        st.download_button("Download PPT", data=output.getvalue(), file_name="C&B_Trend_Summary.pptx")
