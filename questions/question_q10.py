@@ -67,3 +67,5 @@ def run_question():
         line.set_linewidth(1.5)
 
     st.pyplot(fig)
+    run = run_question
+
