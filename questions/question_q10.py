@@ -1,91 +1,88 @@
-# question_q10.py
-
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import matplotlib.pyplot as plt
-from kpi_engine.utilization import load_ut_data  # ✅ FIXED import
+import seaborn as sns
+from kpi_engine.utilization import load_ut_data
 
-def run(prompt=None):
-    st.subheader("📊 Fresher UT% Monthly Trends by Bucket")
+def run(user_query: str = ""):
+    st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
-    # Extract year and segment from prompt
-    year = None
-    segment = None
-    if prompt:
-        if "2024" in prompt:
-            year = "2024-25"
-        elif "2025" in prompt:
-            year = "2025-26"
-        segment_keywords = ["telecom", "transportation", "industrial", "consumer", "medical", "energy"]
-        for s in segment_keywords:
-            if s.lower() in prompt.lower():
-                segment = s.capitalize()
-
-    # Load and prepare data
+    # Load UT data
     df = load_ut_data()
-    df.columns = df.columns.str.strip()
 
-    if "Status" in df.columns:
-        df = df[df["Status"].str.lower() == "billable"]
+    # Use correct UT column
+    if "UT%" not in df.columns or "FresherAgeingCategory" not in df.columns:
+        st.error("Required columns (UT%, FresherAgeingCategory) not found.")
+        return
 
-    if year and "Year" in df.columns:
-        year_num = year.split("-")[0]
-        df = df[df["Year"].astype(str).str.startswith(year_num)]
+    # Clean: keep rows with valid values
+    df = df[df["FresherAgeingCategory"].notna()]
+    df = df[df["UT%"].notna()]
+    df = df[df["Status"].notna()]
+    
+    # Use only Billable and Non Billable status if needed
+    df = df[df["Status"].isin(["Billable", "Non Billable"])]
 
-    if segment and "Segment" in df.columns:
-        df = df[df["Segment"].str.lower() == segment.lower()]
+    # Infer year from user_query
+    selected_year = None
+    if "2024-25" in user_query:
+        selected_year = "2024"
+    elif "2025-26" in user_query:
+        selected_year = "2025"
+    
+    if selected_year:
+        df = df[df["Year"] == selected_year]
 
-    # Filter for fresher buckets
-    fresher_buckets = [
-        "Freshers ET(0-3 Months)",
-        "Freshers ET(4-6 Months)",
-        "Freshers PGET(0-3 Months)",
-        "Freshers ETPremium(0-3 Months)"
-    ]
-    df = df[df["FresherAgeingCategory"].isin(fresher_buckets)]
-
-    # Add month name
-    month_map = {i: m for i, m in enumerate(
-        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
+    # Map numeric months to short names
+    month_map = {
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+    }
     df["MonthName"] = df["Month"].astype(int).map(month_map)
-    df["MonthOrder"] = df["Month"].astype(int)
 
-    # Pivot table
-    pivot_table = df.groupby(
-        ["MonthOrder", "MonthName", "Segment", "FresherAgeingCategory"]
-    )["UT%"].mean().reset_index()
+    # Check again after filters
+    if df.empty:
+        st.info("No fresher UT% data available after applying filters.")
+        return
 
-    pivot_wide = pivot_table.pivot_table(
-        index=["MonthOrder", "MonthName", "Segment"],
-        columns="FresherAgeingCategory",
-        values="UT%"
-    ).sort_index()
+    # Compute average UT% by Month and FresherAgeingCategory
+    pivot_df = df.groupby(["MonthName", "FresherAgeingCategory"])["UT%"].mean().reset_index()
+    table_df = pivot_df.pivot(index="MonthName", columns="FresherAgeingCategory", values="UT%").fillna(0)
+    table_df = table_df.round(2).reset_index()
 
-    styled_table = pivot_wide.style.format("{:.1f}%").set_table_styles({
-        '': {'selector': 'td, th', 'props': [('border', '1px solid lightgrey'), ('padding', '4px')]}
-    })
+    # Sort month order
+    ordered_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    table_df["MonthName"] = pd.Categorical(table_df["MonthName"], categories=ordered_months, ordered=True)
+    table_df = table_df.sort_values("MonthName")
 
-    # Insights
-    st.markdown("🔹 **Insight 1**: Premium freshers (ETPremium) often show higher UT% compared to other buckets.")
-    st.markdown("🔹 **Insight 2**: Dips in utilization may align with onboarding or training cycles — more frequent in early months.")
+    # Key Insights
+    st.subheader("🔍 Key Insights")
+    latest_month = table_df["MonthName"].iloc[-1]
+    insights = []
+    for cat in table_df.columns[1:]:
+        trend = table_df[cat]
+        change = trend.iloc[-1] - trend.iloc[0]
+        insights.append(f"• {cat}: {change:.2f}pt change from {trend.iloc[0]:.2f} to {trend.iloc[-1]:.2f}")
+    st.markdown("\n".join(insights))
 
-    # Show table
-    st.write("### 📋 UT% by Month and Segment")
-    st.dataframe(styled_table, use_container_width=True)
+    # Table and Chart side by side
+    col1, col2 = st.columns([1.2, 1.8])
 
-    # Line chart
-    chart_df = pivot_table.pivot_table(
-        index="MonthOrder", columns="FresherAgeingCategory", values="UT%"
-    ).sort_index()
-    chart_df.index = chart_df.index.map(month_map)
+    with col1:
+        st.subheader("🏋️ Monthly UT% Table")
+        st.dataframe(table_df.style.set_table_styles([
+            {"selector": "th", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("border", "1px solid #ddd"), ("padding", "5px")]}
+        ]), use_container_width=True)
 
-    fig, ax = plt.subplots(figsize=(10, 4))
-    for col in chart_df.columns:
-        ax.plot(chart_df.index, chart_df[col], label=col, linewidth=2)
-    ax.set_ylabel("Utilization %")
-    ax.set_title("Monthly UT% Trend by Fresher Bucket")
-    ax.set_xlabel("Month")
-    ax.legend()
-    ax.grid(True, linestyle='--', alpha=0.3)
-    st.pyplot(fig)
+    with col2:
+        st.subheader("🌐 UT% Trend by Fresher Category")
+        plt.figure(figsize=(8, 4))
+        for cat in table_df.columns[1:]:
+            sns.lineplot(data=table_df, x="MonthName", y=cat, label=cat)
+        plt.xlabel("Month")
+        plt.ylabel("UT%")
+        plt.title("Fresher UT% Trends (Monthly)")
+        plt.grid(True, linestyle="--", alpha=0.5)
+        st.pyplot(plt)
