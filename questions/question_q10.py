@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-st.set_option('deprecation.showPyplotGlobalUse', False)
 
 def run(user_query):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
