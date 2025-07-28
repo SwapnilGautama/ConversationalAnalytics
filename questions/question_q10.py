@@ -2,75 +2,68 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+from io import BytesIO
 
-def run(prompt=None):
-    st.header("DU-wise Fresher UT% Trend")
+def run_question():
+    st.subheader("Fresher UT% Monthly Trends by Bucket")
 
-    st.markdown("""
-    This analysis shows Utilization % trends for freshers by Delivery Unit over months.  
-    **Freshers** are defined as those with `FresherAgeingCategory` in:
-    - Freshers ET(0-3 Months)
-    - Freshers ET(4-6 Months)
-    - Freshers PGET (4-6 months)
-    - Freshers ET-Premium (4-6 months)
-    """)
+    # Load data
+    df = pd.read_excel("LNTData.xlsx")
 
-    @st.cache_data
-    def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")  # Update if path is different
-        df["Date_a"] = pd.to_datetime(df["Date_a"], errors="coerce")
-        df["Month"] = df["Date_a"].dt.strftime("%b %Y")
-        return df
-
-    df = load_data()
-
-    # Clean category
-    df["FresherAgeingCategory"] = df["FresherAgeingCategory"].str.strip()
-
-    # Define fresher buckets
-    buckets = {
+    # Filter only relevant fresher categories
+    fresher_buckets = [
         "Freshers ET(0-3 Months)",
         "Freshers ET(4-6 Months)",
-        "Freshers PGET (4-6 months)",
-        "Freshers ET-Premium (4-6 months)"
-    }
+        "Freshers PGET(0-3 Months)",
+        "Freshers ETPremium(0-3 Months)"
+    ]
+    df = df[df["FresherAgeingCategory"].isin(fresher_buckets)]
 
-    df_fresh = df[df["FresherAgeingCategory"].isin(buckets)].copy()
-    df_fresh = df_fresh.dropna(subset=["NetAvailableHours", "TotalBillableHours"])
+    # Clean and format month
+    df["Month"] = pd.to_datetime(df["Month"])
+    df["Month_str"] = df["Month"].dt.strftime("%b %Y")
 
-    df_fresh["NetAvailableHours"] = pd.to_numeric(df_fresh["NetAvailableHours"], errors="coerce")
-    df_fresh["TotalBillableHours"] = pd.to_numeric(df_fresh["TotalBillableHours"], errors="coerce")
-    df_fresh["UT%"] = (df_fresh["TotalBillableHours"] / df_fresh["NetAvailableHours"]) * 100
+    # Segment filter embedded in table
+    segments = df["Segment"].dropna().unique().tolist()
+    selected_segment = st.multiselect("Filter by Segment", segments, default=segments)
+    df = df[df["Segment"].isin(selected_segment)]
 
-    # Optional segment filtering
-    segments = df_fresh["Segment"].dropna().unique().tolist()
-    selected_segment = st.selectbox("Select Segment", ["All"] + segments)
-    if selected_segment != "All":
-        df_fresh = df_fresh[df_fresh["Segment"] == selected_segment]
+    # Grouping and calculating UT%
+    summary = df.groupby(["Month_str", "FresherAgeingCategory"]).agg(
+        Total_Resources=("Resource Name", "count"),
+        Total_Billable=("IsBillable", lambda x: (x == "Yes").sum())
+    ).reset_index()
+    summary["UT%"] = (summary["Total_Billable"] / summary["Total_Resources"]) * 100
 
-    # Group
-    df_grouped = df_fresh.groupby(["Month", "FresherAgeingCategory"])["UT%"].mean().reset_index()
-    df_pivot = df_grouped.pivot(index="Month", columns="FresherAgeingCategory", values="UT%").sort_index()
+    # Pivot table for display
+    pivot_table = summary.pivot(index="Month_str", columns="FresherAgeingCategory", values="UT%").fillna(0)
+    pivot_table = pivot_table.sort_index()
 
-    st.subheader("Monthly UT% Table")
-    st.dataframe(df_pivot.style.format("{:.1f}").set_properties(**{
-        'border': '1px solid lightgrey'
-    }), use_container_width=True)
+    st.markdown("### UT% Table by Fresher Category")
+    st.dataframe(pivot_table.style.format("{:.1f}").set_table_styles(
+        [{"selector": "th, td", "props": [("border", "1px solid lightgrey")]}]
+    ))
 
-    # Chart
-    st.subheader("Monthly UT% Line Chart")
-
+    # Line chart with pastel lines, thin borders, no grid
+    st.markdown("### Monthly UT% Trend Line Chart")
+    fig, ax = plt.subplots(figsize=(10, 5))
     pastel_palette = sns.color_palette("pastel")
-    sns.set(style="whitegrid", palette=pastel_palette)
-    plt.figure(figsize=(12, 6))
+    pivot_table.plot(kind="line", ax=ax, linewidth=2, marker="o", color=pastel_palette)
 
-    for column in df_pivot.columns:
-        plt.plot(df_pivot.index, df_pivot[column], label=column, marker="o", linewidth=2)
-
-    plt.xlabel("Month")
-    plt.ylabel("Utilization %")
-    plt.title("Fresher UT% Trend by Category")
+    ax.set_ylabel("Utilization %")
+    ax.set_xlabel("Month")
+    ax.set_title("Monthly UT% Trend by Fresher Bucket")
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_color('lightgrey')
+    ax.spines['left'].set_color('lightgrey')
+    ax.grid(False)
+    ax.legend(title="Fresher Bucket", loc="lower center", bbox_to_anchor=(0.5, -0.4), ncol=2)
     plt.xticks(rotation=45)
-    plt.legend(title="Fresher Category")
-    plt.grid(color="lightgrey", linewidth=0.5)
-    st.pyplot(plt)
+
+    # Smoothen the lines
+    for line in ax.get_lines():
+        line.set_linestyle('-')
+        line.set_linewidth(1.5)
+
+    st.pyplot(fig)
