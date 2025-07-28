@@ -7,8 +7,8 @@ from io import BytesIO
 def run(prompt=None):
     st.subheader("Fresher UT% Monthly Trends by Bucket")
 
-    # Load data
-    df = pd.read_excel("LNTData.xlsx")
+    # ✅ Load data from correct folder
+    df = pd.read_excel("sample_data/LNTData.xlsx")
 
     # Filter only relevant fresher categories
     fresher_buckets = [
@@ -23,7 +23,7 @@ def run(prompt=None):
     df["Month"] = pd.to_datetime(df["Month"])
     df["Month_str"] = df["Month"].dt.strftime("%b %Y")
 
-    # Segment filter embedded in table
+    # ✅ Segment filter embedded in table
     segments = df["Segment"].dropna().unique().tolist()
     selected_segment = st.multiselect("Filter by Segment", segments, default=segments)
     df = df[df["Segment"].isin(selected_segment)]
@@ -39,15 +39,18 @@ def run(prompt=None):
     pivot_table = summary.pivot(index="Month_str", columns="FresherAgeingCategory", values="UT%").fillna(0)
     pivot_table = pivot_table.sort_index()
 
+    # Display table with soft grey borders
     st.markdown("### UT% Table by Fresher Category")
-    st.dataframe(pivot_table.style.format("{:.1f}").set_table_styles(
-        [{"selector": "th, td", "props": [("border", "1px solid lightgrey")]}]
-    ))
+    st.dataframe(
+        pivot_table.style.format("{:.1f}").set_table_styles(
+            [{"selector": "th, td", "props": [("border", "1px solid lightgrey")]}]
+        )
+    )
 
-    # Line chart with pastel lines, thin borders, no grid
+    # Line chart with pastel colors
     st.markdown("### Monthly UT% Trend Line Chart")
     fig, ax = plt.subplots(figsize=(10, 5))
-    pastel_palette = sns.color_palette("pastel")
+    pastel_palette = sns.color_palette("pastel", len(pivot_table.columns))
     pivot_table.plot(kind="line", ax=ax, linewidth=2, marker="o", color=pastel_palette)
 
     ax.set_ylabel("Utilization %")
@@ -67,5 +70,3 @@ def run(prompt=None):
         line.set_linewidth(1.5)
 
     st.pyplot(fig)
-   
-
