@@ -6,7 +6,7 @@ import streamlit as st
 # Load data
 @st.cache_data
 def load_data():
-    df = pd.read_excel("LNTDataSample.xlsx")
+    df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Corrected filename
     df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
     df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
     df['Quarter'] = df['Date_a'].dt.to_period("Q")
