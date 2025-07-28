@@ -71,6 +71,12 @@ PROMPT_BANK = {
         "Utilization rate over time for each account",
         "Quarterly utilization % per segment",
         "Trend of utilization over time"
+    ],
+    "Q10": [
+        "DU wise Fresher UT Trends",
+        "fresher ut trend",
+        "ut% trend for freshers",
+        "fresher utilization trend by DU"
     ]
 }
 
