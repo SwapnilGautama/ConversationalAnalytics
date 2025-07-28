@@ -1,68 +1,65 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import streamlit as st
 
-def answer_question_q10(ut_df: pd.DataFrame, entity_name: str) -> dict:
-    """
-    Computes UT% trend for the last 2 quarters for a DU/BU/account.
-
-    Parameters:
-    - ut_df (pd.DataFrame): Utilization dataset
-    - entity_name (str): DU or BU or Account name (matches with one of: Delivery_Unit, Business_Unit, Final Customer Name)
-
-    Returns:
-    - dict: Contains summary, trend table, and chart data
-    """
-    # Standardize date format
-    ut_df["Month"] = pd.to_datetime(ut_df["Month"])
-    ut_df["MonthStr"] = ut_df["Month"].dt.strftime("%b-%Y")
-
-    # Try matching by DU, then BU, then Account
-    if entity_name in ut_df["Delivery_Unit"].unique():
-        filtered = ut_df[ut_df["Delivery_Unit"] == entity_name].copy()
-        entity_type = "Delivery Unit"
-    elif entity_name in ut_df["Business_Unit"].unique():
-        filtered = ut_df[ut_df["Business_Unit"] == entity_name].copy()
-        entity_type = "Business Unit"
-    elif entity_name.lower() in ut_df["Final Customer Name"].str.lower().unique():
-        filtered = ut_df[ut_df["Final Customer Name"].str.lower() == entity_name.lower()].copy()
-        entity_type = "Account"
-    else:
-        return {
-            "answer": f"'{entity_name}' not found in Delivery Unit, Business Unit, or Account columns.",
-            "table": pd.DataFrame(),
-            "chart": None
-        }
-
-    # Keep only last 6 months (2 quarters)
-    recent_months = sorted(filtered["Month"].unique())[-6:]
-    filtered = filtered[filtered["Month"].isin(recent_months)]
-
-    if filtered.empty:
-        return {
-            "answer": f"No recent UT% data available for {entity_type} '{entity_name}'.",
-            "table": pd.DataFrame(),
-            "chart": None
-        }
-
-    # Compute UT%
-    grouped = (
-        filtered.groupby("MonthStr")
-        .agg({"Billed HC": "sum", "HC": "sum"})
-        .reset_index()
+def run():
+    st.header("DU-wise Fresher UT% Trend")
+    st.markdown(
+        "This analysis shows Utilization % trends for freshers by Delivery Unit over months. "
+        "**Freshers** are defined as those with `FresherAgeingCategory` in:\n"
+        "- Freshers ET(0-3 Months)\n"
+        "- Freshers ET(4-6 Months)\n"
+        "- Freshers PGET(0-3 Months)\n"
+        "- Freshers ETPremium(0-3 Months)"
     )
-    grouped["UT%"] = ((grouped["Billed HC"] / grouped["HC"]) * 100).round(2)
 
-    latest_month = grouped["MonthStr"].iloc[-1]
-    latest_ut = grouped["UT%"].iloc[-1]
+    # Load data
+    @st.cache_data
+    def load_data():
+        df = pd.read_excel("sample_data/LNTData.xlsx")
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df["Month"] = df["Date"].dt.strftime("%b %Y")
+        df["Month"] = pd.Categorical(df["Month"], ordered=True, categories=sorted(df["Month"].dropna().unique(), key=lambda x: pd.to_datetime(x)))
+        return df
 
-    summary = f"UT% for {entity_type} '{entity_name}' in {latest_month} was {latest_ut}%."
+    df = load_data()
 
-    return {
-        "answer": summary,
-        "table": grouped[["MonthStr", "Billed HC", "HC", "UT%"]],
-        "chart": {
-            "type": "line",
-            "x": grouped["MonthStr"].tolist(),
-            "y": grouped["UT%"].tolist(),
-            "title": f"UT% Trend for {entity_name}"
-        }
-    }
+    # Define fresher categories
+    fresher_cats = [
+        "Freshers ET(0-3 Months)",
+        "Freshers ET(4-6 Months)",
+        "Freshers PGET(0-3 Months)",
+        "Freshers ETPremium(0-3 Months)"
+    ]
+
+    # Filter to freshers
+    fresher_df = df[df["FresherAgeingCategory"].isin(fresher_cats)].copy()
+
+    # Calculate UT%
+    fresher_df["NetAvailableHours"] = pd.to_numeric(fresher_df["NetAvailableHours"], errors="coerce")
+    fresher_df["TotalBillableHours"] = pd.to_numeric(fresher_df["TotalBillableHours"], errors="coerce")
+    fresher_df["UT%"] = fresher_df["TotalBillableHours"] / fresher_df["NetAvailableHours"] * 100
+
+    # Group by DU and Month
+    trend_df = fresher_df.groupby(["Delivery_Unit", "Month"]).agg({"UT%": "mean"}).reset_index()
+
+    if trend_df.empty:
+        st.warning("No data available for the selected fresher categories.")
+        return
+
+    pivot_df = trend_df.pivot(index="Month", columns="Delivery_Unit", values="UT%")
+
+    # Plotting
+    st.subheader("Monthly Fresher UT% by Delivery Unit")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.lineplot(data=pivot_df, markers=True, dashes=False)
+    ax.set_ylabel("Fresher UT%")
+    ax.set_xlabel("Month")
+    ax.set_title("Fresher Utilization % Trends by DU")
+    ax.tick_params(axis='x', rotation=45)
+    st.pyplot(fig)
+
+    # Display table
+    st.subheader("Fresher UT% Table")
+    st.dataframe(pivot_df.round(2), use_container_width=True)
