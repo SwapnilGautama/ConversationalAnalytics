@@ -1,82 +1,60 @@
-# app.py
+# utilization.py
 
-import streamlit as st
-from utils.semantic_matcher import find_best_matching_qid, PROMPT_BANK
-import importlib
-from kpi_engine import margin
-import os
 import pandas as pd
-import inspect
+import os
+import streamlit as st
 
-# ✅ Load data from sample_data folder
 @st.cache_data
-def load_data():
-    filepath = os.path.join("sample_data", "LnTPnL.xlsx")
+def load_ut_data():
+    filepath = os.path.join("sample_data", "LNTDataSample.xlsx")
     if not os.path.exists(filepath):
-        raise FileNotFoundError(f"File not found at path: {filepath}")
-
-    df = margin.load_pnl_data(filepath)
-    df = margin.preprocess_pnl_data(df)
-
-    if df.empty:
-        raise ValueError("Loaded P&L data is empty after preprocessing.")
-
+        raise FileNotFoundError(f"File not found at: {filepath}")
+    df = pd.read_excel(filepath)
+    
+    # Clean and standardize column names
+    df.columns = df.columns.str.strip()
+    
+    # Calculate UT%
+    df["UT%"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
+    df["Month"] = pd.to_datetime(df["Month"])
+    df["Quarter"] = df["Month"].dt.to_period("Q")
+    df["Year"] = df["Month"].dt.year.astype(str)
+    
     return df
 
-try:
-    df = load_data()
-except Exception as e:
-    st.error(f"❌ Failed to load data: {e}")
-    st.stop()
 
-# ✅ Import correct prompt bank used for semantic matching
-from utils.semantic_matcher import PROMPT_BANK
+# ✅ Monthly trend for UT%
+def get_ut_mom_trend(df, level="DU"):
+    trend = df.groupby([pd.Grouper(key="Month", freq="M"), level])["UT%"].mean().reset_index()
+    trend["Month"] = trend["Month"].dt.strftime("%Y-%m")
+    return trend.pivot(index="Month", columns=level, values="UT%").fillna(0)
 
-# Streamlit UI
-st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
-st.title("📊 LTTS BI Assistant")
 
-st.markdown("""
-Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+# ✅ Quarterly trend for UT%
+def get_ut_qoq_trend(df, level="DU"):
+    trend = df.groupby(["Quarter", level])["UT%"].mean().reset_index()
+    trend["Quarter"] = trend["Quarter"].astype(str)
+    return trend.pivot(index="Quarter", columns=level, values="UT%").fillna(0)
 
-✅ You can ask questions such as:
-- *Which accounts had CM% < 30 in the last quarter?*
-- *What caused the margin drop in Transportation?*
-- *Show UT% trends for the last 2 quarters*
 
-👉 **Start by typing your business question below**:
-""")
+# ✅ Yearly trend for UT%
+def get_ut_yoy_trend(df, level="DU"):
+    trend = df.groupby(["Year", level])["UT%"].mean().reset_index()
+    return trend.pivot(index="Year", columns=level, values="UT%").fillna(0)
 
-# Input box
-user_question = st.text_input("Ask your business question:")
 
-# Main logic
-if user_question:
-    try:
-        best_qid, matched_prompt = find_best_matching_qid(user_question)
-        st.info(f"🔍 Running analysis for: **{matched_prompt}**")
+# ✅ Agent-level UT%
+def get_agent_ut(df):
+    return df.groupby("EmployeeID")["UT%"].mean().reset_index().rename(columns={"UT%": "Avg UT%"})
 
-        # ✅ Lowercase the QID for correct import
-        question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
-
-        # ✅ Dynamically inspect the run function parameters
-        run_func = question_module.run
-        run_params = inspect.signature(run_func).parameters
-
-        if len(run_params) == 2:
-            result = run_func(df, user_question)
-        else:
-            result = run_func(df)
-
-        st.success("✅ Analysis complete.")
-        if isinstance(result, pd.DataFrame):
-            st.dataframe(result)
-        elif isinstance(result, str):
-            st.markdown(result)
-        else:
-            st.write(result)
-
-    except ModuleNotFoundError as e:
-        st.error(f"❌ Could not load analysis script for {best_qid}: {e}")
-    except Exception as e:
-        st.error(f"❌ Error running analysis: {e}")
+# ✅ Filter by segment, DU, BU, account
+def filter_ut(df, segment=None, du=None, bu=None, account=None):
+    if segment:
+        df = df[df["Segment"] == segment]
+    if du:
+        df = df[df["DU"] == du]
+    if bu:
+        df = df[df["BU"] == bu]
+    if account:
+        df = df[df["Account"] == account]
+    return df
