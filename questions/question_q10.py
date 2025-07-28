@@ -2,101 +2,104 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+import re
 from io import BytesIO
 
-@st.cache_data
-def load_data():
-    df = pd.read_excel("sample_data/LNTData.xlsx")
-    df.columns = df.columns.str.strip()
-    df = df[df["Status"] == "Billable"]
-    df = df[df["FresherAgeingCategory"].notna()]
-    df["UT%"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
-    df["Month"] = pd.to_numeric(df["Month"], errors='coerce')
-    df = df[df["Month"].between(1, 12)]
-    df["MonthName"] = df["Month"].map({
-        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
-        5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
-        9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
-    })
-    df["MonthOrder"] = df["Month"]
-    df["Year"] = df["Year"].astype(str).str[:4]
-    return df
-
 def run(prompt=None):
+    st.subheader("📊 Fresher UT% Monthly Trends by Bucket")
+
+    @st.cache_data
+    def load_data():
+        df = pd.read_excel("sample_data/LNTData.xlsx")
+        df["Date_a"] = pd.to_datetime(df["Date_a"], errors="coerce")
+        df["Month"] = df["Date_a"].dt.month
+        df["MonthName"] = df["Date_a"].dt.strftime("%b")
+        df["Year"] = df["Date_a"].dt.year
+        df["Utilization %"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
+        return df
+
     df = load_data()
 
-    # Extract year and segment from chatbot prompt
-    year = None
-    segment_filter = None
+    # ✅ Parse year and segment from prompt
+    selected_year = None
     if prompt:
-        for yr in ["2024", "2025"]:
-            if yr in prompt:
-                year = yr
-        segments = df["Segment"].dropna().unique()
-        for seg in segments:
-            if str(seg).lower() in prompt.lower():
-                segment_filter = seg
+        year_match = re.search(r"(20\d{2})", prompt)
+        if year_match:
+            selected_year = int(year_match.group(1))
 
-    if year:
-        df = df[df["Year"] == year]
-    if segment_filter:
-        df = df[df["Segment"] == segment_filter]
+    segments = df["Segment"].dropna().unique().tolist()
+    segment_from_prompt = None
+    if prompt:
+        for s in segments:
+            if s.lower() in prompt.lower():
+                segment_from_prompt = s
+                break
 
-    # Aggregate UT%
-    agg_df = df.groupby(["MonthOrder", "MonthName", "Segment", "FresherAgeingCategory"])["UT%"].mean().reset_index()
+    if selected_year:
+        df = df[df["Year"] == selected_year]
+    if segment_from_prompt:
+        df = df[df["Segment"] == segment_from_prompt]
 
-    # Pivot Table
-    table_df = agg_df.pivot_table(
-        index=["MonthOrder", "MonthName", "Segment"],
-        columns="FresherAgeingCategory",
-        values="UT%"
-    )
-    table_df = table_df.reset_index().sort_values("MonthOrder").drop(columns="MonthOrder")
-    table_df = table_df.round(1)
+    fresher_buckets = [
+        "Freshers DET(>6 Months)",
+        "Freshers ET(0-3 Months)",
+        "Freshers ET(4-6 Months)",
+        "Freshers ET(>6 Months)",
+        "Freshers ET-Premium (4-6 months)",
+        "Freshers ET-Premium (>6 months)",
+        "Freshers PGET (4-6 months)",
+        "Non Freshers",
+        "Non-Freshers(1-2 yrs)",
+    ]
 
-    # 💡 Top Key Insight Block — At top
-    st.markdown("### 🔍 Key Insights")
-    last_month = table_df["MonthName"].iloc[-1] if not table_df.empty else "N/A"
-    trend_summary = ""
-    if not table_df.empty:
-        recent = table_df.iloc[-1].drop(["MonthName", "Segment"])
-        top_cat = recent.idxmax()
-        top_val = recent.max()
-        trend_summary += f"**In {last_month}**, highest UT% was in **{top_cat}** at **{top_val:.1f}%**. "
-        lowest_cat = recent.idxmin()
-        lowest_val = recent.min()
-        trend_summary += f"Lowest UT% was in **{lowest_cat}** at **{lowest_val:.1f}%**."
-    else:
-        trend_summary = "No data available for the selected year or segment."
-    st.markdown(trend_summary)
+    # Filter only fresher bucket rows
+    df = df[df["FresherAgeingCategory"].isin(fresher_buckets)]
 
-    # 📋 Layout: Table and Chart side by side
-    col1, col2 = st.columns([1, 1])
+    if df.empty:
+        st.warning("No data available for selected filters.")
+        return
+
+    # Pivot table for table and chart
+    pivot_df = df.groupby(["MonthName", "FresherAgeingCategory"])["Utilization %"].mean().unstack().fillna(0)
+    pivot_df = pivot_df.reindex(["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+
+    # ✅ Insights at the top
+    st.markdown("🔍 **Key Insights**")
+    insights = []
+    for col in pivot_df.columns:
+        series = pivot_df[col]
+        first_val = series[series != 0].iloc[0] if (series != 0).any() else 0
+        last_val = series[series != 0].iloc[-1] if (series != 0).any() else 0
+        change = last_val - first_val
+        insights.append((col, first_val, last_val, change))
+
+    top_insights = sorted(insights, key=lambda x: abs(x[3]), reverse=True)[:2]
+    for name, start, end, change in top_insights:
+        st.markdown(f"- **{name}** UT% changed from {start:.1f}% to {end:.1f}% ({change:+.1f}pt change)")
+
+    # ✅ Side-by-side layout
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### 📋 Monthly UT% Table")
-        st.dataframe(table_df.style.format("{:.1f}"))
+        table_df = pivot_df.copy()
+        table_df["Segment"] = segment_from_prompt if segment_from_prompt else "All Segments"
+        st.markdown("📋 **Monthly UT% Table**")
+        st.dataframe(table_df.style.format("{:.1f}%"))
 
     with col2:
-        st.markdown("### 📈 UT% Trend by Fresher Category")
-        chart_df = agg_df.groupby(["MonthOrder", "MonthName", "FresherAgeingCategory"])["UT%"].mean().reset_index()
-        pivot_chart = chart_df.pivot(index="MonthOrder", columns="FresherAgeingCategory", values="UT%")
-        pivot_chart.index = chart_df.drop_duplicates("MonthOrder").sort_values("MonthOrder")["MonthName"].values
-
-        fig, ax = plt.subplots(figsize=(6, 4))
-        pastel_colors = sns.color_palette("pastel")
-
-        for idx, col in enumerate(pivot_chart.columns):
-            ax.plot(pivot_chart.index, pivot_chart[col], label=col, linewidth=2, marker='o', color=pastel_colors[idx % len(pastel_colors)])
-
-        ax.set_xlabel("Month")
+        st.markdown("📈 **UT% Trend by Fresher Category**")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        pastel_palette = sns.color_palette("pastel")
+        for idx, col in enumerate(pivot_df.columns):
+            ax.plot(pivot_df.index, pivot_df[col], label=col, linewidth=2, marker="o", color=pastel_palette[idx % len(pastel_palette)])
         ax.set_ylabel("UT%")
+        ax.set_xlabel("Month")
         ax.set_title("Fresher UT% Trends (Monthly)")
-        ax.grid(visible=True, linestyle='--', linewidth=0.3, color='lightgrey')
-        ax.set_facecolor("white")
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('lightgrey')
-        ax.spines['bottom'].set_color('lightgrey')
-        ax.legend(title="Fresher Category", fontsize=8, title_fontsize=9)
+        ax.grid(True, linestyle="--", alpha=0.3)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("lightgrey")
+        ax.spines["bottom"].set_color("lightgrey")
+        ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8)
         st.pyplot(fig)
