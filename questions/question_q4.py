@@ -118,14 +118,14 @@ def run(df, user_question=None):
 
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
-                 color='#87CEFA', marker='o', linewidth=2, linestyle='-', alpha=0.9)
+                 color='#87CEFA', marker='o', linewidth=1.5, linestyle='-', alpha=0.9)
         ax2.set_ylabel("C&B % of Revenue", color='gray')
 
-        ax1.set_title(title_str)
-        ax1.spines['top'].set_color('lightgray')
-        ax1.spines['right'].set_color('lightgray')
-        ax1.spines['left'].set_color('lightgray')
-        ax1.spines['bottom'].set_color('lightgray')
+        for spine in ax1.spines.values():
+            spine.set_color('lightgray')
+        for spine in ax2.spines.values():
+            spine.set_color('lightgray')
+
         ax1.grid(False)
         ax2.grid(False)
         fig.tight_layout()
@@ -152,13 +152,11 @@ def run(df, user_question=None):
     with col5:
         fig_bu, ax_bu = plt.subplots()
         for col in pivot_bu.columns:
-            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.5)
+            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1)
         ax_bu.set_title("BU Revenue Trend")
         ax_bu.set_ylabel("Revenue (M USD)")
-        ax_bu.spines['top'].set_color('lightgray')
-        ax_bu.spines['bottom'].set_color('lightgray')
-        ax_bu.spines['left'].set_color('lightgray')
-        ax_bu.spines['right'].set_color('lightgray')
+        for spine in ax_bu.spines.values():
+            spine.set_color('lightgray')
         ax_bu.grid(False)
         ax_bu.legend(fontsize=6)
         st.pyplot(fig_bu)
@@ -166,13 +164,11 @@ def run(df, user_question=None):
     with col6:
         fig_du, ax_du = plt.subplots()
         for col in pivot_du.columns:
-            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1.5)
+            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1)
         ax_du.set_title("DU Revenue Trend")
         ax_du.set_ylabel("Revenue (M USD)")
-        ax_du.spines['top'].set_color('lightgray')
-        ax_du.spines['bottom'].set_color('lightgray')
-        ax_du.spines['left'].set_color('lightgray')
-        ax_du.spines['right'].set_color('lightgray')
+        for spine in ax_du.spines.values():
+            spine.set_color('lightgray')
         ax_du.grid(False)
         ax_du.legend(fontsize=6)
         st.pyplot(fig_du)
