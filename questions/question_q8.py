@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
+def run(prompt=None):  # ✅ Accept the prompt argument
+
 def run():
     # Load data
     @st.cache_data
