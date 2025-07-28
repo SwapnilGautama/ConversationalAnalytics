@@ -19,7 +19,7 @@ def run(user_query: str = ""):
         st.info("No fresher UT% data available.")
         return
 
-    # Extract year and segment from query
+    # Extract year and segment from user query
     year = "2025-26" if "2025" in user_query else "2024-25"
     segment = None
     possible_segments = df["Segment"].dropna().unique().tolist()
@@ -32,14 +32,14 @@ def run(user_query: str = ""):
     if segment:
         df = df[df["Segment"] == segment]
 
-    # Month number to short name
+    # Month number to name
     month_map = {
         1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
         7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
     }
     df["MonthName"] = df["Month"].map(month_map)
 
-    # Aggregate UT% by MonthName, FresherAgeingCategory, Segment
+    # Group by MonthName, FresherAgeingCategory, Segment
     df_grouped = (
         df.groupby(["MonthName", "FresherAgeingCategory", "Segment"])["ut%"]
         .mean()
@@ -50,21 +50,25 @@ def run(user_query: str = ""):
         st.warning("No data after filtering for year and segment.")
         return
 
-    # Pivot for table display
+    # Pivot table: MonthName × Segment × FresherAgeingCategory
     df_pivot = df_grouped.pivot_table(
         index=["MonthName", "Segment"],
         columns="FresherAgeingCategory",
         values="ut%"
     ).reset_index()
 
-    # Format as percent with 1 decimal
+    # Format as percentage
     df_display = df_pivot.copy()
     for col in df_display.columns[2:]:
         df_display[col] = df_display[col].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "")
 
-    # Key Insights
-    latest_month = df_grouped["MonthName"].dropna().unique().tolist()[-1]
-    first_month = df_grouped["MonthName"].dropna().unique().tolist()[0]
+    # Trend Insights
+    all_months = df_grouped["MonthName"].dropna().unique().tolist()
+    if len(all_months) < 2:
+        st.info("Not enough months to compare trends.")
+        return
+    latest_month = all_months[-1]
+    first_month = all_months[0]
 
     trend_summary = df_grouped[df_grouped["MonthName"].isin([first_month, latest_month])]
     pivot_trend = trend_summary.pivot(index="FresherAgeingCategory", columns="MonthName", values="ut%")
@@ -72,19 +76,18 @@ def run(user_query: str = ""):
 
     top_increase = pivot_trend["Change"].idxmax()
     top_decrease = pivot_trend["Change"].idxmin()
-
     top_inc_val = pivot_trend.loc[top_increase, "Change"]
     top_dec_val = pivot_trend.loc[top_decrease, "Change"]
 
+    # Key Insights at top
     st.subheader("🔍 Key Insights")
     st.markdown(f"""
-    - 📈 **Highest UT% increase**: **{top_increase}**, up by **{top_inc_val:.1f}pt** from {first_month} to {latest_month}.
-    - 📉 **Sharpest UT% drop**: **{top_decrease}**, down by **{top_dec_val:.1f}pt** from {first_month} to {latest_month}.
+    - 📈 **{top_increase}** saw the **highest improvement** in UT%, increasing by **{top_inc_val:.1f}pt** from {first_month} to {latest_month}.
+    - 📉 **{top_decrease}** experienced the **steepest decline**, dropping by **{abs(top_dec_val):.1f}pt** over the same period.
     """)
 
-    # Layout: table and chart side by side
-    col1, col2 = st.columns([1, 2])
-
+    # Layout
+    col1, col2 = st.columns([1.2, 1.8])
     with col1:
         st.subheader("🧮 Monthly UT% Table")
         st.dataframe(df_display.style.set_properties(**{
@@ -96,11 +99,9 @@ def run(user_query: str = ""):
     with col2:
         st.subheader("📈 UT% Trend by Fresher Category")
 
-        # Prepare data for line chart
+        # Prepare chart
         df_chart = df_grouped.copy()
-        df_chart["MonthOrder"] = df_chart["MonthName"].map({
-            v: k for k, v in month_map.items()
-        })
+        df_chart["MonthOrder"] = df_chart["MonthName"].map({v: k for k, v in month_map.items()})
         df_chart = df_chart.sort_values("MonthOrder")
 
         pastel_colors = sns.color_palette("pastel", n_colors=df_chart["FresherAgeingCategory"].nunique())
