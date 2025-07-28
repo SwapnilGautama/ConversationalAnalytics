@@ -1,6 +1,7 @@
 # ✅ FINAL Q4 CODE: Enhanced visuals + DU/BU breakdown + clean charts
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 def run(df, user_question=None):
     import streamlit as st
@@ -145,51 +146,30 @@ def run(df, user_question=None):
         st.dataframe(pivot_du.round(1).reset_index())
 
     # 📈 BU Chart
-    st.markdown("### 📈 Revenue Trend by BU and DU")
-    fig_bu, ax_bu = plt.subplots()
+    st.markdown("### 📈 Revenue Trend by BU")
+    fig_bu, ax_bu = plt.subplots(figsize=(6.5, 3.2))
     for col in pivot_bu.columns:
-        ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.2)
+        ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.1)
     ax_bu.set_title("BU Revenue Trend")
     ax_bu.set_ylabel("Revenue (M USD)")
+    ax_bu.legend(fontsize=6, loc='upper left')
     for spine in ax_bu.spines.values():
         spine.set_color('lightgray')
     ax_bu.grid(False)
-    ax_bu.legend(fontsize=6)
     st.pyplot(fig_bu)
 
-    # 📈 DU Chart moved to new row with bottom legend
-    fig_du, ax_du = plt.subplots()
+    # 📈 DU Chart (moved down, legend below, thinner lines)
+    st.markdown("### 📈 Revenue Trend by DU")
+    fig_du, ax_du = plt.subplots(figsize=(6.5, 3.2))
     for col in pivot_du.columns:
-        ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1.2)
+        x_vals = pivot_du.index.to_timestamp()
+        y_vals = pivot_du[col].values
+        ax_du.plot(x_vals, y_vals, label=col, linewidth=1.1)
     ax_du.set_title("DU Revenue Trend")
     ax_du.set_ylabel("Revenue (M USD)")
+    ax_du.legend(loc='lower center', bbox_to_anchor=(0.5, -0.35), ncol=3, fontsize=6)
     for spine in ax_du.spines.values():
         spine.set_color('lightgray')
     ax_du.grid(False)
-    ax_du.legend(fontsize=6, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=3)
     fig_du.tight_layout()
     st.pyplot(fig_du)
-
-    # 📤 PPT Export
-    if st.button("📥 Download as PPT"):
-        prs = Presentation()
-        slide = prs.slides.add_slide(prs.slide_layouts[5])
-        slide.shapes.title.text = slide_title
-
-        content = f"In {last}, C&B changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev}.\n"
-        if segment_insights:
-            content += "Segments with margin drop:\n" + "\n".join(i.replace("**", "") for i in segment_insights)
-
-        textbox = slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(8), Inches(2))
-        tf = textbox.text_frame
-        tf.text = content
-        tf.paragraphs[0].font.size = Pt(14)
-
-        img_stream = BytesIO()
-        fig.savefig(img_stream, format='png')
-        img_stream.seek(0)
-        slide.shapes.add_picture(img_stream, Inches(1), Inches(3), Inches(7), Inches(3.5))
-
-        output = BytesIO()
-        prs.save(output)
-        st.download_button("Download PPT", data=output.getvalue(), file_name="C&B_Trend_Summary.pptx")
