@@ -62,7 +62,7 @@ def run(df, user_question=None):
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # 🔎 Margin insights by Segment
+    # 🔎 Segment margin drop analysis
     segment_insights = []
     if freq_option == 'MoM':
         latest_month = df['Month'].max()
@@ -76,8 +76,7 @@ def run(df, user_question=None):
             cost = sub_df[sub_df['Type'].str.lower() == 'cost'][amount_col].sum()
             return ((rev - cost) / cost * 100) if cost else 0
 
-        segments = df['Segment'].dropna().unique()
-        for seg in segments:
+        for seg in df['Segment'].dropna().unique():
             margin_now = margin_calc(df_latest[df_latest['Segment'] == seg])
             margin_prev = margin_calc(df_prev[df_prev['Segment'] == seg])
             cb_now = df_cb[(df_cb['Segment'] == seg) & (df_cb['Month'].dt.to_period('M') == latest_month.to_period('M'))][amount_col].sum()
@@ -88,7 +87,7 @@ def run(df, user_question=None):
                     f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
                 )
 
-    # 📊 Summary Section
+    # 📊 Summary Block
     st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
         last, prev = df_summary.index[-1], df_summary.index[-2]
@@ -102,7 +101,7 @@ def run(df, user_question=None):
             for insight in segment_insights:
                 st.markdown(f"- {insight}")
 
-    # 📈 Main Chart/Table
+    # 📈 Summary Table and Chart
     col1, col2 = st.columns([1, 1])
     with col1:
         st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
@@ -118,7 +117,7 @@ def run(df, user_question=None):
 
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
-                 color='#87CEFA', marker='o', linewidth=1.5, linestyle='-', alpha=0.9)
+                 color='#87CEFA', marker='o', linewidth=1.2, linestyle='-', alpha=0.9)
         ax2.set_ylabel("C&B % of Revenue", color='gray')
 
         for spine in ax1.spines.values():
@@ -131,7 +130,7 @@ def run(df, user_question=None):
         fig.tight_layout()
         st.pyplot(fig)
 
-    # 🧾 BU/DU Tables
+    # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
@@ -141,37 +140,35 @@ def run(df, user_question=None):
     with col3:
         st.markdown("#### Revenue by BU (Million USD)")
         st.dataframe(pivot_bu.round(1).reset_index())
-
     with col4:
         st.markdown("#### Revenue by DU (Million USD)")
         st.dataframe(pivot_du.round(1).reset_index())
 
-    # 📈 BU/DU Line Charts
+    # 📈 BU Chart
     st.markdown("### 📈 Revenue Trend by BU and DU")
-    col5, col6 = st.columns(2)
-    with col5:
-        fig_bu, ax_bu = plt.subplots()
-        for col in pivot_bu.columns:
-            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1)
-        ax_bu.set_title("BU Revenue Trend")
-        ax_bu.set_ylabel("Revenue (M USD)")
-        for spine in ax_bu.spines.values():
-            spine.set_color('lightgray')
-        ax_bu.grid(False)
-        ax_bu.legend(fontsize=6)
-        st.pyplot(fig_bu)
+    fig_bu, ax_bu = plt.subplots()
+    for col in pivot_bu.columns:
+        ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.2)
+    ax_bu.set_title("BU Revenue Trend")
+    ax_bu.set_ylabel("Revenue (M USD)")
+    for spine in ax_bu.spines.values():
+        spine.set_color('lightgray')
+    ax_bu.grid(False)
+    ax_bu.legend(fontsize=6)
+    st.pyplot(fig_bu)
 
-    with col6:
-        fig_du, ax_du = plt.subplots()
-        for col in pivot_du.columns:
-            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1)
-        ax_du.set_title("DU Revenue Trend")
-        ax_du.set_ylabel("Revenue (M USD)")
-        for spine in ax_du.spines.values():
-            spine.set_color('lightgray')
-        ax_du.grid(False)
-        ax_du.legend(fontsize=6)
-        st.pyplot(fig_du)
+    # 📈 DU Chart moved to new row with bottom legend
+    fig_du, ax_du = plt.subplots()
+    for col in pivot_du.columns:
+        ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1.2)
+    ax_du.set_title("DU Revenue Trend")
+    ax_du.set_ylabel("Revenue (M USD)")
+    for spine in ax_du.spines.values():
+        spine.set_color('lightgray')
+    ax_du.grid(False)
+    ax_du.legend(fontsize=6, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=3)
+    fig_du.tight_layout()
+    st.pyplot(fig_du)
 
     # 📤 PPT Export
     if st.button("📥 Download as PPT"):
