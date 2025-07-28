@@ -19,8 +19,6 @@ def run(user_query: str = ""):
     df = df[df["FresherAgeingCategory"].notna()]
     df = df[df["UT%"].notna()]
     df = df[df["Status"].notna()]
-    
-    # Use only Billable and Non Billable status if needed
     df = df[df["Status"].isin(["Billable", "Non Billable"])]
 
     # Infer year from user_query
@@ -29,7 +27,6 @@ def run(user_query: str = ""):
         selected_year = "2024"
     elif "2025-26" in user_query:
         selected_year = "2025"
-    
     if selected_year:
         df = df[df["Year"] == selected_year]
 
@@ -40,7 +37,6 @@ def run(user_query: str = ""):
     }
     df["MonthName"] = df["Month"].astype(int).map(month_map)
 
-    # Check again after filters
     if df.empty:
         st.info("No fresher UT% data available after applying filters.")
         return
@@ -48,7 +44,7 @@ def run(user_query: str = ""):
     # Compute average UT% by Month and FresherAgeingCategory
     pivot_df = df.groupby(["MonthName", "FresherAgeingCategory"])["UT%"].mean().reset_index()
     table_df = pivot_df.pivot(index="MonthName", columns="FresherAgeingCategory", values="UT%").fillna(0)
-    table_df = table_df.round(2).reset_index()
+    table_df = table_df.reset_index()
 
     # Sort month order
     ordered_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -71,7 +67,10 @@ def run(user_query: str = ""):
 
     with col1:
         st.subheader("🏋️ Monthly UT% Table")
-        st.dataframe(table_df.style.set_table_styles([
+        display_df = table_df.copy()
+        for col in display_df.columns[1:]:
+            display_df[col] = display_df[col].apply(lambda x: f"{x:.1f}%")
+        st.dataframe(display_df.style.set_table_styles([
             {"selector": "th", "props": [("text-align", "center")]},
             {"selector": "td", "props": [("border", "1px solid #ddd"), ("padding", "5px")]}
         ]), use_container_width=True)
@@ -79,10 +78,15 @@ def run(user_query: str = ""):
     with col2:
         st.subheader("🌐 UT% Trend by Fresher Category")
         plt.figure(figsize=(8, 4))
+        ax = plt.gca()
         for cat in table_df.columns[1:]:
-            sns.lineplot(data=table_df, x="MonthName", y=cat, label=cat)
+            sns.lineplot(data=table_df, x="MonthName", y=cat, label=cat, linewidth=2)
         plt.xlabel("Month")
         plt.ylabel("UT%")
         plt.title("Fresher UT% Trends (Monthly)")
-        plt.grid(True, linestyle="--", alpha=0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#ccc")
+        ax.spines["bottom"].set_color("#ccc")
+        plt.grid(False)
         st.pyplot(plt)
