@@ -15,7 +15,8 @@ PROMPT_BANK = [
     "How much C&B varied from last quarter to this quarter?",
     "C&B cost as percentage of revenue trend",
     "What is FTE trend over months?",
-    "How is utilization % trending?"
+    "How is utilization % trending?",
+    "fresher ut trend"
 ]
 
 # 🔁 Auto-fill logic for prompt clicks
