@@ -21,12 +21,22 @@ def run(user_query: str = ""):
 
     # Infer year from user_query
     selected_year = None
-    if "2024-25" in user_query:
+    if "2024" in user_query or "2024-25" in user_query:
         selected_year = "2024"
-    elif "2025-26" in user_query:
+    elif "2025" in user_query or "2025-26" in user_query:
         selected_year = "2025"
     if selected_year:
         df = df[df["Year"] == selected_year]
+
+    # Infer segment from user_query
+    possible_segments = df["Segment"].dropna().unique()
+    selected_segment = None
+    for seg in possible_segments:
+        if seg.lower() in user_query.lower():
+            selected_segment = seg
+            break
+    if selected_segment:
+        df = df[df["Segment"] == selected_segment]
 
     # Month mapping
     month_map = {
@@ -49,7 +59,7 @@ def run(user_query: str = ""):
     table_df["MonthName"] = pd.Categorical(table_df["MonthName"], categories=ordered_months, ordered=True)
     table_df = table_df.sort_values("MonthName")
 
-    # 🔍 Key Insights – keep only 2 most changing categories
+    # 🔍 Key Insights – show top 2 trends
     st.subheader("🔍 Key Insights")
     trends = []
     for cat in table_df.columns[1:]:
@@ -66,8 +76,6 @@ def run(user_query: str = ""):
                 "avg": valid.mean(),
                 "direction": "↑ Increasing" if change > 0 else "↓ Decreasing" if change < 0 else "→ Stable"
             })
-
-    # Sort by absolute change, pick top 2
     top_trends = sorted(trends, key=lambda x: abs(x["change"]), reverse=True)[:2]
 
     if top_trends:
