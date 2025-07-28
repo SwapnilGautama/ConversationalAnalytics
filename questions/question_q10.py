@@ -5,61 +5,72 @@ import streamlit as st
 
 def run(prompt=None):
     st.header("DU-wise Fresher UT% Trend")
-    st.markdown(
-        "This analysis shows Utilization % trends for freshers by Delivery Unit over months. "
-        "**Freshers** are defined as those with `FresherAgeingCategory` in:\n"
-        "- Freshers ET(0-3 Months)\n"
-        "- Freshers ET(4-6 Months)\n"
-        "- Freshers PGET(0-3 Months)\n"
-        "- Freshers ETPremium(0-3 Months)"
-    )
 
-    # Load data
+    st.markdown("""
+    This analysis shows Utilization % trends for freshers by Delivery Unit over months.  
+    **Freshers** are defined as those with `FresherAgeingCategory` in:
+    - Freshers ET(0-3 Months)
+    - Freshers ET(4-6 Months)
+    - Freshers PGET (4-6 months)
+    - Freshers ET-Premium (4-6 months)
+    """)
+
     @st.cache_data
     def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df["Month"] = df["Date"].dt.strftime("%b %Y")
-        df["Month"] = pd.Categorical(df["Month"], ordered=True, categories=sorted(df["Month"].dropna().unique(), key=lambda x: pd.to_datetime(x)))
+        df = pd.read_excel("sample_data/LNTData.xlsx")  # Update if path is different
+        df["Date_a"] = pd.to_datetime(df["Date_a"], errors="coerce")
+        df["Month"] = df["Date_a"].dt.strftime("%b %Y")
         return df
 
     df = load_data()
 
-    # Define fresher categories
-    fresher_cats = [
+    # Clean category
+    df["FresherAgeingCategory"] = df["FresherAgeingCategory"].str.strip()
+
+    # Define fresher buckets
+    buckets = {
         "Freshers ET(0-3 Months)",
         "Freshers ET(4-6 Months)",
-        "Freshers PGET(0-3 Months)",
-        "Freshers ETPremium(0-3 Months)"
-    ]
+        "Freshers PGET (4-6 months)",
+        "Freshers ET-Premium (4-6 months)"
+    }
 
-    # Filter to freshers
-    fresher_df = df[df["FresherAgeingCategory"].isin(fresher_cats)].copy()
+    df_fresh = df[df["FresherAgeingCategory"].isin(buckets)].copy()
+    df_fresh = df_fresh.dropna(subset=["NetAvailableHours", "TotalBillableHours"])
 
-    # Calculate UT%
-    fresher_df["NetAvailableHours"] = pd.to_numeric(fresher_df["NetAvailableHours"], errors="coerce")
-    fresher_df["TotalBillableHours"] = pd.to_numeric(fresher_df["TotalBillableHours"], errors="coerce")
-    fresher_df["UT%"] = fresher_df["TotalBillableHours"] / fresher_df["NetAvailableHours"] * 100
+    df_fresh["NetAvailableHours"] = pd.to_numeric(df_fresh["NetAvailableHours"], errors="coerce")
+    df_fresh["TotalBillableHours"] = pd.to_numeric(df_fresh["TotalBillableHours"], errors="coerce")
+    df_fresh["UT%"] = (df_fresh["TotalBillableHours"] / df_fresh["NetAvailableHours"]) * 100
 
-    # Group by DU and Month
-    trend_df = fresher_df.groupby(["Delivery_Unit", "Month"]).agg({"UT%": "mean"}).reset_index()
+    # Optional segment filtering
+    segments = df_fresh["Segment"].dropna().unique().tolist()
+    selected_segment = st.selectbox("Select Segment", ["All"] + segments)
+    if selected_segment != "All":
+        df_fresh = df_fresh[df_fresh["Segment"] == selected_segment]
 
-    if trend_df.empty:
-        st.warning("No data available for the selected fresher categories.")
-        return
+    # Group
+    df_grouped = df_fresh.groupby(["Month", "FresherAgeingCategory"])["UT%"].mean().reset_index()
+    df_pivot = df_grouped.pivot(index="Month", columns="FresherAgeingCategory", values="UT%").sort_index()
 
-    pivot_df = trend_df.pivot(index="Month", columns="Delivery_Unit", values="UT%")
+    st.subheader("Monthly UT% Table")
+    st.dataframe(df_pivot.style.format("{:.1f}").set_properties(**{
+        'border': '1px solid lightgrey'
+    }), use_container_width=True)
 
-    # Plotting
-    st.subheader("Monthly Fresher UT% by Delivery Unit")
-    fig, ax = plt.subplots(figsize=(12, 6))
-    sns.lineplot(data=pivot_df, markers=True, dashes=False)
-    ax.set_ylabel("Fresher UT%")
-    ax.set_xlabel("Month")
-    ax.set_title("Fresher Utilization % Trends by DU")
-    ax.tick_params(axis='x', rotation=45)
-    st.pyplot(fig)
+    # Chart
+    st.subheader("Monthly UT% Line Chart")
 
-    # Display table
-    st.subheader("Fresher UT% Table")
-    st.dataframe(pivot_df.round(2), use_container_width=True)
+    pastel_palette = sns.color_palette("pastel")
+    sns.set(style="whitegrid", palette=pastel_palette)
+    plt.figure(figsize=(12, 6))
+
+    for column in df_pivot.columns:
+        plt.plot(df_pivot.index, df_pivot[column], label=column, marker="o", linewidth=2)
+
+    plt.xlabel("Month")
+    plt.ylabel("Utilization %")
+    plt.title("Fresher UT% Trend by Category")
+    plt.xticks(rotation=45)
+    plt.legend(title="Fresher Category")
+    plt.grid(color="lightgrey", linewidth=0.5)
+    st.pyplot(plt)
