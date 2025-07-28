@@ -49,21 +49,32 @@ def run(user_query: str = ""):
     table_df["MonthName"] = pd.Categorical(table_df["MonthName"], categories=ordered_months, ordered=True)
     table_df = table_df.sort_values("MonthName")
 
-    # 🔍 Enhanced Key Insights
+    # 🔍 Key Insights – keep only 2 most changing categories
     st.subheader("🔍 Key Insights")
-    insights = []
+    trends = []
     for cat in table_df.columns[1:]:
         trend = table_df[cat]
-        valid_values = trend[(~trend.isna()) & (trend != 0)]
-        if len(valid_values) >= 2:
-            first = valid_values.iloc[0]
-            last = valid_values.iloc[-1]
-            avg = valid_values.mean()
-            direction = "↑ Increasing" if last > first else "↓ Decreasing" if last < first else "→ Stable"
-            insights.append(f"• {cat}: Avg UT% = {avg:.1f}%, Trend = {direction} ({first:.1f}% → {last:.1f}%)")
-    if not insights:
-        insights.append("• No meaningful UT% trends detected for fresher categories.")
-    st.markdown("\n".join(insights))
+        valid = trend[(~trend.isna()) & (trend != 0)]
+        if len(valid) >= 2:
+            first, last = valid.iloc[0], valid.iloc[-1]
+            change = last - first
+            trends.append({
+                "category": cat,
+                "first": first,
+                "last": last,
+                "change": change,
+                "avg": valid.mean(),
+                "direction": "↑ Increasing" if change > 0 else "↓ Decreasing" if change < 0 else "→ Stable"
+            })
+
+    # Sort by absolute change, pick top 2
+    top_trends = sorted(trends, key=lambda x: abs(x["change"]), reverse=True)[:2]
+
+    if top_trends:
+        for t in top_trends:
+            st.markdown(f"• **{t['category']}**: Avg UT% = {t['avg']:.1f}%, Trend = {t['direction']} ({t['first']:.1f}% → {t['last']:.1f}%)")
+    else:
+        st.markdown("• No meaningful UT% trends detected for fresher categories.")
 
     # 📊 Table + Chart
     col1, col2 = st.columns([1.2, 1.8])
