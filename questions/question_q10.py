@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
-def run():
+def run(prompt=None):
     st.header("DU-wise Fresher UT% Trend")
     st.markdown(
         "This analysis shows Utilization % trends for freshers by Delivery Unit over months. "
