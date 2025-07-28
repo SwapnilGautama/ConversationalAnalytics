@@ -6,7 +6,7 @@ import streamlit as st
 
 @st.cache_data
 def load_ut_data():
-    filepath = os.path.join("sample_data", "LNTDataSample.xlsx")
+    filepath = os.path.join("sample_data", "LNTData.xlsx")  # ✅ updated file reference
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found at: {filepath}")
     df = pd.read_excel(filepath)
@@ -46,6 +46,7 @@ def get_ut_yoy_trend(df, level="DU"):
 # ✅ Agent-level UT%
 def get_agent_ut(df):
     return df.groupby("EmployeeID")["UT%"].mean().reset_index().rename(columns={"UT%": "Avg UT%"})
+
 
 # ✅ Filter by segment, DU, BU, account
 def filter_ut(df, segment=None, du=None, bu=None, account=None):
