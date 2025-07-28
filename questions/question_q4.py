@@ -155,6 +155,7 @@ plot_group_trend(du_pivot, "DU", ax_du)
 # Place legend outside
 ax_du.legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=4, fontsize=8, frameon=False)
 fig_du.tight_layout()
+
 st.pyplot(fig_du)
     # 📤 PPT Export
     if st.button("📥 Download as PPT"):
