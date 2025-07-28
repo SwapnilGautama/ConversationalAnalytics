@@ -1,85 +1,132 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from kpi_engine import utilization
+import seaborn as sns
 
 def run(user_query: str = ""):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
+    # Load data
     df = utilization.load_ut_data()
 
-    # Filter relevant data
-    df = df[df["Status"].notna()]
-    df = df[df["FresherAgeingCategory"].notna()]
-    df = df[df["UT%"].notna()]
-    df = df[df["PSNo"].notna()]
+    # Filter nulls
+    df = df[df['Status'].notna()]
+    df = df[df['FresherAgeingCategory'].notna()]
+    df = df[df['ut%'].notna()]
 
     if df.empty:
         st.info("No fresher UT% data available.")
         return
 
-    # Map numeric month to short names
+    # Extract year and segment from query
+    year = "2025-26" if "2025" in user_query else "2024-25"
+    segment = None
+    possible_segments = df["Segment"].dropna().unique().tolist()
+    for s in possible_segments:
+        if str(s).lower() in user_query.lower():
+            segment = s
+            break
+
+    df = df[df["Year"] == year]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    # Month number to short name
     month_map = {
-        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
-        5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
-        9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
     }
-    df["MonthName"] = df["Month"].astype(int).map(month_map)
+    df["MonthName"] = df["Month"].map(month_map)
 
-    # Group and calculate average UT% by month and fresher bucket
-    grouped = df.groupby(["Month", "MonthName", "FresherAgeingCategory"])["UT%"].mean().reset_index()
-
-    # Pivot table for table display
-    table_df = grouped.pivot(index="MonthName", columns="FresherAgeingCategory", values="UT%").fillna(0)
-    table_df = table_df.loc[[m for m in month_map.values() if m in table_df.index]]  # order months
-
-    # ➤ Format table values as %
-    styled_table = table_df.style.format("{:.1f}%").set_table_styles(
-        [{'selector': 'th, td', 'props': [('border', '1px solid lightgrey')]}]
+    # Aggregate UT% by MonthName, FresherAgeingCategory, Segment
+    df_grouped = (
+        df.groupby(["MonthName", "FresherAgeingCategory", "Segment"])["ut%"]
+        .mean()
+        .reset_index()
     )
-    st.subheader("🏋️ Monthly UT% Table")
-    st.dataframe(styled_table, use_container_width=True)
 
-    # ➤ Plot smoothed pastel-colored line chart
-    st.subheader("🌐 UT% Trend by Fresher Category")
-    fig, ax = plt.subplots(figsize=(10, 5))
-    pastel_colors = sns.color_palette("pastel", n_colors=10)
+    if df_grouped.empty:
+        st.warning("No data after filtering for year and segment.")
+        return
 
-    for i, category in enumerate(table_df.columns):
-        ax.plot(table_df.index, table_df[category], label=category,
-                marker='o', linewidth=2, linestyle='-',
-                color=pastel_colors[i % len(pastel_colors)])
+    # Pivot for table display
+    df_pivot = df_grouped.pivot_table(
+        index=["MonthName", "Segment"],
+        columns="FresherAgeingCategory",
+        values="ut%"
+    ).reset_index()
 
-    ax.set_xlabel("Month")
-    ax.set_ylabel("UT%")
-    ax.set_title("Fresher UT% Trends (Monthly)")
-    ax.grid(True, linestyle='--', linewidth=0.5, color='lightgrey')
-    ax.set_facecolor('white')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_color('lightgrey')
-    ax.spines['left'].set_color('lightgrey')
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize="small")
+    # Format as percent with 1 decimal
+    df_display = df_pivot.copy()
+    for col in df_display.columns[2:]:
+        df_display[col] = df_display[col].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "")
 
-    st.pyplot(fig)
+    # Key Insights
+    latest_month = df_grouped["MonthName"].dropna().unique().tolist()[-1]
+    first_month = df_grouped["MonthName"].dropna().unique().tolist()[0]
 
-    # ➤ Key Insights (story-based summary)
+    trend_summary = df_grouped[df_grouped["MonthName"].isin([first_month, latest_month])]
+    pivot_trend = trend_summary.pivot(index="FresherAgeingCategory", columns="MonthName", values="ut%")
+    pivot_trend["Change"] = pivot_trend[latest_month] - pivot_trend[first_month]
+
+    top_increase = pivot_trend["Change"].idxmax()
+    top_decrease = pivot_trend["Change"].idxmin()
+
+    top_inc_val = pivot_trend.loc[top_increase, "Change"]
+    top_dec_val = pivot_trend.loc[top_decrease, "Change"]
+
     st.subheader("🔍 Key Insights")
+    st.markdown(f"""
+    - 📈 **Highest UT% increase**: **{top_increase}**, up by **{top_inc_val:.1f}pt** from {first_month} to {latest_month}.
+    - 📉 **Sharpest UT% drop**: **{top_decrease}**, down by **{top_dec_val:.1f}pt** from {first_month} to {latest_month}.
+    """)
 
-    insight_lines = []
-    for col in table_df.columns:
-        values = table_df[col].dropna()
-        if len(values) >= 2:
-            start = values.iloc[0]
-            end = values.iloc[-1]
-            change = end - start
-            trend = "increased" if change > 0 else "decreased" if change < 0 else "remained stable"
-            insight_lines.append(
-                f"• {col} UT% {trend} from {start:.1f}% to {end:.1f}% over the months ({'+' if change > 0 else ''}{change:.1f}pt change)."
+    # Layout: table and chart side by side
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.subheader("🧮 Monthly UT% Table")
+        st.dataframe(df_display.style.set_properties(**{
+            'border-color': '#ccc',
+            'border-width': '1px',
+            'border-style': 'solid'
+        }), use_container_width=True)
+
+    with col2:
+        st.subheader("📈 UT% Trend by Fresher Category")
+
+        # Prepare data for line chart
+        df_chart = df_grouped.copy()
+        df_chart["MonthOrder"] = df_chart["MonthName"].map({
+            v: k for k, v in month_map.items()
+        })
+        df_chart = df_chart.sort_values("MonthOrder")
+
+        pastel_colors = sns.color_palette("pastel", n_colors=df_chart["FresherAgeingCategory"].nunique())
+
+        plt.figure(figsize=(10, 5))
+        for i, category in enumerate(df_chart["FresherAgeingCategory"].unique()):
+            temp = df_chart[df_chart["FresherAgeingCategory"] == category]
+            plt.plot(
+                temp["MonthName"],
+                temp["ut%"],
+                label=category,
+                color=pastel_colors[i],
+                linewidth=2,
+                linestyle='-',
+                marker='o'
             )
 
-    if insight_lines:
-        st.markdown("\n".join(insight_lines))
-    else:
-        st.info("Not enough data to generate insights.")
+        plt.title("Fresher UT% Trends (Monthly)")
+        plt.ylabel("UT%")
+        plt.xlabel("Month")
+        plt.grid(True, linestyle='--', linewidth=0.5, color='grey', alpha=0.3)
+        plt.gca().spines['top'].set_visible(False)
+        plt.gca().spines['right'].set_visible(False)
+        plt.gca().spines['left'].set_color('#ccc')
+        plt.gca().spines['bottom'].set_color('#ccc')
+        plt.legend(loc='center left', bbox_to_anchor=(1.0, 0.5))
+        st.pyplot(plt)
+
+    st.success("✅ Analysis complete.")
