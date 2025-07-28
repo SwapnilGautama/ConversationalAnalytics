@@ -1,56 +1,79 @@
 import pandas as pd
-from utils.helpers import extract_month, extract_quarter, extract_fy
+import matplotlib.pyplot as plt
+import seaborn as sns
+import streamlit as st
 
-def answer_question_q8(ut_df: pd.DataFrame, account_name: str) -> dict:
-    """
-    Returns the MoM trend of Headcount (HC) for a given account.
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_excel("LNTDataSample.xlsx")
+    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
+    df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
+    df['Quarter'] = df['Date_a'].dt.to_period("Q")
+    df['Year'] = df['Date_a'].dt.year
+    df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
+    df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
+    df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
+    return df
 
-    Parameters:
-    - ut_df (pd.DataFrame): Unified table with UT data
-    - account_name (str): Name of the final customer / account
+df = load_data()
 
-    Returns:
-    - dict: Contains summary, table (DataFrame), and chart metadata
-    """
+# Sidebar filters
+st.sidebar.header("Filters")
+time_view = st.sidebar.radio("Select Trend Type:", ["Month", "Quarter", "Year"])
+segments = st.sidebar.multiselect("Select Segment(s):", df['Segment'].dropna().unique(), default=None)
+bus = st.sidebar.multiselect("Select BU(s):", df['DeliveryGroup'].dropna().unique(), default=None)
+dus = st.sidebar.multiselect("Select DU(s):", df['Delivery_Unit'].dropna().unique(), default=None)
+agents = st.sidebar.multiselect("Select Agent(s):", df['PSNo'].dropna().unique(), default=None)
 
-    # Step 1: Filter for the selected account
-    df = ut_df.copy()
-    df = df[df['Final Customer Name'].str.lower() == account_name.lower()]
+# Filter data
+df_filtered = df.copy()
+if segments:
+    df_filtered = df_filtered[df_filtered['Segment'].isin(segments)]
+if bus:
+    df_filtered = df_filtered[df_filtered['DeliveryGroup'].isin(bus)]
+if dus:
+    df_filtered = df_filtered[df_filtered['Delivery_Unit'].isin(dus)]
+if agents:
+    df_filtered = df_filtered[df_filtered['PSNo'].isin(agents)]
 
-    if df.empty:
-        return {
-            "answer": f"No headcount data found for account '{account_name}'.",
-            "table": pd.DataFrame(),
-            "chart": None,
-        }
+# Grouping by time dimension
+if time_view == "Month":
+    group_col = "Month_Year"
+elif time_view == "Quarter":
+    group_col = "Quarter"
+else:
+    group_col = "Year"
 
-    # Step 2: Extract month and year
-    df["Month"] = pd.to_datetime(df["Month"]).dt.strftime("%b-%Y")
+def draw_line_chart(pivot_df, title):
+    fig, ax = plt.subplots(figsize=(8, 3))
+    for col in pivot_df.columns:
+        ax.plot(pivot_df.index, pivot_df[col], label=col, linewidth=1.5)
+    ax.set_title(title, fontsize=12)
+    ax.set_ylabel("UT %")
+    ax.set_xlabel(group_col)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.45), ncol=3, fontsize=8)
+    ax.grid(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('lightgrey')
+    ax.spines['bottom'].set_color('lightgrey')
+    st.pyplot(fig)
 
-    # Step 3: Group by Month
-    monthly_hc = df.groupby("Month")["HC"].sum().reset_index().sort_values("Month")
+# DU Table and Chart
+st.subheader("Utilization % by DU")
+du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
+st.dataframe(du_pivot.style.format("{:.2f}"))
+draw_line_chart(du_pivot, "DU-wise UT% Trend")
 
-    # Step 4: Calculate MoM difference
-    monthly_hc["MoM_Change"] = monthly_hc["HC"].diff().fillna(0)
+# BU Table and Chart
+st.subheader("Utilization % by BU")
+bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
+st.dataframe(bu_pivot.style.format("{:.2f}"))
+draw_line_chart(bu_pivot, "BU-wise UT% Trend")
 
-    # Step 5: Format response
-    latest_month = monthly_hc["Month"].iloc[-1]
-    latest_hc = monthly_hc["HC"].iloc[-1]
-    change = monthly_hc["MoM_Change"].iloc[-1]
-
-    trend = "increased" if change > 0 else "decreased" if change < 0 else "remained stable"
-    summary = (
-        f"Headcount for account '{account_name}' in {latest_month} was {latest_hc} "
-        f"and has {trend} by {abs(int(change))} from the previous month."
-    )
-
-    return {
-        "answer": summary,
-        "table": monthly_hc.rename(columns={"HC": "Headcount"}),
-        "chart": {
-            "type": "line",
-            "x": monthly_hc["Month"].tolist(),
-            "y": monthly_hc["HC"].tolist(),
-            "title": f"Monthly Headcount Trend for {account_name}"
-        }
-    }
+# Optional Agent Level View
+if not agents:
+    st.subheader("Agent-Level Summary Table")
+    agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
+    st.dataframe(agent_table.style.format("{:.2f}"))
