@@ -2,24 +2,17 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
-
+from kpi_engine.utilization import load_ut_data
 
 def run(user_query):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
-    # Load data
-    df = pd.read_excel("sample_data/LNTData.xlsx")
+    # Load enriched data from utilization.py
+    df = load_ut_data()
     df = df[df['Status'] == 'Billable']
     df = df.dropna(subset=['FresherAgeingCategory'])
 
-    # Convert 'Month' column (int) to month names
-    month_map = {
-        1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-        7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-    }
-    df['MonthName'] = df['Month'].map(month_map)
-
-    # Handle segment filtering via chatbot
+    # Apply segment filter from chatbot
     if "Segment" in df.columns:
         possible_segments = df["Segment"].dropna().unique().tolist()
         selected_segment = None
@@ -33,19 +26,35 @@ def run(user_query):
         if selected_segment:
             df = df[df["Segment"] == selected_segment]
 
-    # Handle year filtering via chatbot
+    # Apply year filter from chatbot
     if "Year" in df.columns:
-        year_mapping = {"2024": "2024-25", "2025": "2025-26"}
+        year_mapping = {"2024": "2024", "2025": "2025"}
         for year in year_mapping:
             if year in user_query:
                 df = df[df["Year"] == year_mapping[year]]
                 break
 
-    # Aggregate UT% by MonthName and FresherAgeingCategory
-    df_summary = df.groupby(['MonthName', 'FresherAgeingCategory'])['Utilization %'].mean().unstack().fillna(0)
-    df_summary = df_summary.loc[month_map.values()]  # Reorder by month
+    # Create MonthName column
+    month_map = {
+        1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+        7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+    }
+    df["MonthNum"] = df["Month"].dt.month
+    df["MonthName"] = df["MonthNum"].map(month_map)
 
-    # Key Insights - top 2 movers
+    # Compute Monthly UT% by FresherAgeingCategory
+    df_summary = (
+        df.groupby(['MonthName', 'FresherAgeingCategory'])['UT%']
+        .mean()
+        .unstack()
+        .fillna(0)
+    )
+
+    # Reorder months
+    ordered_months = [month_map[m] for m in sorted(month_map)]
+    df_summary = df_summary.reindex(ordered_months)
+
+    # Key insights — Top 2 movers
     movement_summary = []
     for col in df_summary.columns:
         values = df_summary[col].values
@@ -65,11 +74,15 @@ def run(user_query):
         })
 
     movement_summary = sorted(movement_summary, key=lambda x: x["diff"], reverse=True)[:2]
+
     st.subheader("🔍 Key Insights")
     for item in movement_summary:
-        st.markdown(f"**{item['bucket']}**: Avg UT% = {item['avg']}%, Trend = {item['trend']} ({item['start']}% → {item['end']}%)")
+        st.markdown(
+            f"**{item['bucket']}**: Avg UT% = {item['avg']}%, "
+            f"Trend = {item['trend']} ({item['start']}% → {item['end']}%)"
+        )
 
-    # Display table
+    # Table
     st.subheader("🤸 Monthly UT% Table")
     st.dataframe(df_summary.style.format("{:.1f}%").set_table_styles([{
         'selector': 'th, td', 'props': [('border', '1px solid lightgrey')]
