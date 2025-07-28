@@ -112,45 +112,50 @@ def run(df, user_question=None):
         st.markdown("#### Revenue by DU (Million USD)")
         st.dataframe(pivot_du.round(1).reset_index())
 
-    # 📈 BU Chart
-    st.markdown("### 📈 Revenue Trend by BU and DU")
-    fig_bu, ax_bu = plt.subplots(figsize=(7, 3))
-    for col in pivot_bu.columns:
-        x = np.arange(len(pivot_bu.index))
-        y = pivot_bu[col].values
-        if len(x) > 3:
-            xnew = np.linspace(x.min(), x.max(), 200)
-            spl = make_interp_spline(x, y, k=2)
-            y_smooth = spl(xnew)
-            ax_bu.plot(pivot_bu.index.to_timestamp()[x.min():x.max():len(x)], y, label=col, linewidth=1.2)
-        else:
-            ax_bu.plot(pivot_bu.index.to_timestamp(), y, label=col, linewidth=1.2)
-    ax_bu.set_title("BU Revenue Trend")
-    ax_bu.set_ylabel("Revenue (M USD)")
-    for spine in ax_bu.spines.values():
-        spine.set_color('lightgray')
-    ax_bu.legend(fontsize=6, loc='upper left')
-    st.pyplot(fig_bu)
+   # ------------------- BU Line Chart -------------------------
+st.markdown("## 📈 Revenue Trend by BU and DU")
 
-    # 📈 DU Chart – Full width, soft colors, better legend
-    fig_du, ax_du = plt.subplots(figsize=(8, 3.5))
-    for col in pivot_du.columns:
-        x = np.arange(len(pivot_du.index))
-        y = pivot_du[col].values
-        if len(x) > 3:
-            xnew = np.linspace(x.min(), x.max(), 200)
-            spl = make_interp_spline(x, y, k=2)
-            y_smooth = spl(xnew)
-            ax_du.plot(pivot_du.index.to_timestamp()[x.min():x.max():len(x)], y, label=col, linewidth=1.2)
-        else:
-            ax_du.plot(pivot_du.index.to_timestamp(), y, label=col, linewidth=1.2)
-    ax_du.set_title("DU Revenue Trend")
-    ax_du.set_ylabel("Revenue (M USD)")
-    for spine in ax_du.spines.values():
-        spine.set_color('lightgray')
-    ax_du.legend(fontsize=6, loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=False)
-    st.pyplot(fig_du)
+def plot_group_trend(pivot_df, group_name, ax, smooth=True):
+    periods = pivot_df["Period"].tolist()
+    x = np.arange(len(periods))
 
+    for col in pivot_df.columns[1:]:
+        y = pivot_df[col].values
+        if smooth and len(x) >= 4:
+            try:
+                xnew = np.linspace(x.min(), x.max(), 300)
+                spl = make_interp_spline(x, y, k=2)
+                y_smooth = spl(xnew)
+                ax.plot(xnew, y_smooth, label=col, linewidth=1)
+            except Exception:
+                ax.plot(x, y, label=col, linewidth=1)
+        else:
+            ax.plot(x, y, label=col, linewidth=1)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(periods, rotation=45)
+    ax.set_title(f"{group_name} Revenue Trend", fontsize=14)
+    ax.set_ylabel("Revenue (M USD)", fontsize=12)
+    ax.set_facecolor("#fffef6")
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+        spine.set_color("lightgrey")
+    ax.tick_params(axis='both', labelsize=10)
+
+# Layout: BU on top, DU below
+fig_bu, ax_bu = plt.subplots(figsize=(10, 4))
+plot_group_trend(bu_pivot, "BU", ax_bu)
+fig_bu.tight_layout()
+st.pyplot(fig_bu)
+
+fig_du, ax_du = plt.subplots(figsize=(10, 4))
+plot_group_trend(du_pivot, "DU", ax_du)
+# Place legend outside
+ax_du.legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=4, fontsize=8, frameon=False)
+fig_du.tight_layout()
+st.pyplot(fig_du)
     # 📤 PPT Export
     if st.button("📥 Download as PPT"):
         prs = Presentation()
