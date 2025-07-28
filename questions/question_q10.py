@@ -1,3 +1,4 @@
+# ✅ FILE: questions/question_q10.py
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,10 +8,10 @@ from io import BytesIO
 def run(prompt=None):
     st.subheader("Fresher UT% Monthly Trends by Bucket")
 
-    # Load data from correct path
+    # Load data
     df = pd.read_excel("sample_data/LNTData.xlsx")
 
-    # Filter only relevant fresher categories
+    # Filter only fresher buckets
     fresher_buckets = [
         "Freshers ET(0-3 Months)",
         "Freshers ET(4-6 Months)",
@@ -19,67 +20,59 @@ def run(prompt=None):
     ]
     df = df[df["FresherAgeingCategory"].isin(fresher_buckets)]
 
-    # Convert month and extract as string
-    df["Month"] = pd.to_datetime(df["Month"], format="%m", errors="coerce")
+    # Filter only billable agents
+    df = df[df["Status"] == "Billable"]
+
+    # Ensure necessary columns exist
+    if "Month" not in df.columns or "PSNo" not in df.columns:
+        st.error("Required columns missing in the data: 'Month' or 'PSNo'")
+        return
+
+    # Parse and format month
+    df["Month"] = pd.to_datetime(df["Month"])
     df["Month_str"] = df["Month"].dt.strftime("%b %Y")
 
-    # Segment multiselect for filtering
-    segments = sorted(df["Segment"].dropna().unique())
-    selected_segments = st.multiselect("Filter by Segment", segments, default=segments)
+    # Compute UT% by fresher category
+    agg = df.groupby(["Month_str", "FresherAgeingCategory"])["PSNo"].nunique().reset_index()
+    agg_total = df.groupby("Month_str")["PSNo"].nunique().reset_index().rename(columns={"PSNo": "Total"})
+    merged = pd.merge(agg, agg_total, on="Month_str")
+    merged["UT%"] = round(100 * merged["PSNo"] / merged["Total"], 2)
+    pivot_df = merged.pivot(index="Month_str", columns="FresherAgeingCategory", values="UT%").fillna(0)
+    pivot_df = pivot_df.sort_index()
 
-    if selected_segments:
-        df = df[df["Segment"].isin(selected_segments)]
+    # Insight generation
+    latest_month = pivot_df.index[-1]
+    insights = []
+    for bucket in pivot_df.columns:
+        values = pivot_df[bucket]
+        if len(values) >= 2:
+            trend = "increased" if values.iloc[-1] > values.iloc[-2] else "decreased"
+            delta = abs(values.iloc[-1] - values.iloc[-2])
+            insights.append(f"- **{bucket}** UT% has {trend} to **{values.iloc[-1]}%** (Δ {delta:.1f}%) in {latest_month}")
+        else:
+            insights.append(f"- **{bucket}** UT% in {latest_month} is **{values.iloc[-1]}%**")
 
-    # Calculate UT%
-    df["NetAvailableHours"] = pd.to_numeric(df["NetAvailableHours"], errors="coerce")
-    df["TotalBillableHours"] = pd.to_numeric(df["TotalBillableHours"], errors="coerce")
-    df["UT%"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
+    st.markdown("### 📊 Key Insights")
+    for line in insights:
+        st.markdown(line)
 
-    # Grouped by month and fresher category
-    grouped = df.groupby(["Month_str", "FresherAgeingCategory"]).agg({
-        "PSNo": "nunique",  # Count of unique agents
-        "NetAvailableHours": "sum",
-        "TotalBillableHours": "sum",
-        "UT%": "mean"
-    }).reset_index()
-
-    grouped.rename(columns={
-        "PSNo": "Unique Freshers",
-        "NetAvailableHours": "Total Available Hrs",
-        "TotalBillableHours": "Total Billable Hrs"
-    }, inplace=True)
-
-    # Pivoted table view
-    pivot_table = grouped.pivot(index="Month_str", columns="FresherAgeingCategory", values="UT%").fillna(0)
-    styled_table = pivot_table.style.format("{:.1f}%").set_properties(**{
-        'border': '1px solid lightgrey',
-        'color': 'black'
-    })
+    # Show Table
+    st.markdown("### 📋 Monthly UT% by Fresher Category")
+    st.dataframe(pivot_df.style.set_table_styles([
+        {"selector": "th, td", "props": [("border", "1px solid lightgrey")]}
+    ]))
 
     # Plot
+    st.markdown("### 📈 Trend Chart")
     pastel_palette = sns.color_palette("pastel")
     fig, ax = plt.subplots(figsize=(10, 4))
-    pivot_table.plot(ax=ax, marker="o", linewidth=2, palette=pastel_palette)
-    ax.set_title("Monthly UT% Trend by Fresher Bucket")
+    for i, column in enumerate(pivot_df.columns):
+        ax.plot(pivot_df.index, pivot_df[column], label=column, linewidth=2.5, linestyle='-', 
+                color=pastel_palette[i % len(pastel_palette)], marker='o')
     ax.set_ylabel("UT%")
     ax.set_xlabel("Month")
-    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.6)
-    ax.legend(title="Fresher Category", bbox_to_anchor=(1.05, 1), loc='upper left')
-
-    # Layout: Table and Chart side-by-side
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.markdown("### UT% Table")
-        st.dataframe(styled_table, use_container_width=True)
-    with col2:
-        st.pyplot(fig)
-
-    # Export option
-    buffer = BytesIO()
-    fig.savefig(buffer, format="png")
-    st.download_button(
-        label="📥 Download Chart as PNG",
-        data=buffer.getvalue(),
-        file_name="fresher_ut_trend.png",
-        mime="image/png"
-    )
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+    ax.set_facecolor("white")
+    ax.legend(title="Fresher Category")
+    sns.despine()
+    st.pyplot(fig)
