@@ -10,12 +10,10 @@ def run(user_query: str = ""):
     # Load UT data
     df = load_ut_data()
 
-    # Use correct UT column
     if "UT%" not in df.columns or "FresherAgeingCategory" not in df.columns:
         st.error("Required columns (UT%, FresherAgeingCategory) not found.")
         return
 
-    # Clean: keep rows with valid values
     df = df[df["FresherAgeingCategory"].notna()]
     df = df[df["UT%"].notna()]
     df = df[df["Status"].notna()]
@@ -30,7 +28,7 @@ def run(user_query: str = ""):
     if selected_year:
         df = df[df["Year"] == selected_year]
 
-    # Map numeric months to short names
+    # Month mapping
     month_map = {
         1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
         7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
@@ -41,35 +39,40 @@ def run(user_query: str = ""):
         st.info("No fresher UT% data available after applying filters.")
         return
 
-    # Compute average UT% by Month and FresherAgeingCategory
+    # Pivot data
     pivot_df = df.groupby(["MonthName", "FresherAgeingCategory"])["UT%"].mean().reset_index()
     table_df = pivot_df.pivot(index="MonthName", columns="FresherAgeingCategory", values="UT%").fillna(0)
     table_df = table_df.reset_index()
 
-    # Sort month order
     ordered_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     table_df["MonthName"] = pd.Categorical(table_df["MonthName"], categories=ordered_months, ordered=True)
     table_df = table_df.sort_values("MonthName")
 
-    # Key Insights
+    # 🔍 Enhanced Key Insights
     st.subheader("🔍 Key Insights")
-    latest_month = table_df["MonthName"].iloc[-1]
     insights = []
     for cat in table_df.columns[1:]:
         trend = table_df[cat]
-        change = trend.iloc[-1] - trend.iloc[0]
-        insights.append(f"• {cat}: {change:.2f}pt change from {trend.iloc[0]:.2f} to {trend.iloc[-1]:.2f}")
+        valid_values = trend[(~trend.isna()) & (trend != 0)]
+        if len(valid_values) >= 2:
+            first = valid_values.iloc[0]
+            last = valid_values.iloc[-1]
+            avg = valid_values.mean()
+            direction = "↑ Increasing" if last > first else "↓ Decreasing" if last < first else "→ Stable"
+            insights.append(f"• {cat}: Avg UT% = {avg:.1f}%, Trend = {direction} ({first:.1f}% → {last:.1f}%)")
+    if not insights:
+        insights.append("• No meaningful UT% trends detected for fresher categories.")
     st.markdown("\n".join(insights))
 
-    # Table and Chart side by side
+    # 📊 Table + Chart
     col1, col2 = st.columns([1.2, 1.8])
 
     with col1:
         st.subheader("🏋️ Monthly UT% Table")
         display_df = table_df.copy()
         for col in display_df.columns[1:]:
-            display_df[col] = display_df[col].apply(lambda x: f"{x:.1f}%")
+            display_df[col] = display_df[col].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "")
         st.dataframe(display_df.style.set_table_styles([
             {"selector": "th", "props": [("text-align", "center")]},
             {"selector": "td", "props": [("border", "1px solid #ddd"), ("padding", "5px")]}
