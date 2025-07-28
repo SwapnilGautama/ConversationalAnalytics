@@ -9,14 +9,20 @@ import pandas as pd
 import inspect
 import base64
 
-# ✅ Add your custom PROMPT BANK here
 PROMPT_BANK = [
     "List accounts with margin % less than 30% in the last quarter",
     "Which cost caused margin drop last month in Transportation?",
     "How much C&B varied from last quarter to this quarter?",
     "C&B cost as percentage of revenue trend",
-    "What is FTE trend over months?"
+    "What is FTE trend over months?",
+    "What is the UT trend for last 2 quarters for a DU/BU/account?"
 ]
+
+# Display prompt buttons in 2 columns
+col1, col2 = st.columns(2)
+for i, prompt in enumerate(PROMPT_BANK):
+    with col1 if i % 2 == 0 else col2:
+        st.button(prompt, on_click=handle_click, args=(prompt,))
 
 # ✅ Load data from sample_data folder
 @st.cache_data
