@@ -4,7 +4,7 @@ import seaborn as sns
 import streamlit as st
 from io import BytesIO
 
-def run():
+def run(prompt=None):
     st.subheader("Fresher UT% Monthly Trends by Bucket")
 
     # Load data
