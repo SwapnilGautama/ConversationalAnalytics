@@ -35,7 +35,7 @@ def run(prompt: str):
             break
 
     # ✅ Filter only Billable + selected year + segment (if any)
-    df = df[df['Status'].str.lower() == 'billable']
+    df = df[df['Status'].astype(str).str.lower() == 'billable']
     df = df[df['Year_clean'] == selected_year]
     if selected_segment:
         df = df[df['Segment'] == selected_segment]
