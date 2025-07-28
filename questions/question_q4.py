@@ -1,5 +1,4 @@
-# ✅ FULL FINAL CODE for question_q4.py with DU/BU Tables and Line Charts per Tab
-
+# ✅ FINAL Q4 CODE: Enhanced visuals + DU/BU breakdown + clean charts
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -8,22 +7,17 @@ def run(df, user_question=None):
     from io import BytesIO
     from pptx import Presentation
     from pptx.util import Inches, Pt
-    from pptx.enum.shapes import MSO_SHAPE
     from pptx.dml.color import RGBColor
 
     df.columns = df.columns.str.strip()
 
-    # ✅ Fix for 'Amount in USD'
-    amount_col = None
-    for col in df.columns:
-        if col.strip().lower() in ['amount in usd', 'amountinusd', 'amount']:
-            amount_col = col
-            break
+    # 🔍 Detect amount field
+    amount_col = next((col for col in df.columns if col.lower().strip() in ['amount', 'amount in usd', 'amountinusd']), None)
     if not amount_col:
         st.error("❌ Column not found: Amount in USD")
         return
 
-    # Add DU and BU fields from Exec DU/DG
+    # ✅ Add BU and DU
     df['DU'] = df.get('Exec DU', 'Unknown')
     df['BU'] = df.get('Exec DG', 'Unknown')
 
@@ -33,6 +27,7 @@ def run(df, user_question=None):
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
+    # 🕒 Frequency Toggle
     freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
 
     if freq_option == 'MoM':
@@ -67,7 +62,7 @@ def run(df, user_question=None):
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
     df_summary = df_summary.round(2)
 
-    # Segment Insights
+    # 🔎 Margin insights by Segment
     segment_insights = []
     if freq_option == 'MoM':
         latest_month = df['Month'].max()
@@ -93,11 +88,10 @@ def run(df, user_question=None):
                     f"**{seg}**: Margin% dropped from {margin_prev:.1f}% to {margin_now:.1f}% and C&B rose from ${cb_prev/1e6:.1f}M to ${cb_now/1e6:.1f}M"
                 )
 
-    # Chart and Summary Display
+    # 📊 Summary Section
     st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
-        last = df_summary.index[-1]
-        prev = df_summary.index[-2]
+        last, prev = df_summary.index[-1], df_summary.index[-2]
         cb_chg = df_summary.loc[last, cb_label]
         rev_chg = df_summary.loc[last, rev_label]
         st.markdown(
@@ -108,33 +102,36 @@ def run(df, user_question=None):
             for insight in segment_insights:
                 st.markdown(f"- {insight}")
 
-    # Main Table and Chart
+    # 📈 Main Chart/Table
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.dataframe(df_summary.reset_index(drop=False).rename(columns={'Month': 'Period'}), hide_index=True)
+        st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
 
     with col2:
         fig, ax1 = plt.subplots(figsize=(6.5, 4))
         df_summary_plot = df_summary.copy()
         df_summary_plot.index = df_summary_plot.index.to_timestamp()
 
-        bar_color = '#FFFACD'  # pastel yellow
-        line_color = '#ADD8E6'  # pastel blue
-
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20,
-                color=bar_color, label='Revenue')
-        ax1.set_ylabel("Revenue (Million USD)", color=bar_color)
+        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'],
+                width=20, color='#FFFACD')  # pastel yellow
+        ax1.set_ylabel("Revenue (Million USD)", color='gray')
 
         ax2 = ax1.twinx()
         ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
-                 color=line_color, marker='o', label='C&B %')
-        ax2.set_ylabel("C&B % of Revenue", color=line_color)
+                 color='#87CEFA', marker='o', linewidth=2, linestyle='-', alpha=0.9)
+        ax2.set_ylabel("C&B % of Revenue", color='gray')
 
         ax1.set_title(title_str)
+        ax1.spines['top'].set_color('lightgray')
+        ax1.spines['right'].set_color('lightgray')
+        ax1.spines['left'].set_color('lightgray')
+        ax1.spines['bottom'].set_color('lightgray')
+        ax1.grid(False)
+        ax2.grid(False)
         fig.tight_layout()
         st.pyplot(fig)
 
-    # ➕ DU and BU Tables
+    # 🧾 BU/DU Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
@@ -149,43 +146,48 @@ def run(df, user_question=None):
         st.markdown("#### Revenue by DU (Million USD)")
         st.dataframe(pivot_du.round(1).reset_index())
 
-    # ➕ DU and BU Line Charts
+    # 📈 BU/DU Line Charts
     st.markdown("### 📈 Revenue Trend by BU and DU")
     col5, col6 = st.columns(2)
-
     with col5:
         fig_bu, ax_bu = plt.subplots()
         for col in pivot_bu.columns:
-            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=2)
+            ax_bu.plot(pivot_bu.index.to_timestamp(), pivot_bu[col], label=col, linewidth=1.5)
         ax_bu.set_title("BU Revenue Trend")
         ax_bu.set_ylabel("Revenue (M USD)")
-        ax_bu.grid(True, linestyle='--', alpha=0.3)
+        ax_bu.spines['top'].set_color('lightgray')
+        ax_bu.spines['bottom'].set_color('lightgray')
+        ax_bu.spines['left'].set_color('lightgray')
+        ax_bu.spines['right'].set_color('lightgray')
+        ax_bu.grid(False)
         ax_bu.legend(fontsize=6)
         st.pyplot(fig_bu)
 
     with col6:
         fig_du, ax_du = plt.subplots()
         for col in pivot_du.columns:
-            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=2)
+            ax_du.plot(pivot_du.index.to_timestamp(), pivot_du[col], label=col, linewidth=1.5)
         ax_du.set_title("DU Revenue Trend")
         ax_du.set_ylabel("Revenue (M USD)")
-        ax_du.grid(True, linestyle='--', alpha=0.3)
+        ax_du.spines['top'].set_color('lightgray')
+        ax_du.spines['bottom'].set_color('lightgray')
+        ax_du.spines['left'].set_color('lightgray')
+        ax_du.spines['right'].set_color('lightgray')
+        ax_du.grid(False)
         ax_du.legend(fontsize=6)
         st.pyplot(fig_du)
 
-    # PPT Export
+    # 📤 PPT Export
     if st.button("📥 Download as PPT"):
         prs = Presentation()
         slide = prs.slides.add_slide(prs.slide_layouts[5])
-        title = slide.shapes.title
-        title.text = slide_title
+        slide.shapes.title.text = slide_title
 
-        content = "\n".join([
-            f"In {last}, C&B cost changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev}.",
-            "Segments with margin drop & rising C&B:" if segment_insights else "No segments met the criteria."
-        ] + [i.replace("**", "") for i in segment_insights])
+        content = f"In {last}, C&B changed by {cb_chg:+.1f}% and Revenue by {rev_chg:+.1f}% vs {prev}.\n"
+        if segment_insights:
+            content += "Segments with margin drop:\n" + "\n".join(i.replace("**", "") for i in segment_insights)
 
-        textbox = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(8), Inches(2))
+        textbox = slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(8), Inches(2))
         tf = textbox.text_frame
         tf.text = content
         tf.paragraphs[0].font.size = Pt(14)
