@@ -1,80 +1,93 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.patches as mpatches
 import streamlit as st
+from kpi_engine.utilization import load_ut_data
 
-def run(prompt=None):
-    # Load data
-    @st.cache_data
-    def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Correct filename
-        df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-        df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
-        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)  # ✅ Convert Period to string
-        df['Year'] = df['Date_a'].dt.year
-        df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
-        df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
-        df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
-        return df
+def run(params):
+    df = load_ut_data()
 
-    df = load_data()
+    trend_type = params.get("trend_type", "Month")
+    selected_segment = params.get("segment")
+    selected_bu = params.get("bu")
+    selected_du = params.get("du")
+    selected_agent = params.get("agent")
 
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    time_view = st.sidebar.radio("Select Trend Type:", ["Month", "Quarter", "Year"])
-    segments = st.sidebar.multiselect("Select Segment(s):", df['Segment'].dropna().unique(), default=None)
-    bus = st.sidebar.multiselect("Select BU(s):", df['DeliveryGroup'].dropna().unique(), default=None)
-    dus = st.sidebar.multiselect("Select DU(s):", df['Delivery_Unit'].dropna().unique(), default=None)
-    agents = st.sidebar.multiselect("Select Agent(s):", df['PSNo'].dropna().unique(), default=None)
+    filters = {
+        "Segment": selected_segment,
+        "BU": selected_bu,
+        "DU": selected_du,
+        "PSNo": selected_agent,
+    }
 
-    # Filter data
-    df_filtered = df.copy()
-    if segments:
-        df_filtered = df_filtered[df_filtered['Segment'].isin(segments)]
-    if bus:
-        df_filtered = df_filtered[df_filtered['DeliveryGroup'].isin(bus)]
-    if dus:
-        df_filtered = df_filtered[df_filtered['Delivery_Unit'].isin(dus)]
-    if agents:
-        df_filtered = df_filtered[df_filtered['PSNo'].isin(agents)]
+    for col, selected_val in filters.items():
+        if selected_val:
+            df = df[df[col].isin(selected_val)]
 
-    # Grouping by time dimension
-    if time_view == "Month":
-        group_col = "Month_Year"
-    elif time_view == "Quarter":
-        group_col = "Quarter"
-    else:
-        group_col = "Year"
+    time_col = trend_type
+    if trend_type == "Month":
+        df = df.sort_values(by="Month")
+    elif trend_type == "Quarter":
+        df = df.sort_values(by="Quarter")
+    elif trend_type == "Year":
+        df = df.sort_values(by="Year")
 
-    def draw_line_chart(pivot_df, title):
-        fig, ax = plt.subplots(figsize=(8, 3))
-        for col in pivot_df.columns:
-            ax.plot(pivot_df.index, pivot_df[col], label=col, linewidth=1.5)
-        ax.set_title(title, fontsize=12)
-        ax.set_ylabel("UT %")
-        ax.set_xlabel(group_col)
-        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.45), ncol=3, fontsize=8)
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('lightgrey')
-        ax.spines['bottom'].set_color('lightgrey')
-        st.pyplot(fig)
+    def generate_summary_table(df, group_col, time_col):
+        pivot = df.pivot_table(index=group_col, columns=time_col, values="UT%", aggfunc="mean")
+        pivot = pivot.sort_index(axis=1)
+        diff = pivot.diff(axis=1)
+        latest_cols = pivot.columns[-2:]
+        arrows = diff[latest_cols[-1]].apply(
+            lambda x: "↑" if x > 1 else ("↓" if x < -1 else "")
+        )
+        pct_change = (
+            (pivot[latest_cols[-1]] - pivot[latest_cols[-2]])
+            / pivot[latest_cols[-2]].replace(0, pd.NA)
+            * 100
+        )
+        combined = pivot.copy()
+        combined[latest_cols[-1]] = pivot[latest_cols[-1]].round(2).astype(str) + " " + arrows + " (" + pct_change.round(1).astype(str) + "%)"
+        return combined.fillna("None")
 
-    # DU Table and Chart
-    st.subheader("Utilization % by DU")
-    du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(du_pivot.style.format("{:.2f}"))
-    draw_line_chart(du_pivot, "DU-wise UT% Trend")
+    st.subheader(f"Utilization % by DU")
+    df["Quarter"] = df["Quarter"].astype(str)  # fix float(period) error
+    du_table = generate_summary_table(df, "DU", time_col)
+    st.dataframe(du_table.style.set_properties(border_color='lightgrey', border_width='1px'))
 
-    # BU Table and Chart
-    st.subheader("Utilization % by BU")
-    bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(bu_pivot.style.format("{:.2f}"))
-    draw_line_chart(bu_pivot, "BU-wise UT% Trend")
+    st.subheader(f"Utilization % by BU")
+    df["BU"] = df["BU"].fillna("Unknown")
+    bu_table = generate_summary_table(df, "BU", time_col)
+    st.dataframe(bu_table.style.set_properties(border_color='lightgrey', border_width='1px'))
 
-    # Optional Agent Level View
-    if not agents:
-        st.subheader("Agent-Level Summary Table")
-        agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
-        st.dataframe(agent_table.style.format("{:.2f}"))
+    st.subheader(f"Utilization % by Agent")
+    agent_table = df.pivot_table(index="PSNo", columns=time_col, values="UT%", aggfunc="mean").sort_index(axis=1)
+    st.dataframe(agent_table.style.set_properties(border_color='lightgrey', border_width='1px'))
+
+    st.subheader("Trend Chart by DU")
+    trend_df = df.groupby([time_col, "DU"])["UT%"].mean().reset_index()
+    plt.figure(figsize=(12, 5))
+    sns.lineplot(data=trend_df, x=time_col, y="UT%", hue="DU", palette="pastel", marker="o")
+    plt.xticks(rotation=45)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    st.pyplot(plt)
+
+    st.subheader("Trend Chart by BU")
+    trend_df_bu = df.groupby([time_col, "BU"])["UT%"].mean().reset_index()
+    plt.figure(figsize=(12, 5))
+    sns.lineplot(data=trend_df_bu, x=time_col, y="UT%", hue="BU", palette="pastel", marker="o")
+    plt.xticks(rotation=45)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    st.pyplot(plt)
+
+    st.subheader("Trend Chart by Agent")
+    top_agents = df["PSNo"].value_counts().head(10).index.tolist()
+    trend_df_agent = df[df["PSNo"].isin(top_agents)].groupby([time_col, "PSNo"])["UT%"].mean().reset_index()
+    plt.figure(figsize=(12, 5))
+    sns.lineplot(data=trend_df_agent, x=time_col, y="UT%", hue="PSNo", palette="pastel", marker="o")
+    plt.xticks(rotation=45)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    st.pyplot(plt)
