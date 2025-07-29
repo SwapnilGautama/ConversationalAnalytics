@@ -59,11 +59,18 @@ def run(query):
         summary = df[(df["Year"] == latest_year) & (df["MonthOrder"] == latest_month_num)]
         category_summary = summary.groupby("FresherAgeingCategory")["Utilization %"].mean().sort_values(ascending=False)
 
-        insight_text = f"In {latest_month_name} {latest_year}, UT% by category: "
-        for category, value in category_summary.items():
-            if pd.notna(value):
-                insight_text += f"{category}: {value:.1f}%, "
-        st.markdown(insight_text.rstrip(", "))
+        top_increase = category_summary.dropna().head(3)
+        top_decrease = category_summary.dropna().sort_values().head(3)
+
+        insight_bullets = [
+            f"🔼 **Top 3 Increases** in UT% in {latest_month_name} {latest_year}: " +
+            ", ".join([f"{cat} ({val:.0f}%)" for cat, val in top_increase.items()]),
+            f"🔻 **Top 3 Decreases** in UT% in {latest_month_name} {latest_year}: " +
+            ", ".join([f"{cat} ({val:.0f}%)" for cat, val in top_decrease.items()])
+        ]
+
+        for bullet in insight_bullets:
+            st.markdown(f"- {bullet}")
 
         # --- SIDE-BY-SIDE CHART AND TABLE ---
         st.subheader("📋 UT% Table")
@@ -76,10 +83,10 @@ def run(query):
         pivot_df = pivot_df.sort_values(["Year", "MonthOrder"])
         pivot_df.drop(columns="Year", inplace=True)
 
-        # Format and display table
+        # Format and display table as whole number percentages
         numeric_cols = pivot_df.select_dtypes(include='number').columns
         styled_df = pivot_df.drop(columns='MonthOrder').style.format(
-            {col: "{:.1f}%" for col in numeric_cols}
+            {col: lambda x: f"{int(round(x))}%" if pd.notnull(x) else "" for col in numeric_cols}
         ).set_properties(**{
             'border': '1px solid lightgrey',
             'border-collapse': 'collapse'
@@ -100,6 +107,7 @@ def run(query):
         ax.set_ylabel("Utilization %")
         ax.set_xlabel("Month")
         ax.legend(loc="best", fontsize=8)
+        ax.grid(False)  # REMOVE gridlines
         st.pyplot(fig)
 
     except Exception as e:
