@@ -8,7 +8,7 @@ import calendar
 sns.set_palette("pastel")
 plt.rcParams["axes.edgecolor"] = "lightgrey"
 
-def run():
+def run(query):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
     try:
