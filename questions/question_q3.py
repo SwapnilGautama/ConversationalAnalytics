@@ -1,159 +1,90 @@
-# question_q3.py
-
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.cm as cm
-import numpy as np
-import re
+import seaborn as sns
+from io import BytesIO
+from dateutil.relativedelta import relativedelta
 
-def run(df, user_question=None):
-    import streamlit as st
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_excel("LNTDataSample.xlsx", sheet_name="LNTDataSample")
+    return df
 
-    # --- Standardize column names ---
-    df.columns = df.columns.str.strip()
+def filter_segment(df, user_query):
+    segment_keywords = ['Transportation', 'Industrial Products', 'Media & Technology', 'Energy & Utilities', 'CPG & Retail']
+    for seg in segment_keywords:
+        if seg.lower() in user_query.lower():
+            return df[df['Segment'].str.lower().str.contains(seg.lower())], seg
+    return df, None
 
-    # --- Identify amount column ---
-    amount_col = next((col for col in df.columns if col.lower() in ['amount in usd', 'amountinusd', 'amount', 'amount in inr']), None)
-    if not amount_col:
-        st.error("❌ Column not found: Amount")
-        return
+def preprocess(df):
+    df = df[df['Type'].isin(['Revenue', 'Cost'])]
 
-    # --- Extract segment from prompt ---
-    selected_segment = None
-    if user_question:
-        match = re.search(r'\b(transportation|manufacturing|retail|energy|healthcare|defense|telecom)\b', user_question, re.IGNORECASE)
-        if match:
-            selected_segment = match.group(1).capitalize()
-            st.markdown(f"🔍 Filtering data for segment: **{selected_segment}**")
+    df['Date'] = pd.to_datetime(df['Year'].astype(str) + "-" + df['Month'].astype(str).str.zfill(2) + "-01")
+    df['C&B Flag'] = df['Group4'].str.contains("C&B", case=False, na=False)
 
-    # --- Filter by segment if provided ---
-    if selected_segment:
-        df = df[df['Segment'].str.lower() == selected_segment.lower()]
-        if df.empty:
-            st.warning(f"No data found for segment: {selected_segment}")
-            return
+    df_cnb = df[df['C&B Flag']]
+    df_rev = df[df['Type'] == 'Revenue']
 
-    # --- Clean and convert Month ---
-    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-    df = df.dropna(subset=['Month'])
-    df['Quarter'] = df['Month'].dt.to_period('Q')
+    agg_cnb = df_cnb.groupby('Date')['Amount in INR'].sum().reset_index().rename(columns={'Amount in INR': 'C&B'})
+    agg_rev = df_rev.groupby('Date')['Amount in INR'].sum().reset_index().rename(columns={'Amount in INR': 'Revenue'})
 
-    # --- Get quarters ---
-    latest_month = df['Month'].max()
-    latest_q = latest_month.to_period('Q')
-    prev_q = (latest_month - pd.DateOffset(months=3)).to_period('Q')
+    merged = pd.merge(agg_cnb, agg_rev, on='Date', how='inner')
+    merged['C&B % of Revenue'] = (merged['C&B'] / merged['Revenue']) * 100
+    merged = merged.sort_values('Date')
 
-    # --- Split groups ---
-    df_cb = df[df['Group3'].str.contains('C&B', na=False)]
-    df_cost = df[df['Type'].str.lower() == 'cost']
-    df_rev = df[df['Type'].str.lower() == 'revenue']
+    merged['MoM C&B Change (%)'] = merged['C&B'].pct_change() * 100
+    merged['MoM Revenue Change (%)'] = merged['Revenue'].pct_change() * 100
+    merged['Period'] = merged['Date'].dt.strftime('%Y-%m')
 
-    # --- Aggregation ---
-    cb_summary = df_cb.groupby(['Segment', 'Quarter'])[amount_col].sum().unstack(fill_value=0)
-    cost_summary = df_cost.groupby(['Segment', 'Quarter'])[amount_col].sum().unstack(fill_value=0)
-    rev_summary = df_rev.groupby(['Segment', 'Quarter'])[amount_col].sum().unstack(fill_value=0)
+    return merged
 
-    # --- Ensure both quarters exist ---
-    for q in [prev_q, latest_q]:
-        for summary in [cb_summary, cost_summary, rev_summary]:
-            if q not in summary.columns:
-                summary[q] = 0
+def display_insights(df, segment=None):
+    latest = df.iloc[-1]
+    prev = df.iloc[-2]
 
-    cb_summary = cb_summary[[prev_q, latest_q]] / 1e6
-    cost_summary = cost_summary[[prev_q, latest_q]] / 1e6
-    rev_summary = rev_summary[[prev_q, latest_q]] / 1e6
+    cnb_change = latest['MoM C&B Change (%)']
+    rev_change = latest['MoM Revenue Change (%)']
+    period = latest['Period']
+    prev_period = prev['Period']
 
-    # --- Header insights ---
-    total_q1_cb = cb_summary[prev_q].sum()
-    total_q2_cb = cb_summary[latest_q].sum()
-    cb_change = ((total_q2_cb - total_q1_cb) / total_q1_cb) * 100 if total_q1_cb else 0
+    seg_label = f" in {segment}" if segment else ""
+    st.markdown(f"📌 In **{period}**, C&B cost changed by **{cnb_change:+.1f}%** while revenue changed by **{rev_change:+.1f}%** vs **{prev_period}**{seg_label}.")
 
-    total_q1_rev = rev_summary[prev_q].sum()
-    total_q2_rev = rev_summary[latest_q].sum()
-    rev_change = ((total_q2_rev - total_q1_rev) / total_q1_rev) * 100 if total_q1_rev else 0
+def display_table(df):
+    display_df = df[['Period', 'C&B', 'Revenue', 'C&B % of Revenue', 'MoM C&B Change (%)', 'MoM Revenue Change (%)']].copy()
+    display_df.columns = ['Period', 'C&B (Million USD)', 'Revenue (Million USD)', 'C&B % of Revenue (%)', 'MoM C&B Change (%)', 'MoM Revenue Change (%)']
+    st.dataframe(display_df.style.format({
+        'C&B (Million USD)': '{:,.2f}',
+        'Revenue (Million USD)': '{:,.2f}',
+        'C&B % of Revenue (%)': '{:,.1f}',
+        'MoM C&B Change (%)': '{:+.1f}',
+        'MoM Revenue Change (%)': '{:+.1f}'
+    }), use_container_width=True)
 
-    increased_segments = cb_summary[cb_summary[latest_q] > cb_summary[prev_q]].index.tolist()
+def plot_chart(df):
+    fig, ax1 = plt.subplots(figsize=(10, 5))
 
-    st.markdown("### 📊 C&B Cost Insights")
-    st.markdown(f"- 💰 **Overall C&B change** from {prev_q} to {latest_q}: **{cb_change:+.1f}%**")
-    st.markdown(f"- ✅ **Overall Revenue change** from {prev_q} to {latest_q}: **{rev_change:+.1f}%**")
-    if increased_segments:
-        st.markdown(f"- 📈 **Segments with increased C&B**: {', '.join(increased_segments)}")
+    ax2 = ax1.twinx()
+    sns.barplot(x='Period', y='C&B % of Revenue', data=df, ax=ax1, color='lightyellow')
+    sns.lineplot(x='Period', y='Revenue', data=df, ax=ax2, marker='o', color='skyblue')
 
-    # --- Table ---
-    merged = pd.DataFrame(index=cb_summary.index)
-    merged['C&B Q1'] = cb_summary[prev_q]
-    merged['C&B Q2'] = cb_summary[latest_q]
-    merged['Total Cost Q1'] = cost_summary[prev_q]
-    merged['Total Cost Q2'] = cost_summary[latest_q]
-    merged['Revenue Q1'] = rev_summary[prev_q]
-    merged['Revenue Q2'] = rev_summary[latest_q]
-    merged['% C&B Change'] = ((merged['C&B Q2'] - merged['C&B Q1']) / merged['C&B Q1'].replace(0, 1)) * 100
-    merged['% Rev Change'] = ((merged['Revenue Q2'] - merged['Revenue Q1']) / merged['Revenue Q1'].replace(0, 1)) * 100
-    merged['C&B vs Revenue Growth (pp)'] = merged['% C&B Change'] - merged['% Rev Change']
+    ax1.set_ylabel('C&B % of Revenue (%)')
+    ax2.set_ylabel('Revenue (Million USD)')
+    ax1.set_title('Monthly Revenue vs C&B % of Revenue')
 
-    # --- Total Row ---
-    total_row = merged.sum(numeric_only=True)
-    total_row.name = 'Total'
-    merged = pd.concat([merged, total_row.to_frame().T])
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(fig)
 
-    # --- Format ---
-    def fmt(x): return f"{x:,.1f}"
-    def fmt_pct(x): return f"{x:.2f}%" if pd.notnull(x) else "—"
-    styled = merged.copy()
-    styled[['C&B Q1', 'C&B Q2', 'Total Cost Q1', 'Total Cost Q2', 'Revenue Q1', 'Revenue Q2']] = \
-        styled[['C&B Q1', 'C&B Q2', 'Total Cost Q1', 'Total Cost Q2', 'Revenue Q1', 'Revenue Q2']].applymap(fmt)
-    styled[['% C&B Change', '% Rev Change', 'C&B vs Revenue Growth (pp)']] = \
-        styled[['% C&B Change', '% Rev Change', 'C&B vs Revenue Growth (pp)']].applymap(fmt_pct)
+def run(user_question):
+    st.markdown("### 📊 MoM Revenue vs C&B % of Revenue")
 
-    def highlight_mismatch(val):
-        try:
-            return 'background-color: #ffe6e6' if float(val.strip('%')) > 0 else ''
-        except:
-            return ''
+    df = load_data()
+    df_filtered, segment = filter_segment(df, user_question)
+    df_trend = preprocess(df_filtered)
 
-    st.markdown("#### 🧾 C&B vs Revenue Comparison by Segment")
-    st.dataframe(
-        styled.style
-            .applymap(highlight_mismatch, subset=['C&B vs Revenue Growth (pp)'])
-            .set_properties(**{'white-space': 'normal', 'text-align': 'left'})
-            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
-    )
-
-    # --- Charts ---
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig1, ax1 = plt.subplots(figsize=(6, 4))
-        bar_data = ((cb_summary[latest_q] - cb_summary[prev_q]) / cb_summary[prev_q].replace(0, 1)) * 100
-        bar_data = bar_data.sort_values()
-        norm = mcolors.TwoSlopeNorm(vmin=-100, vcenter=0, vmax=100)
-        colors = [cm.Reds(norm(val)) if val < 0 else cm.Greens(norm(val)) for val in bar_data]
-        bar_data.plot(kind='barh', ax=ax1, color=colors)
-        for spine in ax1.spines.values():
-            spine.set_linewidth(0.5)
-            spine.set_edgecolor('#cccccc')
-        ax1.set_xlabel('% Change in C&B Cost')
-        ax1.set_title(f'C&B Change by Segment: {prev_q} vs {latest_q}')
-        ax1.set_xlim(-100, 100)
-        st.pyplot(fig1)
-
-    with col2:
-        cb_ratio_q1 = (cb_summary[prev_q] / rev_summary[prev_q].replace(0, np.nan)) * 100
-        cb_ratio_q2 = (cb_summary[latest_q] / rev_summary[latest_q].replace(0, np.nan)) * 100
-        fig2, ax2 = plt.subplots(figsize=(6, 4))
-        index = cb_ratio_q1.index
-        bar_width = 0.35
-        x = np.arange(len(index))
-        ax2.bar(x - bar_width / 2, cb_ratio_q1, width=bar_width, label=str(prev_q), color='#a8dadc', edgecolor='#ccc')
-        ax2.bar(x + bar_width / 2, cb_ratio_q2, width=bar_width, label=str(latest_q), color='#fff9b0', edgecolor='#ccc')
-        ax2.set_xticks(x)
-        ax2.set_xticklabels(index, rotation=45, ha='right')
-        ax2.set_ylabel('C&B / Revenue (%)')
-        ax2.set_title('Quarterly C&B as % of Revenue')
-        ax2.legend()
-        for spine in ax2.spines.values():
-            spine.set_linewidth(0.5)
-            spine.set_edgecolor('#cccccc')
-        st.pyplot(fig2)
+    display_insights(df_trend, segment)
+    display_table(df_trend)
+    plot_chart(df_trend)
