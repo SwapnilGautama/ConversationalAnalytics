@@ -70,33 +70,11 @@ def run(df, user_question=None):
             f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
 
-    # 📈 Summary Table and Chart
+    # 📈 Summary Table
     col1, col2 = st.columns([1, 1])
     with col1:
         st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
 
-    with col2:
-        fig, ax1 = plt.subplots(figsize=(6.5, 4))
-        df_summary_plot = df_summary.copy()
-        df_summary_plot.index = df_summary_plot.index.to_timestamp()
-
-        ax1.bar(df_summary_plot.index, df_summary_plot['Revenue (Million USD)'], width=20, color='#FFFACD')
-        ax1.set_ylabel("Revenue (Million USD)", color='gray')
-
-        ax2 = ax1.twinx()
-        ax2.plot(df_summary_plot.index, df_summary_plot['C&B % of Revenue'],
-                 color='#87CEFA', marker='o', linewidth=1.2, linestyle='-', alpha=0.9)
-        ax2.set_ylabel("C&B % of Revenue", color='gray')
-
-        for spine in ax1.spines.values():
-            spine.set_color('lightgray')
-        for spine in ax2.spines.values():
-            spine.set_color('lightgray')
-
-        ax1.grid(False)
-        ax2.grid(False)
-        fig.tight_layout()
-        st.pyplot(fig)
 
     # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
