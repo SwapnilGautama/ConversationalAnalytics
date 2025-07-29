@@ -19,17 +19,20 @@ def run(user_query):
     df["MonthName"] = df["Month"].map(month_map)
 
     # 🧠 Extract year and segment from chatbot query
-    user_query = user_query.lower()
     selected_year = None
     selected_segment = None
+    try:
+        user_query = str(user_query).lower()
+    except Exception:
+        user_query = ""
 
-    # Match year (format: 2024 or 2025)
+    # Match year
     for y in df["Year"].dropna().unique():
         if str(y) in user_query:
             selected_year = y
 
     # Match segment
-    if "segment" in df.columns:
+    if "Segment" in df.columns:
         for seg in df["Segment"].dropna().unique():
             if str(seg).lower() in user_query:
                 selected_segment = seg
