@@ -43,8 +43,7 @@ def run(query):
         df = df[df['FresherAgeingCategory'].notna()]
 
         # --- KEY INSIGHTS ---
-        st.subheader("📌 Key Insights")
-
+        
         latest_month = df.sort_values(["Year", "MonthOrder"]).dropna(subset=["Utilization %"]).iloc[-1]
         latest_year = latest_month["Year"]
         latest_month_num = latest_month["MonthOrder"]
