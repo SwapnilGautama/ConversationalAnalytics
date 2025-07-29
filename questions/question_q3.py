@@ -14,7 +14,7 @@ def run(prompt):
     segment_filter = segment_match.group(1) if segment_match else None
 
     # ✅ Corrected file path
-    df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="Sheet1")  # Adjust sheet if needed
+    df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL")  # Adjust sheet if needed
 
     # Clean columns
     df.columns = df.columns.str.strip()
