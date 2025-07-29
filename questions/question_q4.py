@@ -1,8 +1,15 @@
-# ✅ FINAL Q4 CODE — Charts removed, tables vertically stacked
+# ✅ FINAL Q4 CODE: Cleaned up DU/BU charts, added smooth lines and lighter visuals
 import pandas as pd
+import matplotlib.pyplot as plt
 
 def run(df, user_question=None):
     import streamlit as st
+    from io import BytesIO
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from scipy.interpolate import make_interp_spline
+    import numpy as np
 
     df.columns = df.columns.str.strip()
 
@@ -26,16 +33,19 @@ def run(df, user_question=None):
         title_str = "MoM Revenue vs C&B % of Revenue"
         cb_label = "MoM C&B Change (%)"
         rev_label = "MoM Revenue Change (%)"
+        slide_title = "C&B MoM Trend Summary"
     elif freq_option == 'QoQ':
         period = df['Month'].dt.to_period('Q')
         title_str = "QoQ Revenue vs C&B % of Revenue"
         cb_label = "QoQ C&B Change (%)"
         rev_label = "QoQ Revenue Change (%)"
+        slide_title = "C&B QoQ Trend Summary"
     else:
         period = df['Month'].dt.to_period('Y')
         title_str = "YoY Revenue vs C&B % of Revenue"
         cb_label = "YoY C&B Change (%)"
         rev_label = "YoY Revenue Change (%)"
+        slide_title = "C&B YoY Trend Summary"
 
     cb_agg = df_cb.groupby(period)[amount_col].sum()
     rev_agg = df_rev.groupby(period)[amount_col].sum()
@@ -61,17 +71,23 @@ def run(df, user_question=None):
         )
 
     # 📈 Summary Table
-    st.markdown("#### C&B vs Revenue Summary Table")
-    st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
+
 
     # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
-
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    st.markdown("#### Revenue by BU (Million USD)")
-    st.dataframe(pivot_bu.round(1).reset_index())
-
     pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    st.markdown("#### Revenue by DU (Million USD)")
-    st.dataframe(pivot_du.round(1).reset_index())
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("#### Revenue by BU (Million USD)")
+        st.dataframe(pivot_bu.round(1).reset_index())
+    with col4:
+        st.markdown("#### Revenue by DU (Million USD)")
+        st.dataframe(pivot_du.round(1).reset_index())
+
+  
