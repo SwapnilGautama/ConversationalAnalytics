@@ -1,6 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import streamlit as st
 
 def run(prompt=None):
@@ -46,34 +44,17 @@ def run(prompt=None):
     else:
         group_col = "Year"
 
-    def draw_line_chart(pivot_df, title):
-        fig, ax = plt.subplots(figsize=(8, 3))
-        for col in pivot_df.columns:
-            ax.plot(pivot_df.index, pivot_df[col], label=col, linewidth=1.5)
-        ax.set_title(title, fontsize=12)
-        ax.set_ylabel("UT %")
-        ax.set_xlabel(group_col)
-        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.45), ncol=3, fontsize=8)
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('lightgrey')
-        ax.spines['bottom'].set_color('lightgrey')
-        st.pyplot(fig)
-
-    # DU Table and Chart
+    # DU Table
     st.subheader("Utilization % by DU")
     du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
     st.dataframe(du_pivot.style.format("{:.2f}"))
-    draw_line_chart(du_pivot, "DU-wise UT% Trend")
 
-    # BU Table and Chart
+    # BU Table
     st.subheader("Utilization % by BU")
     bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
     st.dataframe(bu_pivot.style.format("{:.2f}"))
-    draw_line_chart(bu_pivot, "BU-wise UT% Trend")
 
-    # Optional Agent Level View
+    # Optional Agent Level Table
     if not agents:
         st.subheader("Agent-Level Summary Table")
         agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
