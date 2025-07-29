@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
 import calendar
+import difflib
 
 # Set pastel theme
 sns.set_palette("pastel")
@@ -14,16 +15,20 @@ def run(query):
     try:
         df = pd.read_excel("sample_data/LNTData.xlsx")
 
-        # Rename BU and DU as per q8.py
-        column_map = {
-            'DU': 'Delivery_Unit',
-            'BU': 'Business_Unit'
-        }
-        for std_col, actual_col in column_map.items():
-            if actual_col in df.columns:
-                df.rename(columns={actual_col: std_col}, inplace=True)
+        # Show available columns (for debug or dynamic detection)
+        actual_cols = df.columns.tolist()
 
-        # Ensure required fields exist
+        # Fuzzy find BU and DU using close matches
+        bu_col = difflib.get_close_matches('Business_Unit', actual_cols, n=1, cutoff=0.6)
+        du_col = difflib.get_close_matches('Delivery_Unit', actual_cols, n=1, cutoff=0.6)
+
+        # Rename dynamically
+        if bu_col:
+            df.rename(columns={bu_col[0]: 'BU'}, inplace=True)
+        if du_col:
+            df.rename(columns={du_col[0]: 'DU'}, inplace=True)
+
+        # Check required fields after renaming
         required_cols = ['FresherAgeingCategory', 'Segment', 'BU', 'DU', 'Month', 'Year', 'TotalBillableHours', 'NetAvailableHours']
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
@@ -34,7 +39,7 @@ def run(query):
         df['Utilization %'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
         df['Utilization %'] = df['Utilization %'].round(2)
 
-        # Map month numbers to short names
+        # Convert Month to short names
         df['MonthName'] = df['Month'].apply(lambda x: calendar.month_abbr[int(x)] if pd.notnull(x) else x)
 
         # Clean Year
@@ -43,7 +48,6 @@ def run(query):
         # Group and Pivot
         agg_df = df.groupby(['FresherAgeingCategory', 'Segment', 'BU', 'DU', 'Year', 'MonthName'])['Utilization %'].mean().reset_index()
 
-        # Prepare pivot for table
         pivot_df = agg_df.pivot_table(
             index=['Year', 'MonthName'],
             columns='FresherAgeingCategory',
@@ -51,35 +55,38 @@ def run(query):
             aggfunc='mean'
         ).reset_index()
 
-        # Sort months correctly
+        # Sort by proper month order
         month_order = list(calendar.month_abbr)[1:]
         pivot_df['MonthOrder'] = pd.Categorical(pivot_df['MonthName'], categories=month_order, ordered=True)
         pivot_df = pivot_df.sort_values(['Year', 'MonthOrder'])
 
-        # Display insights
+        # Display summary
         st.subheader("📌 Key Insights")
-        recent_month = pivot_df['MonthName'].iloc[-1]
-        insight = f"Fresher UT% trends show variations across aging buckets. For example, in {recent_month}, "
-        top_cols = pivot_df.columns[2:-1]
-        sample_trends = [f"{col}: {pivot_df[col].iloc[-1]:.1f}%" for col in top_cols]
-        insight += ", ".join(sample_trends) + "."
-        st.markdown(insight)
+        if not pivot_df.empty:
+            latest_month = pivot_df.iloc[-1]
+            insights = [f"{col}: {latest_month[col]:.1f}%" for col in pivot_df.columns if col not in ['Year', 'MonthName', 'MonthOrder']]
+            insight_text = f"In {latest_month['MonthName']} {latest_month['Year']}, UT% by category: " + ", ".join(insights)
+            st.markdown(insight_text)
+        else:
+            st.warning("No data to generate insights.")
 
-        # Display visuals
+        # Layout visuals
         col1, col2 = st.columns(2)
 
         with col1:
             st.subheader("📋 UT% Table")
-            table_display = pivot_df.drop(columns='MonthOrder')
-            st.dataframe(table_display.style.format("{:.1f}").set_properties(**{
-                'border': '1px solid lightgrey',
-                'border-collapse': 'collapse'
-            }), use_container_width=True)
+            st.dataframe(
+                pivot_df.drop(columns='MonthOrder').style.format("{:.1f}").set_properties(**{
+                    'border': '1px solid lightgrey',
+                    'border-collapse': 'collapse'
+                }),
+                use_container_width=True
+            )
 
         with col2:
             st.subheader("📈 UT% Trend Chart")
             fig, ax = plt.subplots(figsize=(6, 4))
-            for col in top_cols:
+            for col in pivot_df.columns[2:-1]:  # skip Year, MonthName, MonthOrder
                 ax.plot(pivot_df['MonthName'], pivot_df[col], label=col, linewidth=2)
             ax.set_ylabel("Utilization %")
             ax.set_xlabel("Month")
