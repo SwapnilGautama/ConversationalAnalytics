@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 import numpy as np
+import re
 
 def run(df, user_question=None):
     import streamlit as st
@@ -17,6 +18,17 @@ def run(df, user_question=None):
     if not amount_col:
         st.error("❌ Column not found: Amount in USD")
         return
+
+    # Extract segment from user prompt if any
+    selected_segment = None
+    if user_question:
+        segments = df['Segment'].dropna().unique().tolist()
+        pattern = r'\b(?:' + '|'.join(map(re.escape, segments)) + r')\b'
+        match = re.search(pattern, user_question, flags=re.IGNORECASE)
+        if match:
+            selected_segment = match.group(0)
+            df = df[df['Segment'].str.lower() == selected_segment.lower()]
+            st.markdown(f"📌 **Filtered Segment**: `{selected_segment}`")
 
     # Clean and convert Month
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
