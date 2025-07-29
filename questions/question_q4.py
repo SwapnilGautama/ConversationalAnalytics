@@ -1,61 +1,77 @@
+# ✅ FINAL Q4 CODE (Chart-Free Version): All charts removed, tables and summaries preserved
 import pandas as pd
-import streamlit as st
 
-def run(prompt=None):
-    # Load data
-    @st.cache_data
-    def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Correct filename
-        df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-        df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
-        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)  # ✅ Convert Period to string
-        df['Year'] = df['Date_a'].dt.year
-        df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
-        df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
-        df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
-        return df
+def run(df, user_question=None):
+    import streamlit as st
 
-    df = load_data()
+    df.columns = df.columns.str.strip()
 
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    time_view = st.sidebar.radio("Select Trend Type:", ["Month", "Quarter", "Year"])
-    segments = st.sidebar.multiselect("Select Segment(s):", df['Segment'].dropna().unique(), default=None)
-    bus = st.sidebar.multiselect("Select BU(s):", df['DeliveryGroup'].dropna().unique(), default=None)
-    dus = st.sidebar.multiselect("Select DU(s):", df['Delivery_Unit'].dropna().unique(), default=None)
-    agents = st.sidebar.multiselect("Select Agent(s):", df['PSNo'].dropna().unique(), default=None)
+    amount_col = next((col for col in df.columns if col.lower().strip() in ['amount', 'amount in usd', 'amountinusd']), None)
+    if not amount_col:
+        st.error("❌ Column not found: Amount in USD")
+        return
 
-    # Filter data
-    df_filtered = df.copy()
-    if segments:
-        df_filtered = df_filtered[df_filtered['Segment'].isin(segments)]
-    if bus:
-        df_filtered = df_filtered[df_filtered['DeliveryGroup'].isin(bus)]
-    if dus:
-        df_filtered = df_filtered[df_filtered['Delivery_Unit'].isin(dus)]
-    if agents:
-        df_filtered = df_filtered[df_filtered['PSNo'].isin(agents)]
+    df['DU'] = df.get('Exec DU', 'Unknown')
+    df['BU'] = df.get('Exec DG', 'Unknown')
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    df = df.dropna(subset=['Month'])
 
-    # Grouping by time dimension
-    if time_view == "Month":
-        group_col = "Month_Year"
-    elif time_view == "Quarter":
-        group_col = "Quarter"
+    df_cb = df[df['Group3'].str.contains('C&B', na=False)]
+    df_rev = df[df['Type'].str.lower() == 'revenue']
+
+    freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
+
+    if freq_option == 'MoM':
+        period = df['Month'].dt.to_period('M')
+        title_str = "MoM Revenue vs C&B % of Revenue"
+        cb_label = "MoM C&B Change (%)"
+        rev_label = "MoM Revenue Change (%)"
+    elif freq_option == 'QoQ':
+        period = df['Month'].dt.to_period('Q')
+        title_str = "QoQ Revenue vs C&B % of Revenue"
+        cb_label = "QoQ C&B Change (%)"
+        rev_label = "QoQ Revenue Change (%)"
     else:
-        group_col = "Year"
+        period = df['Month'].dt.to_period('Y')
+        title_str = "YoY Revenue vs C&B % of Revenue"
+        cb_label = "YoY C&B Change (%)"
+        rev_label = "YoY Revenue Change (%)"
 
-    # DU Table
-    st.subheader("Utilization % by DU")
-    du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(du_pivot.style.format("{:.2f}"))
+    cb_agg = df_cb.groupby(period)[amount_col].sum()
+    rev_agg = df_rev.groupby(period)[amount_col].sum()
 
-    # BU Table
-    st.subheader("Utilization % by BU")
-    bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(bu_pivot.style.format("{:.2f}"))
+    df_summary = pd.DataFrame({
+        'C&B (Million USD)': cb_agg / 1e6,
+        'Revenue (Million USD)': rev_agg / 1e6
+    }).dropna()
 
-    # Optional Agent Level Table
-    if not agents:
-        st.subheader("Agent-Level Summary Table")
-        agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
-        st.dataframe(agent_table.style.format("{:.2f}"))
+    df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
+    df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
+    df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
+    df_summary = df_summary.round(2)
+
+    # 📊 Summary Block
+    st.markdown(f"### 📊 {title_str}")
+    if df_summary.shape[0] >= 2:
+        last, prev = df_summary.index[-1], df_summary.index[-2]
+        cb_chg = df_summary.loc[last, cb_label]
+        rev_chg = df_summary.loc[last, rev_label]
+        st.markdown(
+            f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
+        )
+
+    # 📋 Summary Table
+    st.markdown("### Summary Table")
+    st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
+
+    # 🧾 BU/DU Revenue Tables
+    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
+    df_rev['Period'] = period
+    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+
+    st.markdown("#### Revenue by BU (Million USD)")
+    st.dataframe(pivot_bu.round(1).reset_index())
+
+    st.markdown("#### Revenue by DU (Million USD)")
+    st.dataframe(pivot_du.round(1).reset_index())
