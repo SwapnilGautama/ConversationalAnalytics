@@ -1,4 +1,4 @@
-vimport pandas as pd
+import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
