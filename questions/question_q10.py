@@ -1,82 +1,83 @@
-import pandas as pd
-import streamlit as st
+vimport pandas as pd
 import matplotlib.pyplot as plt
+import streamlit as st
 import seaborn as sns
-from io import BytesIO
+import calendar
 
-def run(user_question: str):
-    # Load data
-    file_path = "sample_data/LNTData.xlsx"
+# Set pastel theme
+sns.set_palette("pastel")
+plt.rcParams["axes.edgecolor"] = "lightgrey"
+
+def run():
+    st.header("📊 Fresher UT% Monthly Trends by Bucket")
+
     try:
-        df = pd.read_excel(file_path)
+        df = pd.read_excel("sample_data/LNTData.xlsx")
+
+        required_fields = ['FresherAgeingCategory', 'Segment', 'Month', 'Year',
+                           'TotalBillableHours', 'NetAvailableHours']
+        column_map = {
+            'DU': 'Delivery_Unit',
+            'BU': 'Business_Unit'
+        }
+
+        # Rename columns based on q8.py logic
+        for standard_col, actual_col in column_map.items():
+            if actual_col in df.columns:
+                df.rename(columns={actual_col: standard_col}, inplace=True)
+
+        required_fields += list(column_map.keys())
+        missing = [col for col in required_fields if col not in df.columns]
+
+        if missing:
+            st.error(f"Missing required columns: {', '.join(missing)}")
+            return
+
+        # Convert Year like "2024-25" → 2024
+        df['Year'] = df['Year'].astype(str).str[:4].astype(int)
+
+        # Calculate Utilization %
+        df = df[df['NetAvailableHours'] != 0]  # avoid division by zero
+        df['Utilization %'] = df['TotalBillableHours'] / df['NetAvailableHours'] * 100
+
+        # Map numeric months to short names
+        df['Month'] = df['Month'].astype(int)
+        df['MonthName'] = df['Month'].apply(lambda x: calendar.month_abbr[x])
+
+        # Group and pivot
+        agg = df.groupby(['MonthName', 'FresherAgeingCategory'])['Utilization %'].mean().reset_index()
+        pivot = agg.pivot(index='MonthName', columns='FresherAgeingCategory', values='Utilization %')
+        pivot = pivot[calendar.month_abbr[1:13]] if set(pivot.index) >= set(calendar.month_abbr[1:13]) else pivot
+        pivot = pivot.round(2)
+
+        # Insights (summary)
+        st.markdown("### 🔍 Insights")
+        trend_summary = pivot.mean().sort_values(ascending=False).to_frame(name='Avg UT%')
+        st.dataframe(trend_summary.style.format("{:.2f}"))
+
+        # Layout
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.markdown("### 📋 UT% by Month and Bucket")
+            st.dataframe(pivot.style.format("{:.2f}").set_table_styles([
+                {'selector': 'th', 'props': [('border', '1px solid lightgrey')]},
+                {'selector': 'td', 'props': [('border', '1px solid lightgrey')]}
+            ]))
+
+        with col2:
+            st.markdown("### 📈 UT% Trend Line Chart")
+            plt.figure(figsize=(8, 4))
+            for cat in pivot.columns:
+                plt.plot(pivot.index, pivot[cat], label=cat)
+            plt.xlabel("Month")
+            plt.ylabel("Utilization %")
+            plt.title("Fresher UT% Trends")
+            plt.grid(True, linestyle='--', alpha=0.5)
+            plt.legend()
+            st.pyplot(plt)
+
+        st.success("✅ Analysis complete.")
+
     except Exception as e:
-        st.error(f"Failed to load file: {e}")
-        return
-
-    # Identify actual BU/DU field names from q8 pattern
-    bu_col = next((col for col in df.columns if "bu" in col.lower()), None)
-    du_col = next((col for col in df.columns if "du" in col.lower()), None)
-
-    # Validate required columns
-    required_cols = ["FresherAgeingCategory", "Segment", "Month", "Utilization %", "Year", "Status"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if bu_col is None:
-        missing_cols.append("BU")
-    if du_col is None:
-        missing_cols.append("DU")
-    if missing_cols:
-        st.error(f"Missing required columns: {', '.join(missing_cols)}")
-        return
-
-    # Filter to Billable only
-    df = df[df["Status"] == "Billable"]
-
-    # Extract year as numeric
-    df["Year"] = df["Year"].astype(str).str.extract(r"(\d{4})").astype(int)
-
-    # Map numeric months to short names
-    month_map = {i: name for i, name in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                                                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
-    df["Month"] = df["Month"].map(month_map)
-
-    # Group and pivot UT%
-    agg_df = df.groupby(["Year", "Month", "FresherAgeingCategory"])["Utilization %"].mean().reset_index()
-    agg_df = agg_df.sort_values(["Year", "Month"], key=lambda x: pd.Categorical(x, categories=month_map.values(), ordered=True))
-    pivot_df = agg_df.pivot(index="Month", columns="FresherAgeingCategory", values="Utilization %")
-
-    # Line Chart
-    fig, ax = plt.subplots(figsize=(8, 4))
-    pastel_palette = sns.color_palette("pastel")
-    pivot_df.plot(ax=ax, linewidth=2.5, marker='o', color=pastel_palette)
-    ax.set_title("UT% Trend by Fresher Category", fontsize=14)
-    ax.set_ylabel("Utilization %")
-    ax.set_xlabel("Month")
-    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
-    ax.set_facecolor("#FAFAFA")
-    sns.despine()
-    st.pyplot(fig)
-
-    # Table
-    styled_table = pivot_df.style.format("{:.1f}").set_table_styles([
-        {'selector': 'thead th', 'props': [('background-color', '#f2f2f2'), ('border', '1px solid #ddd')]},
-        {'selector': 'tbody td', 'props': [('border', '1px solid #ddd')]},
-        {'selector': 'table', 'props': [('border-collapse', 'collapse')]}
-    ])
-    st.dataframe(styled_table, use_container_width=True)
-
-    # Insights
-    summary = []
-    for category in pivot_df.columns:
-        trend = pivot_df[category].dropna()
-        if trend.empty:
-            continue
-        change = trend.iloc[-1] - trend.iloc[0]
-        direction = "increased" if change > 0 else "decreased" if change < 0 else "remained stable"
-        summary.append(f"• UT% for **{category}** has {direction} from **{trend.iloc[0]:.1f}%** to **{trend.iloc[-1]:.1f}%**.")
-    if summary:
-        st.markdown("### 📊 Key Insights")
-        for point in summary:
-            st.markdown(point)
-    else:
-        st.warning("No usable UT% data available for fresher buckets.")
-
+        st.error(f"Error running analysis: {e}")
