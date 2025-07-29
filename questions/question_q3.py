@@ -81,4 +81,17 @@ def run(prompt):
     # Show table
     st.dataframe(result_df.round(2), use_container_width=True)
 
-    
+    # Plot
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+    ax2 = ax1.twinx()
+
+    ax1.bar(result_df['Period'], result_df['C&B % of Revenue (%)'], color='lightyellow', label='C&B % of Revenue')
+    ax2.plot(result_df['Period'], result_df['Revenue (Million USD)'], color='skyblue', marker='o', label='Revenue')
+
+    ax1.set_ylabel('C&B % of Revenue')
+    ax2.set_ylabel('Revenue (Million USD)')
+    ax1.set_xticklabels(result_df['Period'], rotation=45)
+    ax1.grid(False)
+    ax2.grid(False)
+
+    st.pyplot(fig)
