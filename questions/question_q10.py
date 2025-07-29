@@ -56,16 +56,7 @@ def run(query):
         top_increase = category_summary.dropna().head(3)
         top_decrease = category_summary.dropna().sort_values().head(3)
 
-        insight_bullets = [
-            f"🔼 **Top 3 Increases** in UT% in {latest_month_name} {latest_year}: " +
-            ", ".join([f"{cat} ({val:.0f}%)" for cat, val in top_increase.items()]),
-            f"🔻 **Top 3 Decreases** in UT% in {latest_month_name} {latest_year}: " +
-            ", ".join([f"{cat} ({val:.0f}%)" for cat, val in top_decrease.items()])
-        ]
-
-        for bullet in insight_bullets:
-            st.markdown(f"- {bullet}")
-
+        
         # --- TABLE ONLY ---
         st.subheader("📋 UT% Table")
 
