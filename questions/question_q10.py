@@ -7,10 +7,10 @@ def run(user_query: str = ""):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
     # Load raw LNTData
-    df = pd.read_excel("sample_data/LNTData.xlsx")
+    df_raw = pd.read_excel("sample_data/LNTData.xlsx")
 
     # Map year field to numeric
-    df["Year"] = df["Year"].map({"2024-25": "2024", "2025-26": "2025"})
+    df_raw["Year"] = df_raw["Year"].map({"2024-25": "2024", "2025-26": "2025"})
 
     # Infer year & segment from user query
     selected_year = None
@@ -20,11 +20,13 @@ def run(user_query: str = ""):
         selected_year = "2025"
 
     selected_segment = None
-    for segment in df["Segment"].dropna().unique():
+    for segment in df_raw["Segment"].dropna().unique():
         if str(segment).lower() in user_query.lower():
             selected_segment = segment
             break
 
+    # Apply filters
+    df = df_raw.copy()
     if selected_year:
         df = df[df["Year"] == selected_year]
     if selected_segment:
