@@ -3,8 +3,6 @@
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import re
 
 def compute_margin(df):
@@ -99,42 +97,10 @@ def run(df, user_question=None):
         f"and non-zero revenue, which is **{proportion:.1f}%** of all **{total_clients} accounts**."
     )
 
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
-        st.dataframe(
-            top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]].reset_index(drop=True),
-            use_container_width=True
-        )
-
-    with col2:
-        st.markdown("#### 📊 Margin % by Client (Bar Chart)")
-        fig, ax = plt.subplots()
-
-        # Generate gradient pastel green-red colors
-        margins = top_10["Latest Margin %"]
-        colors = []
-        for val in margins:
-            if val >= 0:
-                green_intensity = 0.9 - (val / margins.max()) * 0.6 if margins.max() != 0 else 0.9
-                colors.append((green_intensity, 1.0, green_intensity))
-            else:
-                red_intensity = 0.9 - (abs(val) / abs(margins.min())) * 0.6 if margins.min() != 0 else 0.9
-                colors.append((1.0, red_intensity, red_intensity))
-
-        for spine in ax.spines.values():
-            spine.set_color('#D3D3D3')
-            spine.set_linewidth(0.6)
-
-        ax.barh(top_10["Client"], top_10["Latest Margin %"], color=colors, edgecolor='none')
-        ax.set_xlabel(f"Margin % ({time_label})")
-        ax.set_ylabel("Client")
-        ax.set_title(f"Top 10 Clients with Margin < {threshold}%")
-        ax.set_xlim(-100, 100)
-        ax.invert_yaxis()
-        ax.grid(False)
-        plt.tight_layout()
-        st.pyplot(fig)
+    st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
+    st.dataframe(
+        top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]].reset_index(drop=True),
+        use_container_width=True
+    )
 
     return None
