@@ -8,7 +8,7 @@ def run(segment=None, year=None):
     df = pd.read_excel("sample_data/LNTData.xlsx")
 
     # Ensure required fields exist
-    required_fields = ['Month', 'Year', 'FresherAgeingCategory', 'Status', 'PSNo', 'NetAvailableHours', 'TotalBillableHours', 'Segment', 'BU', 'DU']
+    required_fields = ['Month', 'Year', 'FresherAgeingCategory', 'Status', 'PSNo', 'NetAvailableHours', 'TotalBillableHours', 'Segment', 'DeliveryGroup', 'Delivery_Unit']
     missing_fields = [col for col in required_fields if col not in df.columns]
     if missing_fields:
         st.error(f"Missing required columns: {', '.join(missing_fields)}")
