@@ -1,5 +1,6 @@
-# ✅ FINAL Q4 CODE (Chart-Free Version): All charts removed, tables and summaries preserved
+# ✅ FINAL Q4 CODE (Chart-Free Version, with Segment Filter Support)
 import pandas as pd
+import re
 
 def run(df, user_question=None):
     import streamlit as st
@@ -11,6 +12,16 @@ def run(df, user_question=None):
         st.error("❌ Column not found: Amount in USD")
         return
 
+    # Extract Segment from chatbot prompt
+    segment_match = re.search(r"\b(?:in|for)?\s*(Transportation|Med Tech|Media & Technology|Plant Engineering|Industrial Products)\b", 
+                              user_question or "", re.IGNORECASE)
+    segment_filter = segment_match.group(1) if segment_match else None
+
+    if segment_filter and 'Segment' in df.columns:
+        df['Segment'] = df['Segment'].fillna('').str.strip()
+        df = df[df['Segment'].str.lower() == segment_filter.lower()]
+
+    # BU/DU prep
     df['DU'] = df.get('Exec DU', 'Unknown')
     df['BU'] = df.get('Exec DG', 'Unknown')
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
