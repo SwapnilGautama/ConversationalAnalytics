@@ -78,9 +78,12 @@ def run(query):
 
         # Format and display table
         numeric_cols = pivot_df.select_dtypes(include='number').columns
-        styled_df = pivot_df.drop(columns='MonthOrder').style.format({col: "{:.1f}" for col in numeric_cols}).set_properties(
-            **{'border': '1px solid lightgrey', 'border-collapse': 'collapse'}
-        )
+        styled_df = pivot_df.drop(columns='MonthOrder').style.format(
+            {col: "{:.1f}%" for col in numeric_cols}
+        ).set_properties(**{
+            'border': '1px solid lightgrey',
+            'border-collapse': 'collapse'
+        })
         st.dataframe(styled_df, use_container_width=True)
 
         # --- CHART ---
@@ -96,7 +99,6 @@ def run(query):
         ax.set_title("Fresher UT% by Category (Monthly)", fontsize=12)
         ax.set_ylabel("Utilization %")
         ax.set_xlabel("Month")
-        ax.grid(True, linestyle="--", alpha=0.5)
         ax.legend(loc="best", fontsize=8)
         st.pyplot(fig)
 
