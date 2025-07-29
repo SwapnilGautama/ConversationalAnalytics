@@ -3,87 +3,68 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
-def run(segment=None, year=None):
-    # Load data
-    df = pd.read_excel("sample_data/LNTData.xlsx")
+def run(prompt=None):
+    st.title("📊 Fresher UT% Monthly Trends by Bucket")
 
-    # Ensure required fields exist
-    required_fields = ['Month', 'Year', 'FresherAgeingCategory', 'Status', 'PSNo', 'NetAvailableHours', 'TotalBillableHours', 'Segment']
-    missing_fields = [col for col in required_fields if col not in df.columns]
-    if missing_fields:
-        st.error(f"Missing required columns: {', '.join(missing_fields)}")
+    # Load data
+    @st.cache_data
+    def load_data():
+        df = pd.read_excel("sample_data/LNTData.xlsx")
+        df['Month'] = pd.to_numeric(df['Month'], errors='coerce')
+        df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
+        df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
+        df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
+        df['MonthName'] = df['Month'].map({1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
+                                           7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'})
+        return df
+
+    df = load_data()
+
+    # Apply year filter from prompt if available
+    selected_year = None
+    if prompt:
+        for yr in [2023, 2024, 2025, 2026]:
+            if str(yr) in prompt:
+                selected_year = yr
+                break
+    if selected_year:
+        df = df[df['Year'] == selected_year]
+
+    # Check required columns
+    required_cols = ['FresherAgeingCategory', 'Segment', 'Month', 'MonthName', 'UT%', 'DeliveryGroup', 'Delivery_Unit']
+    missing = [col for col in required_cols if col not in df.columns]
+    if len(missing) > 0:
+        st.error(f"Missing required columns: {', '.join(missing)}")
         return
 
-    # Filters applied
-    filters_applied = []
+    # Group and pivot for table
+    table_df = df.groupby(['MonthName', 'FresherAgeingCategory', 'Segment'])['UT%'].mean().reset_index()
+    pivot_table = table_df.pivot_table(index='MonthName', columns=['FresherAgeingCategory', 'Segment'], values='UT%')
 
-    if year:
-        df = df[df['Year'] == year]
-        filters_applied.append(f"Year = {year}")
+    # Plot line chart
+    line_df = df.groupby(['MonthName', 'FresherAgeingCategory'])['UT%'].mean().reset_index()
+    pivot_line = line_df.pivot(index='MonthName', columns='FresherAgeingCategory', values='UT%')
+    pivot_line = pivot_line.reindex(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])
 
-    if segment and isinstance(segment, str):
-        df = df[df['Segment'].astype(str).str.lower() == segment.lower()]
-        filters_applied.append(f"Segment = {segment}")
+    pastel_palette = sns.color_palette("pastel")
 
-    # Filter to only Billable
-    df = df[df['Status'] == 'Billable']
+    fig, ax = plt.subplots(figsize=(10, 4))
+    for idx, column in enumerate(pivot_line.columns):
+        ax.plot(pivot_line.index, pivot_line[column], label=column, linewidth=2, color=pastel_palette[idx % len(pastel_palette)])
+    ax.set_title("UT% Trend by Fresher Bucket")
+    ax.set_ylabel("UT %")
+    ax.set_xlabel("Month")
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.set_facecolor('white')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('lightgrey')
+    ax.legend()
+    st.pyplot(fig)
 
-    # Drop NA Fresher categories
-    df = df.dropna(subset=['FresherAgeingCategory'])
-
-    # Calculate UT%
-    df['Utilization %'] = df['TotalBillableHours'] / df['NetAvailableHours'] * 100
-
-    # Aggregate UT% by Month and Category
-    trend = df.groupby(['Month', 'FresherAgeingCategory'])['Utilization %'].mean().reset_index()
-
-    # Month mapping
-    month_map = {
-        1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr',
-        5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug',
-        9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-    }
-    trend['MonthName'] = trend['Month'].map(month_map)
-
-    # Pivot for table
-    table = trend.pivot(index='MonthName', columns='FresherAgeingCategory', values='Utilization %')
-    table = table.reindex(list(month_map.values()))  # Ensure correct order
-
-    # Display applied filters
-    if filters_applied:
-        with st.container():
-            st.markdown("🧭 **Filter Applied**")
-            st.write(", ".join(filters_applied))
-
-    # Title
-    st.markdown("## 📊 Fresher UT% Monthly Trends by Bucket")
-
-    # Summary
-    latest_month = trend['Month'].max()
-    latest_data = trend[trend['Month'] == latest_month]
-    summary_lines = []
-    for cat in latest_data['FresherAgeingCategory'].unique():
-        val = latest_data[latest_data['FresherAgeingCategory'] == cat]['Utilization %'].mean()
-        summary_lines.append(f"- **{cat}** had a UT% of **{val:.1f}%** in {month_map[latest_month]}")
-    st.markdown("### 🔍 Insights")
-    st.markdown("\n".join(summary_lines))
-
-    # Side-by-side layout
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.markdown("#### 📋 UT% Table")
-        st.dataframe(table.style.format("{:.1f}").set_table_styles([
-            {"selector": "th", "props": [("border", "1px solid lightgrey")]},
-            {"selector": "td", "props": [("border", "1px solid lightgrey")]}
-        ]), use_container_width=True)
-
-    with col2:
-        st.markdown("#### 📈 UT% Trend Chart")
-        plt.figure(figsize=(8, 4))
-        sns.lineplot(data=trend, x='MonthName', y='Utilization %', hue='FresherAgeingCategory', marker='o')
-        plt.xticks(rotation=45)
-        plt.grid(True, linestyle='--', linewidth=0.5)
-        plt.tight_layout()
-        st.pyplot(plt.gcf())
-        plt.clf()
+    # Show table
+    st.subheader("📋 UT% Table by Month × Fresher Category × Segment")
+    st.dataframe(pivot_table.style.format("{:.2f}").set_properties(**{
+        'border-color': 'lightgrey',
+        'border-style': 'solid',
+        'border-width': '0.5px'
+    }))
