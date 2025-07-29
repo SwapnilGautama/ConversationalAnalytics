@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import re
 
 def run(prompt):
@@ -79,3 +80,5 @@ def run(prompt):
 
     # Show table
     st.dataframe(result_df.round(2), use_container_width=True)
+
+    
