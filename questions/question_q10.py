@@ -30,9 +30,9 @@ def run(prompt=None):
     if selected_year:
         df = df[df['Year'] == selected_year]
 
-    # Check required columns
+    # Check required columns (fixed logic)
     required_cols = ['FresherAgeingCategory', 'Segment', 'Month', 'MonthName', 'UT%', 'DeliveryGroup', 'Delivery_Unit']
-    missing = [col for col in required_cols if col not in df.columns]
+    missing = list(set(required_cols) - set(df.columns))
     if len(missing) > 0:
         st.error(f"Missing required columns: {', '.join(missing)}")
         return
