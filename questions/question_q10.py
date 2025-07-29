@@ -12,16 +12,19 @@ def run(user_query: str = ""):
     # Map year field to numeric
     df_raw["Year"] = df_raw["Year"].map({"2024-25": "2024", "2025-26": "2025"})
 
+    # 👉 Ensure we don't overwrite user_query
+    query_text = user_query if isinstance(user_query, str) else ""
+
     # Infer year & segment from user query
     selected_year = None
-    if "2024" in user_query:
+    if "2024" in query_text:
         selected_year = "2024"
-    elif "2025" in user_query:
+    elif "2025" in query_text:
         selected_year = "2025"
 
     selected_segment = None
     for segment in df_raw["Segment"].dropna().unique():
-        if str(segment).lower() in user_query.lower():
+        if str(segment).lower() in query_text.lower():
             selected_segment = segment
             break
 
@@ -36,7 +39,7 @@ def run(user_query: str = ""):
     df = df[df["FresherAgeingCategory"].notna()]
     df = df[df["Status"].isin(["Billable", "Non Billable"])]
 
-    # Compute UT% inline (as in utilization.py): UT% = Billable / (Billable + Non-Billable)
+    # Compute UT% inline: UT% = Billable / (Billable + Non-Billable)
     df["Headcount"] = 1
     agg_df = df.groupby(["Year", "Month", "FresherAgeingCategory", "Status", "Segment"]).agg({"Headcount": "sum"}).reset_index()
     pivot_df = agg_df.pivot_table(index=["Year", "Month", "FresherAgeingCategory", "Segment"],
