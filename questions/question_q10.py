@@ -9,7 +9,7 @@ def run(chat_input):
 
     # --- Load Data ---
     file_path = "LNTData.xlsx"
-    df = pd.read_excel(file_path, sheet_name="LNTData")
+    df = pd.read_excel("sample_data/LNTData.xlsx")
 
     # --- Compute Utilization % ---
     df["TotalBillableHours"] = pd.to_numeric(df["TotalBillableHours"], errors="coerce").fillna(0)
