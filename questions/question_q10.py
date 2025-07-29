@@ -1,12 +1,6 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import streamlit as st
-import seaborn as sns
 import calendar
-
-# Set pastel theme
-sns.set_palette("pastel")
-plt.rcParams["axes.edgecolor"] = "lightgrey"
 
 def run(query):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
@@ -72,7 +66,7 @@ def run(query):
         for bullet in insight_bullets:
             st.markdown(f"- {bullet}")
 
-        # --- SIDE-BY-SIDE CHART AND TABLE ---
+        # --- TABLE ONLY ---
         st.subheader("📋 UT% Table")
 
         pivot_df = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
@@ -92,23 +86,6 @@ def run(query):
             'border-collapse': 'collapse'
         })
         st.dataframe(styled_df, use_container_width=True)
-
-        # --- CHART ---
-        st.subheader("📈 UT% Trend Chart")
-        fig, ax = plt.subplots(figsize=(10, 4))
-
-        for category in df["FresherAgeingCategory"].dropna().unique():
-            cat_df = df[df["FresherAgeingCategory"] == category]
-            grouped = cat_df.groupby(["Year", "MonthOrder", "MonthShort"])["Utilization %"].mean().reset_index()
-            grouped = grouped.sort_values(["Year", "MonthOrder"])
-            ax.plot(grouped["MonthShort"], grouped["Utilization %"], label=category, marker='o')
-
-        ax.set_title("Fresher UT% by Category (Monthly)", fontsize=12)
-        ax.set_ylabel("Utilization %")
-        ax.set_xlabel("Month")
-        ax.legend(loc="best", fontsize=8)
-        ax.grid(False)  # REMOVE gridlines
-        st.pyplot(fig)
 
     except Exception as e:
         st.error(f"Error running analysis: {e}")
