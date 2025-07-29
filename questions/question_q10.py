@@ -7,7 +7,7 @@ def run(user_query: str = ""):
     st.header("📊 Fresher UT% Monthly Trends by Bucket")
 
     # Load raw LNTData
-    df = pd.read_excel("LNTData.xlsx")
+    df = pd.read_excel("sample_data/LNTData.xlsx")
 
     # Map year field to numeric
     df["Year"] = df["Year"].map({"2024-25": "2024", "2025-26": "2025"})
