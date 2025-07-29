@@ -1,7 +1,6 @@
 # question_q2.py
 
 import pandas as pd
-import matplotlib.pyplot as plt
 import re
 
 def run(df, user_question=None):
@@ -74,38 +73,19 @@ def run(df, user_question=None):
     g4['% Change'] = ((g4_raw[latest_month] - g4_raw[prev_month]) / g4_raw[prev_month].replace(0, 0.0001)) * 100
     g4_raw['abs_change'] = (g4_raw[latest_month] - g4_raw[prev_month])
 
-    # ✅ Filter only positive increases (costs that went up)
     g4_positive_increase = g4_raw[g4_raw['abs_change'] > 0].copy()
     top8 = g4_positive_increase.sort_values(by='abs_change', ascending=False).head(8)
 
     table_df = pd.DataFrame({
-        'May (Mn USD)': top8[prev_month] / 1e6,
-        'Jun (Mn USD)': top8[latest_month] / 1e6,
+        f'{prev_month.strftime("%b")} (Mn USD)': top8[prev_month] / 1e6,
+        f'{latest_month.strftime("%b")} (Mn USD)': top8[latest_month] / 1e6,
         '% Change': g4.loc[top8.index, '% Change']
     }, index=top8.index)
     table_df.index.name = 'Group4'
 
-    table_df['May (Mn USD)'] = table_df['May (Mn USD)'].map(lambda x: f"{x:,.2f}")
-    table_df['Jun (Mn USD)'] = table_df['Jun (Mn USD)'].map(lambda x: f"{x:,.2f}")
+    table_df[f'{prev_month.strftime("%b")} (Mn USD)'] = table_df[f'{prev_month.strftime("%b")} (Mn USD)'].map(lambda x: f"{x:,.2f}")
+    table_df[f'{latest_month.strftime("%b")} (Mn USD)'] = table_df[f'{latest_month.strftime("%b")} (Mn USD)'].map(lambda x: f"{x:,.2f}")
     table_df['% Change'] = table_df['% Change'].map(lambda x: f"{x:.2f}%")
 
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in Mn USD, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
-        st.dataframe(table_df)
-
-    with col2:
-        g4_latest_cost = g4_raw[latest_month]
-        g4_latest_cost = g4_latest_cost[g4_latest_cost > 0].sort_values(ascending=False)
-
-        top5 = g4_latest_cost.head(5)
-        others = g4_latest_cost.iloc[5:].sum()
-        pie_labels = list(top5.index) + (['Others'] if others > 0 else [])
-        pie_values = list(top5.values) + ([others] if others > 0 else [])
-
-        pastel_colors = ['#AEC6CF', '#FFB347', '#77DD77', '#FF6961', '#CBAACB', '#FFFACD']
-        fig, ax = plt.subplots()
-        ax.pie(pie_values, labels=pie_labels, autopct='%1.1f%%', startangle=90, colors=pastel_colors[:len(pie_values)])
-        ax.set_title(f"Top Group4 Cost Types – {latest_month.strftime('%b')}")
-        st.pyplot(fig)
+    st.markdown(f"### 📊 Top 8 Group4 Cost Increases (actual cost in Mn USD, % change from {prev_month.strftime('%b')} to {latest_month.strftime('%b')})")
+    st.dataframe(table_df)
