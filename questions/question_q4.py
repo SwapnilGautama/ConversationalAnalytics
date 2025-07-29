@@ -71,23 +71,20 @@ def run(df, user_question=None):
         )
 
     # 📈 Summary Table
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
+st.markdown("#### C&B vs Revenue Summary Table")
+st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
 
+# 🧾 BU/DU Revenue Tables
+st.markdown("### 🧾 Revenue Breakdown by BU and DU")
+df_rev['Period'] = period
 
-    # 🧾 BU/DU Revenue Tables
-    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
-    df_rev['Period'] = period
-    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.markdown("#### Revenue by BU (Million USD)")
-        st.dataframe(pivot_bu.round(1).reset_index())
-    with col4:
-        st.markdown("#### Revenue by DU (Million USD)")
-        st.dataframe(pivot_du.round(1).reset_index())
+st.markdown("#### Revenue by BU (Million USD)")
+st.dataframe(pivot_bu.round(1).reset_index())
+
+st.markdown("#### Revenue by DU (Million USD)")
+st.dataframe(pivot_du.round(1).reset_index())
 
   
