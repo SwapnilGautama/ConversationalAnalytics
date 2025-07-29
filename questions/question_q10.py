@@ -14,70 +14,80 @@ def run(query):
     try:
         df = pd.read_excel("sample_data/LNTData.xlsx")
 
-        required_fields = ['FresherAgeingCategory', 'Segment', 'Month', 'Year',
-                           'TotalBillableHours', 'NetAvailableHours']
+        # Rename BU and DU as per q8.py
         column_map = {
             'DU': 'Delivery_Unit',
             'BU': 'Business_Unit'
         }
-
-        # Rename columns based on q8.py logic
-        for standard_col, actual_col in column_map.items():
+        for std_col, actual_col in column_map.items():
             if actual_col in df.columns:
-                df.rename(columns={actual_col: standard_col}, inplace=True)
+                df.rename(columns={actual_col: std_col}, inplace=True)
 
-        required_fields += list(column_map.keys())
-        missing = [col for col in required_fields if col not in df.columns]
-
-        if missing:
-            st.error(f"Missing required columns: {', '.join(missing)}")
+        # Ensure required fields exist
+        required_cols = ['FresherAgeingCategory', 'Segment', 'BU', 'DU', 'Month', 'Year', 'TotalBillableHours', 'NetAvailableHours']
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            st.error(f"Missing required columns: {', '.join(missing_cols)}")
             return
 
-        # Convert Year like "2024-25" → 2024
+        # Derive Utilization %
+        df['Utilization %'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
+        df['Utilization %'] = df['Utilization %'].round(2)
+
+        # Map month numbers to short names
+        df['MonthName'] = df['Month'].apply(lambda x: calendar.month_abbr[int(x)] if pd.notnull(x) else x)
+
+        # Clean Year
         df['Year'] = df['Year'].astype(str).str[:4].astype(int)
 
-        # Calculate Utilization %
-        df = df[df['NetAvailableHours'] != 0]  # avoid division by zero
-        df['Utilization %'] = df['TotalBillableHours'] / df['NetAvailableHours'] * 100
+        # Group and Pivot
+        agg_df = df.groupby(['FresherAgeingCategory', 'Segment', 'BU', 'DU', 'Year', 'MonthName'])['Utilization %'].mean().reset_index()
 
-        # Map numeric months to short names
-        df['Month'] = df['Month'].astype(int)
-        df['MonthName'] = df['Month'].apply(lambda x: calendar.month_abbr[x])
+        # Prepare pivot for table
+        pivot_df = agg_df.pivot_table(
+            index=['Year', 'MonthName'],
+            columns='FresherAgeingCategory',
+            values='Utilization %',
+            aggfunc='mean'
+        ).reset_index()
 
-        # Group and pivot
-        agg = df.groupby(['MonthName', 'FresherAgeingCategory'])['Utilization %'].mean().reset_index()
-        pivot = agg.pivot(index='MonthName', columns='FresherAgeingCategory', values='Utilization %')
-        pivot = pivot[calendar.month_abbr[1:13]] if set(pivot.index) >= set(calendar.month_abbr[1:13]) else pivot
-        pivot = pivot.round(2)
+        # Sort months correctly
+        month_order = list(calendar.month_abbr)[1:]
+        pivot_df['MonthOrder'] = pd.Categorical(pivot_df['MonthName'], categories=month_order, ordered=True)
+        pivot_df = pivot_df.sort_values(['Year', 'MonthOrder'])
 
-        # Insights (summary)
-        st.markdown("### 🔍 Insights")
-        trend_summary = pivot.mean().sort_values(ascending=False).to_frame(name='Avg UT%')
-        st.dataframe(trend_summary.style.format("{:.2f}"))
+        # Display insights
+        st.subheader("📌 Key Insights")
+        recent_month = pivot_df['MonthName'].iloc[-1]
+        insight = f"Fresher UT% trends show variations across aging buckets. For example, in {recent_month}, "
+        top_cols = pivot_df.columns[2:-1]
+        sample_trends = [f"{col}: {pivot_df[col].iloc[-1]:.1f}%" for col in top_cols]
+        insight += ", ".join(sample_trends) + "."
+        st.markdown(insight)
 
-        # Layout
-        col1, col2 = st.columns([1, 2])
+        # Display visuals
+        col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### 📋 UT% by Month and Bucket")
-            st.dataframe(pivot.style.format("{:.2f}").set_table_styles([
-                {'selector': 'th', 'props': [('border', '1px solid lightgrey')]},
-                {'selector': 'td', 'props': [('border', '1px solid lightgrey')]}
-            ]))
+            st.subheader("📋 UT% Table")
+            table_display = pivot_df.drop(columns='MonthOrder')
+            st.dataframe(table_display.style.format("{:.1f}").set_properties(**{
+                'border': '1px solid lightgrey',
+                'border-collapse': 'collapse'
+            }), use_container_width=True)
 
         with col2:
-            st.markdown("### 📈 UT% Trend Line Chart")
-            plt.figure(figsize=(8, 4))
-            for cat in pivot.columns:
-                plt.plot(pivot.index, pivot[cat], label=cat)
-            plt.xlabel("Month")
-            plt.ylabel("Utilization %")
-            plt.title("Fresher UT% Trends")
-            plt.grid(True, linestyle='--', alpha=0.5)
-            plt.legend()
-            st.pyplot(plt)
-
-        st.success("✅ Analysis complete.")
+            st.subheader("📈 UT% Trend Chart")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            for col in top_cols:
+                ax.plot(pivot_df['MonthName'], pivot_df[col], label=col, linewidth=2)
+            ax.set_ylabel("Utilization %")
+            ax.set_xlabel("Month")
+            ax.set_title("Fresher UT% Trend by Category")
+            ax.legend(title="Fresher Category", bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig)
 
     except Exception as e:
-        st.error(f"Error running analysis: {e}")
+        st.error(f"⚠️ Error running analysis: {str(e)}")
