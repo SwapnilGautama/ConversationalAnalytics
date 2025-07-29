@@ -4,6 +4,8 @@ import numpy as np
 import re
 
 def run(prompt):
+    prompt = str(prompt) if not isinstance(prompt, str) else prompt  # Fix for non-string input
+
     st.markdown("""
         <h2 style='color:#4F8BF9'>📊 MoM Revenue vs C&B % of Revenue</h2>
     """, unsafe_allow_html=True)
@@ -75,7 +77,11 @@ def run(prompt):
             prev_period = prev['Period']
 
             direction = "🔺" if cb_change > 0 else "🔻"
-            st.markdown(f"<span style='color:#E63946'>{direction}</span> In <b>{period}</b>, C&B cost changed by <b>{cb_change:.1f}%</b> while revenue changed by <b>{rev_change:.1f}%</b> vs <b>{prev_period}</b>.", unsafe_allow_html=True)
+            st.markdown(
+                f"<span style='color:#E63946'>{direction}</span> In <b>{period}</b>, C&B cost changed by <b>{cb_change:.1f}%</b> "
+                f"while revenue changed by <b>{rev_change:.1f}%</b> vs <b>{prev_period}</b>.",
+                unsafe_allow_html=True
+            )
 
-    # Show table
+    # Show final table
     st.dataframe(result_df.round(2), use_container_width=True)
