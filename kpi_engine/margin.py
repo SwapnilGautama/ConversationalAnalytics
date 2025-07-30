@@ -1,6 +1,4 @@
-# ✅ UPDATED: margin.py
-# Replaces "Amount in INR" with "Amount in USD"
-
+# ✅ UPDATED: margin.py (with Group1-based Revenue logic)
 import pandas as pd
 
 def load_pnl_data(filepath, sheet_name="LnTPnL"):
@@ -40,12 +38,21 @@ def preprocess_pnl_data(df):
     # Convert Month column to datetime safely
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
 
-    # Filter to Cost/Revenue rows
-    df = df[df['Type'].isin(['Cost', 'Revenue'])]
+    # Check for Group1 column before revenue mapping
+    if 'Group1' not in df.columns:
+        raise ValueError("Required column 'Group1' not found in the dataset for revenue logic.")
 
-    # Coerce Amount column and remove rows with NaNs in key columns
+    # Coerce Amount column and drop missing
     df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
     df = df.dropna(subset=['Month', 'Amount', 'Client'])
+
+    # Reclassify Group1 values as 'Revenue'
+    valid_group1 = ['ONSITE', 'OFFSHORE', 'INDIRECT REVENUE']
+    df['Type'] = df['Type'].fillna('')
+    df.loc[df['Group1'].isin(valid_group1), 'Type'] = 'Revenue'
+
+    # Keep only Cost and Revenue rows
+    df = df[df['Type'].isin(['Cost', 'Revenue'])]
 
     return df
 
