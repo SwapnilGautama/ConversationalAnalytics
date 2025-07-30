@@ -3,7 +3,7 @@
 import streamlit as st
 from utils.semantic_matcher import find_best_matching_qid, PROMPT_BANK
 import importlib
-from kpi_engine import margin, utilization  # 👈 Added utilization to load ut_df
+from kpi_engine import margin
 import os
 import pandas as pd
 import inspect
@@ -37,18 +37,8 @@ def load_data():
         raise ValueError("Loaded P&L data is empty after preprocessing.")
     return df
 
-@st.cache_data
-def load_ut_data():
-    filepath = os.path.join("sample_data", "LNTData.xlsx")
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"UT file not found at path: {filepath}")
-    df = utilization.load_ut_data(filepath)
-    df = utilization.preprocess_ut_data(df)
-    return df
-
 try:
-    pnl_df = load_data()
-    ut_df = load_ut_data()
+    df = load_data()
 except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
@@ -98,11 +88,9 @@ if user_question:
         run_params = inspect.signature(run_func).parameters
 
         if len(run_params) == 2:
-            result = run_func(pnl_df, user_question)
-        elif len(run_params) == 3:
-            result = run_func(pnl_df, ut_df, user_question)
+            result = run_func(df, user_question)
         else:
-            result = run_func(pnl_df)
+            result = run_func(df)
 
         st.success("✅ Analysis complete.")
         if isinstance(result, pd.DataFrame):
