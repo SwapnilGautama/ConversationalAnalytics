@@ -9,6 +9,11 @@ def run(df, user_question=None):
     df.columns = df.columns.str.strip()
     df['Month'] = pd.to_datetime(df['Month'])
 
+    # ✅ Apply Group1-based Revenue logic
+    valid_group1 = ['ONSITE', 'OFFSHORE', 'INDIRECT REVENUE']
+    df['Type'] = df['Type'].fillna('')
+    df.loc[df['Group1'].isin(valid_group1), 'Type'] = 'Revenue'
+
     latest_month = df['Month'].max()
     prev_month = (latest_month - pd.DateOffset(months=1)).replace(day=1)
 
