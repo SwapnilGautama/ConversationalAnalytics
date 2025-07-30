@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from kpi_engine.realized_rate import calculate_realized_rate
+from kpi_engine.realized_rate import calculate_realized_rate_quarterly
 from dateutil.relativedelta import relativedelta
 
 def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
@@ -14,7 +14,7 @@ def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
     df_pnl_filtered = df_pnl[df_pnl["Segment"] == segment_filter]
 
     # Calculate realized rate
-    realized_df = calculate_realized_rate(df_pnl_filtered, df_ut)
+    realized_df = calculate_realized_rate_quarterly(df_pnl_filtered, df_ut, segment_filter=segment_filter, drop_threshold=threshold)
 
     if realized_df.empty:
         st.warning("No data available after filtering.")
