@@ -8,8 +8,8 @@ import os
 st.markdown("### Revenue per Person Analysis by Account")
 
 # Load data directly from uploaded files (not session_state)
-df_pnl = pd.read_excel("/mnt/data/LnTPnL.xlsx")
-df_ut = pd.read_excel("/mnt/data/LNTData.xlsx")
+df_pnl = pd.read_excel("sample_data/LnTPnL.xlsx")
+df_ut = pd.read_excel("sample_data/LNTData.xlsx")
 
 # Ensure date format in UT data
 df_ut['date_a'] = pd.to_datetime(df_ut['date_a'])
