@@ -6,16 +6,16 @@ def run(realized_rate_threshold=3):
 
     # Load LNTData (UT) file
     try:
-        ut_df = pd.read_excel("sample_data/LNTDataSample.xlsx", engine='openpyxl')
+        ut_df = pd.read_excel("sample_data/LNTData.xlsx", engine='openpyxl')
     except:
-        st.error("Could not load UT sample file.")
+        st.error("Could not load UT data file.")
         return
 
     # Load LnTPnL (P&L) file
     try:
-        pnl_df = pd.read_excel("sample_data/LnTPnLSample.xlsx", sheet_name="LnTPnLSample", engine='openpyxl')
+        pnl_df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL", engine='openpyxl')
     except:
-        st.error("Could not load P&L sample file.")
+        st.error("Could not load P&L data file.")
         return
 
     # Strip and rename columns
