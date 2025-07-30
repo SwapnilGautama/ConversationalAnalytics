@@ -1,4 +1,4 @@
-# ✅ ENHANCED Q4 CODE: With Sub-tabs under MoM / QoQ / YoY
+# ✅ FINAL Q4 CODE: Revenue and C&B logic enhanced
 import pandas as pd
 import re
 
@@ -26,8 +26,15 @@ def run(df, user_question=None):
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
     df = df.dropna(subset=['Month'])
 
-    df_cb = df[df['Group3'].str.contains('C&B', na=False)]
-    df_rev = df[df['Type'].str.lower() == 'revenue']
+    # ✅ Revenue Logic: Filter Group1
+    df_rev = df[df['Group1'].isin(['ONSITE', 'OFFSHORE', 'INDIRECT REVENUE'])]
+
+    # ✅ C&B Logic: Filter Group Description
+    cb_keywords = [
+        "Onsite Salaries & Allowances", "Cost of Onsite TPCs/Retainers",
+        "C&B Cost Offshore", "Professional Fee - Retainers/TPC"
+    ]
+    df_cb = df[df['Group Description'].isin(cb_keywords)]
 
     # === Main Tabs ===
     trend_tabs = st.tabs(["📈 MoM", "📊 QoQ", "📉 YoY"])
