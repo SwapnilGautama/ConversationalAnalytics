@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (with Segment Filter, Totals, and Movement Impact Metric)
+# ✅ FINAL Q4 CODE (v19 with Bold Totals, Header Coloring, Rev-C&B Diff Highlighting)
 import pandas as pd
 import re
 
@@ -75,7 +75,6 @@ def run(df, user_question=None):
     st.markdown("### Summary Table")
     df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
 
-    # ✅ Totals (including C&B % of Revenue and Rev-C&B Diff)
     total_cb = df_sum_display['C&B (Million USD)'].sum()
     total_rev = df_sum_display['Revenue (Million USD)'].sum()
     avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
@@ -94,7 +93,29 @@ def run(df, user_question=None):
     }
 
     df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
-    st.dataframe(df_sum_display, hide_index=True)
+
+    def highlight_diff(val):
+        if isinstance(val, str) and val.startswith("**"):
+            try:
+                num = float(val.strip("*").replace("+", ""))
+                color = 'green' if num > 0 else 'red'
+                return f'color: {color}; font-weight: bold'
+            except:
+                return ''
+        return ''
+
+    pastel_colors = ['#dceefb', '#fcefe3', '#e7f5e6']  # pastel blue, peach, green
+    header_styles = [f"background-color: {color}; font-weight: bold;" for color in pastel_colors]
+
+    def style_summary_table(df):
+        styler = df.style
+        for i, style in enumerate(header_styles):
+            if i < len(df.columns):
+                styler = styler.set_table_styles([{ 'selector': f'th.col{i}', 'props': style.split('; ') }], overwrite=False)
+        styler = styler.applymap(highlight_diff, subset=['Rev-C&B Movement Diff'])
+        return styler
+
+    st.dataframe(style_summary_table(df_sum_display), hide_index=True)
 
     # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
