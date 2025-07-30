@@ -83,6 +83,10 @@ PROMPT_BANK = {
         "realized rate drop",
         "Realized Rate",
         "realized rate"
+    ],
+    "Q9": [
+        "Revenue Per Person",
+        "revenue per person",
     ]
 }
 
