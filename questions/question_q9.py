@@ -8,8 +8,8 @@ import os
 st.markdown("### Revenue per Person Analysis by Account")
 
 # Load data directly from deployed Excel files
-df_pnl = pd.read_excel("/mnt/data/LnTPnL.xlsx")
-df_ut = pd.read_excel("/mnt/data/LNTData.xlsx")
+df_pnl = pd.read_excel("sample_data/LnTPnL.xlsx")
+df_ut = pd.read_excel("sample_data/LNTData.xlsx")
 
 # Ensure 'date_a' exists before converting
 if 'date_a' not in df_ut.columns:
