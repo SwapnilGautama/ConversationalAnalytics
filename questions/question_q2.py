@@ -60,12 +60,6 @@ def run(df, user_question=None):
         if match:
             margin_threshold = f"less than {match.group(1)}%"
 
-    st.info(f"🔍 Running analysis for: **Show me accounts with {margin_threshold} margin**")
-
-    st.markdown("### 🔍 Key Insights")
-    st.markdown(f"- 📉 {margin_summary}")
-    st.markdown(f"- 👥 {client_summary}")
-    st.markdown(f"- 💸 {cost_summary}")
 
     group4_df = cost_df[['Month', 'Client', 'Amount', 'Group4']].dropna(subset=['Group4'])
     g4 = group4_df.groupby(['Group4', 'Month'])['Amount'].sum().unstack(fill_value=0)
