@@ -19,14 +19,12 @@ PROMPT_BANK = [
     "fresher ut trend"
 ]
 
-# 🔁 Auto-fill logic for prompt clicks
 if "autofill_text" not in st.session_state:
     st.session_state.autofill_text = ""
 
 def handle_click(prompt):
     st.session_state.autofill_text = prompt
 
-# ✅ Load data from sample_data folder
 @st.cache_data
 def load_data():
     filepath = os.path.join("sample_data", "LnTPnL.xlsx")
@@ -44,79 +42,46 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
 
-# Streamlit page config
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-# ✅ Centered Scalability Engineers logo
+# ✅ Logo Rendering (Centered)
 def display_logo():
     logo_path = "sample_data/logo.png"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode()
         st.markdown(
-            f"<div style='text-align: center'><img src='data:image/png;base64,{logo_base64}' width='300'/></div>",
+            f"<div style='text-align: center; margin-top: -40px;'><img src='data:image/png;base64,{logo_base64}' width='220'/></div>",
             unsafe_allow_html=True
         )
 
 display_logo()
 
-# ✅ Title with pastel Google-style multi-colored font
+# ✅ Updated Title – LTTS Blue Branding
 st.markdown("""
-<h1 style="font-family: 'Segoe UI', sans-serif; font-size: 40px;">
-  <span style="color:#AECBFA;">C</span>
-  <span style="color:#F28B82;">o</span>
-  <span style="color:#FBF476;">n</span>
-  <span style="color:#CCFF90;">v</span>
-  <span style="color:#AECBFA;">e</span>
-  <span style="color:#F28B82;">r</span>
-  <span style="color:#FBF476;">s</span>
-  <span style="color:#CCFF90;">a</span>
-  <span style="color:#AECBFA;">t</span>
-  <span style="color:#F28B82;">i</span>
-  <span style="color:#FBF476;">o</span>
-  <span style="color:#CCFF90;">n</span>
-  <span style="color:#AECBFA;">a</span>
-  <span style="color:#F28B82;">l</span>
-  &nbsp;
-  <span style="color:#FBF476;">A</span>
-  <span style="color:#CCFF90;">n</span>
-  <span style="color:#AECBFA;">a</span>
-  <span style="color:#F28B82;">l</span>
-  <span style="color:#FBF476;">y</span>
-  <span style="color:#CCFF90;">t</span>
-  <span style="color:#AECBFA;">i</span>
-  <span style="color:#F28B82;">c</span>
-  <span style="color:#FBF476;">s</span>
-  &nbsp;
-  <span style="color:#CCFF90;">A</span>
-  <span style="color:#AECBFA;">s</span>
-  <span style="color:#F28B82;">s</span>
-  <span style="color:#FBF476;">i</span>
-  <span style="color:#CCFF90;">s</span>
-  <span style="color:#AECBFA;">t</span>
-  <span style="color:#F28B82;">a</span>
-  <span style="color:#FBF476;">n</span>
-  <span style="color:#CCFF90;">t</span>
+<h1 style='text-align:center; font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin-top: -40px;'>
+Conversational Analytics Assistant
 </h1>
 """, unsafe_allow_html=True)
 
 # Description
 st.markdown("""
-Welcome to the **LTTS BI Assistant** — an AI-powered tool for analyzing business trends using your P&L and utilization data.
-""")
+<div style='text-align:center; font-size:18px; margin-bottom: 25px;'>
+Welcome to the <b>LTTS BI Assistant</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+</div>
+""", unsafe_allow_html=True)
 
-# 👉 Input box with autocomplete suggestions
+# 👉 Chat Input
 user_question = st.text_input(
     label="👉 Start by typing your business question:",
     placeholder="e.g. List accounts with margin % less than 30% in the last quarter",
     value=st.session_state.autofill_text
 )
 
-# Render result if input exists
+# 🧠 Execute selected analysis script
 if user_question:
     try:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
-
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
         run_func = question_module.run
         run_params = inspect.signature(run_func).parameters
@@ -139,11 +104,9 @@ if user_question:
     except Exception as e:
         st.error(f"❌ Error running analysis: {e}")
 
-# Always display the prompt bank (bottom)
+# 🔁 Prompt Bank
 st.markdown("---")
 st.markdown("💡 **Try asking:**")
-
-# ✅ Display prompt buttons in 2 columns
 col1, col2 = st.columns(2)
 for i, prompt in enumerate(PROMPT_BANK):
     with col1 if i % 2 == 0 else col2:
