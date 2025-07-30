@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (with Segment Filter, Totals, and Movement Impact Metric)
+# ✅ FINAL Q4 CODE (with Segment Filter, Totals, Movement Diff Metric, and Styled Tables)
 import pandas as pd
 import re
 
@@ -6,7 +6,6 @@ def run(df, user_question=None):
     import streamlit as st
 
     df.columns = df.columns.str.strip()
-
     amount_col = next((col for col in df.columns if col.lower().strip() in ['amount', 'amount in usd', 'amountinusd']), None)
     if not amount_col:
         st.error("❌ Column not found: Amount in USD")
@@ -75,7 +74,6 @@ def run(df, user_question=None):
     st.markdown("### Summary Table")
     df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
 
-    # ✅ Totals (including C&B % of Revenue and Rev-C&B Diff)
     total_cb = df_sum_display['C&B (Million USD)'].sum()
     total_rev = df_sum_display['Revenue (Million USD)'].sum()
     avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
@@ -84,17 +82,37 @@ def run(df, user_question=None):
     avg_diff = avg_rev_chg - avg_cb_chg
 
     total_row = {
-        'Period': '**Total**',
-        'C&B (Million USD)': f"**{total_cb:.2f}**",
-        'Revenue (Million USD)': f"**{total_rev:.2f}**",
-        'C&B % of Revenue': f"**{avg_cb_pct:.2f}**",
-        cb_label: f"**{avg_cb_chg:.2f}**",
-        rev_label: f"**{avg_rev_chg:.2f}**",
-        'Rev-C&B Movement Diff': f"**{avg_diff:+.2f}**"
+        'Period': 'Total',
+        'C&B (Million USD)': total_cb,
+        'Revenue (Million USD)': total_rev,
+        'C&B % of Revenue': avg_cb_pct,
+        cb_label: avg_cb_chg,
+        rev_label: avg_rev_chg,
+        'Rev-C&B Movement Diff': avg_diff
     }
 
     df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
-    st.dataframe(df_sum_display, hide_index=True)
+
+    def highlight_diff(val):
+        if isinstance(val, str): return ""
+        color = 'green' if val > 0 else 'red' if val < 0 else 'black'
+        return f'color: {color}'
+
+    def highlight_total(row):
+        return ['font-weight: bold' if str(row['Period']).lower() == 'total' else '' for _ in row]
+
+    pastel_colors = ['#fde2e4', '#e2f0cb', '#cde7f0', '#f3d2c1', '#d0e2f2', '#fce1e4']
+    header_styles = [{'selector': 'thead th', 'props': [('background-color', pastel_colors[i % len(pastel_colors)])]} for i in range(len(df_sum_display.columns))]
+
+    styled_summary = (
+        df_sum_display.style
+        .apply(highlight_total, axis=1)
+        .applymap(highlight_diff, subset=['Rev-C&B Movement Diff'])
+        .set_table_styles(header_styles, overwrite=False)
+        .format("{:.2f}", na_rep="None")
+    )
+
+    st.dataframe(styled_summary, use_container_width=True)
 
     # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
@@ -103,9 +121,19 @@ def run(df, user_question=None):
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
     pivot_bu.loc['Total'] = pivot_bu.sum()
     st.markdown("#### Revenue by BU (Million USD)")
-    st.dataframe(pivot_bu.round(1).reset_index())
+    styled_bu = (
+        pivot_bu.round(1).reset_index()
+        .style.apply(highlight_total, axis=1)
+        .set_table_styles(header_styles, overwrite=False)
+    )
+    st.dataframe(styled_bu, use_container_width=True)
 
     pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
     pivot_du.loc['Total'] = pivot_du.sum()
     st.markdown("#### Revenue by DU (Million USD)")
-    st.dataframe(pivot_du.round(1).reset_index())
+    styled_du = (
+        pivot_du.round(1).reset_index()
+        .style.apply(highlight_total, axis=1)
+        .set_table_styles(header_styles, overwrite=False)
+    )
+    st.dataframe(styled_du, use_container_width=True)
