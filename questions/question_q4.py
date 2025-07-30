@@ -6,7 +6,7 @@ def run(prompt=None):
     st.title("📊 MoM Revenue vs C&B % of Revenue")
 
     # Load data
-    df = pd.read_excel("sample_data/LnTPnLSample.xlsx")
+    df = pd.read_excel("sample_data/LnTPnL.xlsx")
     df['Period'] = pd.to_datetime(df['Period'], errors='coerce')
     df['Period'] = df['Period'].dt.to_period('M').astype(str)
     df = df[df['Group4'] == 'C&B']
