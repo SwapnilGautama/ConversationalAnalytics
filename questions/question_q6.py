@@ -1,43 +1,63 @@
 import pandas as pd
 import streamlit as st
-from kpi_engine.realized_rate import calculate_realized_rate  # ✅ Using KPI engine
+import os
+import sys
 
-def load_pnl_data():
-    return pd.read_excel("sample_data/LnTPnL.xlsx")
+# === Load realized rate KPI from kpi_engine folder ===
+module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if module_path not in sys.path:
+    sys.path.append(module_path)
 
-def load_utilization_data():
-    return pd.read_excel("sample_data/LNTData.xlsx")
+from kpi_engine.realized_rate import calculate_realized_rate
 
-def run():
-    # Load data
-    df_pnl = load_pnl_data()
-    df_ut = load_utilization_data()
+def run(_, user_question=None):
+    st.markdown("### 🔍 Accounts with Realized Rate below Threshold")
 
-    # Standardize column names
-    df_pnl.rename(columns={"Company code": "Company_Code"}, inplace=True)
-    df_ut.rename(columns={"Company code": "Company_Code"}, inplace=True)
+    # === 📁 Load Data ===
+    try:
+        df_pnl = pd.read_excel("data/LnTPnL.xlsx", sheet_name="LnTPnL")
+        df_ut = pd.read_excel("data/LNTData.xlsx", sheet_name="LNTData")
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}")
+        return
 
-    # Apply Realized Rate KPI logic
-    df_realized = calculate_realized_rate(df_pnl, df_ut)
+    # === 🧹 Clean + Enrich ===
+    for df in [df_pnl, df_ut]:
+        df.columns = df.columns.str.strip()
 
-    # Filters
-    st.sidebar.header("🛠 Filters")
-    segment_filter = st.sidebar.text_input("Enter Segment (optional)", "")
-    rate_threshold = st.sidebar.slider("Realized Rate Threshold", 0.0, 50.0, 5.0, step=0.5)
+    # Handle Month → Quarter conversion
+    for df in [df_pnl, df_ut]:
+        if 'Month' in df.columns:
+            df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+            df['Quarter'] = df['Month'].dt.to_period('Q').astype(str)
+        else:
+            st.error("❌ 'Month' column not found in one of the datasets.")
+            return
 
-    # Apply segment filter if present
-    if segment_filter:
-        df_realized = df_realized[df_realized["Segment"].str.lower() == segment_filter.lower()]
+    # === 🔎 Sidebar Filters ===
+    segments = sorted(set(df_ut['Segment'].dropna().unique()))
+    default_segment = segments[0] if segments else None
+    selected_segment = st.sidebar.selectbox("📍 Select Segment", options=segments, index=0 if default_segment else None)
 
-    # Apply threshold
-    filtered_df = df_realized[df_realized["Realized Rate"] < rate_threshold]
+    threshold = st.sidebar.slider("🎯 Realized Rate Threshold (USD/hr)", min_value=0.0, max_value=100.0, value=30.0, step=1.0)
 
-    # Output accounts
-    accounts_below_threshold = filtered_df["Company_Code"].unique()
+    # === 📊 Calculate Realized Rate ===
+    try:
+        result = calculate_realized_rate(df_pnl, df_ut, segment=selected_segment)
+        if result.empty:
+            st.warning("⚠️ No matching data found for the selected filters.")
+            return
 
-    st.markdown("### Q6. Realized Rate Analysis")
-    if len(accounts_below_threshold) == 0:
-        st.success("✅ No accounts below the threshold.")
-    else:
-        st.warning("⚠️ Accounts with Realized Rate below threshold:")
-        st.dataframe(pd.DataFrame(accounts_below_threshold, columns=["Company_Code"]))
+        # Filter by threshold
+        below_threshold = result[result['RealizedRate'] < threshold]
+        below_threshold = below_threshold.sort_values(by='RealizedRate')
+
+        if below_threshold.empty:
+            st.success("✅ No accounts found below the selected threshold!")
+            return
+
+        st.markdown(f"### 📉 Accounts in '{selected_segment}' with Realized Rate < {threshold}")
+        st.dataframe(below_threshold[['FinalCustomerName', 'Quarter', 'RealizedRate']].round(2), hide_index=True)
+
+    except Exception as e:
+        st.error(f"❌ Error calculating realized rate: {e}")
