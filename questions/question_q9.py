@@ -8,8 +8,8 @@ import os
 st.markdown("### Revenue per Person Analysis by Account")
 
 # Load data directly from uploaded files
-df_pnl = pd.read_excel("/mnt/data/LnTPnL.xlsx")
-df_ut = pd.read_excel("/mnt/data/LNTData.xlsx")
+df_pnl = pd.read_excel("sample_data/LnTPnL.xlsx")
+df_ut = pd.read_excel("sample_data/LNTData.xlsx")
 
 # ✅ Fix: Use correct column name 'Date_a' (capital D)
 if 'Date_a' not in df_ut.columns:
