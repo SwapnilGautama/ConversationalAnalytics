@@ -18,23 +18,25 @@ def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
     # Revenue calculation from P&L table
     df_revenue = df_pnl[df_pnl['Type'] == 'Revenue'].copy()
     df_revenue['Month'] = pd.to_datetime(df_revenue['Month'], errors='coerce').dt.month
-    revenue_grouped = df_revenue.groupby(['FinalCustomerName', 'Month']).agg({'Amount in USD': 'sum'}).reset_index()
+    df_revenue['Month_Year'] = pd.to_datetime(df_revenue['Month'], errors='coerce').dt.strftime('%b %Y')
+    df_revenue['FinalCustomerName'] = df_revenue['FinalCustomerName'].astype(str)
+
+    revenue_grouped = df_revenue.groupby(['FinalCustomerName', 'Month', 'Month_Year'])[['Amount in USD']].sum().reset_index()
     revenue_grouped.rename(columns={'Amount in USD': 'Total Revenue'}, inplace=True)
 
     # Headcount calculation from UT
+    df_ut['FinalCustomerName'] = df_ut['FinalCustomerName'].astype(str)
     hc_grouped = df_ut.groupby(['FinalCustomerName', 'Month', 'Month_Year'])['PSNo'].nunique().reset_index()
     hc_grouped.rename(columns={'PSNo': 'Headcount'}, inplace=True)
 
-    # Merge on FinalCustomerName and Month
-    merged = pd.merge(revenue_grouped, hc_grouped, on=['FinalCustomerName', 'Month'], how='inner')
-
+    # Merge revenue and headcount
+    merged = pd.merge(revenue_grouped, hc_grouped, on=['FinalCustomerName', 'Month', 'Month_Year'], how='inner')
     merged['Revenue per Person'] = merged['Total Revenue'] / merged['Headcount']
     merged['Revenue per Person'] = merged['Revenue per Person'].fillna(0)
 
-    # Merge back Segment/BU/DU metadata from UT
+    # Metadata
     metadata_cols = ['Segment', 'PVDG', 'PVDU', 'FinalCustomerName', 'Month_Year']
     df_meta = df_ut[metadata_cols].drop_duplicates()
-
     merged = pd.merge(merged, df_meta, on=['FinalCustomerName', 'Month_Year'], how='left')
 
     # Tabs for Segment / BU / DU
@@ -53,7 +55,6 @@ def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
                 'border-style': 'solid'
             }))
 
-            # Optional chart
             fig, ax = plt.subplots(figsize=(12, 5))
             pivot.plot(ax=ax)
             ax.set_title(f"Revenue per Person Trend by {col}")
