@@ -57,8 +57,7 @@ def run(query):
 
         
         # --- TABLE ONLY ---
-        st.subheader("📋 UT% Table")
-
+        
         pivot_df = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
                                   columns='FresherAgeingCategory',
                                   values='Utilization %',
