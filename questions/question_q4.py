@@ -1,64 +1,100 @@
-
+# ✅ FINAL Q4 CODE (Chart-Free Version, with Segment Filter Support + Totals)
 import pandas as pd
-import streamlit as st
+import re
 
-def run(prompt=None):
-    st.title("📊 MoM Revenue vs C&B % of Revenue")
+def run(df, user_question=None):
+    import streamlit as st
 
-    # Load data
-    df = pd.read_excel("sample_data/LnTPnL.xlsx")
-    df['Period'] = pd.to_datetime(df['Period'], errors='coerce')
-    df['Period'] = df['Period'].dt.to_period('M').astype(str)
-    df = df[df['Group4'] == 'C&B']
+    df.columns = df.columns.str.strip()
 
-    # Prompt and frequency selection
-    trend_type = st.radio("Choose trend frequency", ["MoM", "QoQ", "YoY"], horizontal=True)
+    amount_col = next((col for col in df.columns if col.lower().strip() in ['amount', 'amount in usd', 'amountinusd']), None)
+    if not amount_col:
+        st.error("❌ Column not found: Amount in USD")
+        return
 
-    # Summarize
-    summary = df.groupby("Period").agg(
-        CnB_Amount=("Amount in INR", lambda x: x[df['Type'] == "Cost"].sum()/1e7),
-        Revenue=("Amount in INR", lambda x: x[df['Type'] == "Revenue"].sum()/1e7)
-    ).reset_index()
-    summary["C&B % of Revenue"] = (summary["CnB_Amount"] / summary["Revenue"]) * 100
-    summary["MoM C&B Change (%)"] = summary["CnB_Amount"].pct_change().multiply(100).round(2)
-    summary["MoM Revenue Change (%)"] = summary["Revenue"].pct_change().multiply(100).round(2)
-    summary["Rev-C&B Movement Diff"] = summary["MoM Revenue Change (%)"] - summary["MoM C&B Change (%)"]
+    # Extract Segment from chatbot prompt
+    segment_match = re.search(r"\b(?:in|for)?\s*(Transportation|Med Tech|Media & Technology|Plant Engineering|Industrial Products)\b",
+                              user_question or "", re.IGNORECASE)
+    segment_filter = segment_match.group(1) if segment_match else None
 
-    # Total row
-    total_row = pd.DataFrame([{
-        "Period": "Total",
-        "CnB_Amount": summary["CnB_Amount"].sum(),
-        "Revenue": summary["Revenue"].sum(),
-        "C&B % of Revenue": (summary["CnB_Amount"].sum() / summary["Revenue"].sum()) * 100,
-        "MoM C&B Change (%)": summary["MoM C&B Change (%)"].sum(skipna=True),
-        "MoM Revenue Change (%)": summary["MoM Revenue Change (%)"].sum(skipna=True),
-        "Rev-C&B Movement Diff": summary["Rev-C&B Movement Diff"].sum(skipna=True)
-    }])
-    summary = pd.concat([summary, total_row], ignore_index=True)
+    if segment_filter and 'Segment' in df.columns:
+        df['Segment'] = df['Segment'].fillna('').str.strip()
+        df = df[df['Segment'].str.lower() == segment_filter.lower()]
 
+    # BU/DU prep
+    df['DU'] = df.get('Exec DU', 'Unknown')
+    df['BU'] = df.get('Exec DG', 'Unknown')
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    df = df.dropna(subset=['Month'])
+
+    df_cb = df[df['Group3'].str.contains('C&B', na=False)]
+    df_rev = df[df['Type'].str.lower() == 'revenue']
+
+    freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
+
+    if freq_option == 'MoM':
+        period = df['Month'].dt.to_period('M')
+        title_str = "MoM Revenue vs C&B % of Revenue"
+        cb_label = "MoM C&B Change (%)"
+        rev_label = "MoM Revenue Change (%)"
+    elif freq_option == 'QoQ':
+        period = df['Month'].dt.to_period('Q')
+        title_str = "QoQ Revenue vs C&B % of Revenue"
+        cb_label = "QoQ C&B Change (%)"
+        rev_label = "QoQ Revenue Change (%)"
+    else:
+        period = df['Month'].dt.to_period('Y')
+        title_str = "YoY Revenue vs C&B % of Revenue"
+        cb_label = "YoY C&B Change (%)"
+        rev_label = "YoY Revenue Change (%)"
+
+    cb_agg = df_cb.groupby(period)[amount_col].sum()
+    rev_agg = df_rev.groupby(period)[amount_col].sum()
+
+    df_summary = pd.DataFrame({
+        'C&B (Million USD)': cb_agg / 1e6,
+        'Revenue (Million USD)': rev_agg / 1e6
+    }).dropna()
+
+    df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
+    df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
+    df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
+    df_summary = df_summary.round(2)
+
+    # 📊 Summary Block
+    st.markdown(f"### 📊 {title_str}")
+    if df_summary.shape[0] >= 2:
+        last, prev = df_summary.index[-1], df_summary.index[-2]
+        cb_chg = df_summary.loc[last, cb_label]
+        rev_chg = df_summary.loc[last, rev_label]
+        st.markdown(
+            f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
+        )
+
+    # 📋 Summary Table (with Total)
     st.markdown("### Summary Table")
+    df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
+    total_row = pd.DataFrame([{
+        'Period': 'Total',
+        'C&B (Million USD)': df_sum_display['C&B (Million USD)'].sum(),
+        'Revenue (Million USD)': df_sum_display['Revenue (Million USD)'].sum(),
+        'C&B % of Revenue': '',
+        cb_label: '',
+        rev_label: ''
+    }])
+    df_sum_display = pd.concat([df_sum_display, total_row], ignore_index=True)
+    st.dataframe(df_sum_display, hide_index=True)
 
-    # Safe style formatting
-    def color_diff(val):
-        if isinstance(val, float):
-            return "color: green" if val >= 0 else "color: red"
-        return ""
+    # 🧾 BU/DU Revenue Tables
+    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
+    df_rev['Period'] = period
 
-    styled = summary.style.format({
-        "CnB_Amount": "{:.2f}",
-        "Revenue": "{:.2f}",
-        "C&B % of Revenue": "{:.2f}",
-        "MoM C&B Change (%)": "{:.2f}",
-        "MoM Revenue Change (%)": "{:.2f}",
-        "Rev-C&B Movement Diff": "{:.2f}"
-    }).applymap(color_diff, subset=["Rev-C&B Movement Diff"])       .set_properties(subset=pd.IndexSlice[[len(summary)-1], :], **{"font-weight": "bold"})       .set_table_styles([
-        {"selector": "th.col0", "props": [("background-color", "#FDEBD0")]},
-        {"selector": "th.col1", "props": [("background-color", "#D6EAF8")]},
-        {"selector": "th.col2", "props": [("background-color", "#FADBD8")]},
-        {"selector": "th.col3", "props": [("background-color", "#D5F5E3")]},
-        {"selector": "th.col4", "props": [("background-color", "#F9E79F")]},
-        {"selector": "th.col5", "props": [("background-color", "#E8DAEF")]},
-        {"selector": "th.col6", "props": [("background-color", "#F5CBA7")]}
-    ])
+    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_bu.loc['Total'] = pivot_bu.sum()
+    st.markdown("#### Revenue by BU (Million USD)")
+    st.dataframe(pivot_bu.round(1).reset_index())
 
-    st.dataframe(styled, use_container_width=True)
+    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_du.loc['Total'] = pivot_du.sum()
+    st.markdown("#### Revenue by DU (Million USD)")
+    st.dataframe(pivot_du.round(1).reset_index())
