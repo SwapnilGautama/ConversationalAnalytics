@@ -16,7 +16,7 @@ PROMPT_BANK = [
     "C&B cost as percentage of revenue trend",
     "What is FTE trend over months?",
     "How is utilization % trending?",
-    "realize rate",
+    "realized rate",
     "fresher ut trend"
 ]
 
