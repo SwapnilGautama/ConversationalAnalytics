@@ -17,6 +17,7 @@ PROMPT_BANK = [
     "What is FTE trend over months?",
     "How is utilization % trending?",
     "realized rate",
+    "revenue per person",
     "fresher ut trend"
 ]
 
