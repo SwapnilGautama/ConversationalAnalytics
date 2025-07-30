@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 import os
 
-from kpi_engine.utils import load_ut_data  # ⬅️ this should already exist
+from kpi_engine.realized_rate import calculate_realized_rate
 
 def run(pnl_df):
     st.markdown("## Q6. Realized Rate Analysis")
