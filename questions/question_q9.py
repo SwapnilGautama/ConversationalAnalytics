@@ -31,6 +31,21 @@ df_ut_grouped = df_ut_grouped.rename(columns={'PSNo': 'FTEs'})
 merged = pd.merge(df_revenue, df_ut_grouped, on='Month', how='inner')
 merged['Revenue per Person'] = merged['Amount in USD'] / merged['FTEs']
 
-# Month name mapping
+# ✅ Month name mapping (FIXED LINE)
 month_map = {
-    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: '
+    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+}
+merged['Month'] = merged['Month'].map(month_map)
+
+# ✅ Show table
+st.dataframe(merged[['Month', 'Revenue per Person']].set_index('Month').style.format("{:.0f}"))
+
+# ✅ Plot trend
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(merged['Month'], merged['Revenue per Person'], marker='o', color='steelblue')
+ax.set_title("Revenue per Person Trend")
+ax.set_xlabel("Month")
+ax.set_ylabel("Revenue per Person")
+ax.grid(True)
+st.pyplot(fig)
