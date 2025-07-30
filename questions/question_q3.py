@@ -40,8 +40,13 @@ def run(df, user_question=None):
     latest_q = latest_month.to_period('Q')
     prev_q = (latest_month - pd.DateOffset(months=3)).to_period('Q')
 
-    # Prepare data
-    df_cb = df[df['Group3'].str.contains('C&B', na=False)]
+    # ✅ Use updated C&B logic from Group Description
+    cb_keywords = [
+        "Onsite Salaries & Allowances", "Cost of Onsite TPCs/Retainers",
+        "C&B Cost Offshore", "Professional Fee - Retainers/TPC"
+    ]
+    df_cb = df[df['Group Description'].isin(cb_keywords)]
+
     df_cost = df[df['Type'].str.lower() == 'cost']
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
@@ -116,4 +121,3 @@ def run(df, user_question=None):
             .set_properties(**{'white-space': 'normal', 'text-align': 'left'})
             .set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     )
-
