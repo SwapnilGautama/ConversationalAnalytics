@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from kpi_engine.realized_rate import calculate_realized_rate
 
-def run_question_q6(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
+def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame):
     st.subheader("Q6. Realized Rate Analysis")
 
     # Ask user for filters
