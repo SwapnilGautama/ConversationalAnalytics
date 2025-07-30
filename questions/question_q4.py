@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (Chart-Free Version, with Segment Filter Support)
+# ✅ FINAL Q4 CODE (Chart-Free Version, with Segment Filter Support + Totals)
 import pandas as pd
 import re
 
@@ -13,7 +13,7 @@ def run(df, user_question=None):
         return
 
     # Extract Segment from chatbot prompt
-    segment_match = re.search(r"\b(?:in|for)?\s*(Transportation|Med Tech|Media & Technology|Plant Engineering|Industrial Products)\b", 
+    segment_match = re.search(r"\b(?:in|for)?\s*(Transportation|Med Tech|Media & Technology|Plant Engineering|Industrial Products)\b",
                               user_question or "", re.IGNORECASE)
     segment_filter = segment_match.group(1) if segment_match else None
 
@@ -71,18 +71,30 @@ def run(df, user_question=None):
             f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
 
-    # 📋 Summary Table
+    # 📋 Summary Table (with Total)
     st.markdown("### Summary Table")
-    st.dataframe(df_summary.reset_index().rename(columns={'Month': 'Period'}), hide_index=True)
+    df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
+    total_row = pd.DataFrame([{
+        'Period': 'Total',
+        'C&B (Million USD)': df_sum_display['C&B (Million USD)'].sum(),
+        'Revenue (Million USD)': df_sum_display['Revenue (Million USD)'].sum(),
+        'C&B % of Revenue': '',
+        cb_label: '',
+        rev_label: ''
+    }])
+    df_sum_display = pd.concat([df_sum_display, total_row], ignore_index=True)
+    st.dataframe(df_sum_display, hide_index=True)
 
     # 🧾 BU/DU Revenue Tables
     st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
-    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
 
+    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_bu.loc['Total'] = pivot_bu.sum()
     st.markdown("#### Revenue by BU (Million USD)")
     st.dataframe(pivot_bu.round(1).reset_index())
 
+    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+    pivot_du.loc['Total'] = pivot_du.sum()
     st.markdown("#### Revenue by DU (Million USD)")
     st.dataframe(pivot_du.round(1).reset_index())
