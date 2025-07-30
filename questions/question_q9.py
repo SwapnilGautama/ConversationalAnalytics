@@ -1,58 +1,87 @@
 import pandas as pd
+import streamlit as st
 
-def answer_question_q9(pnl_df: pd.DataFrame, ut_df: pd.DataFrame, account_name: str) -> dict:
-    """
-    Calculates the monthly Revenue per Person for a given account.
+def run(df_pnl, df_ut, user_question=None):
+    st.markdown("### 📊 Revenue per Person Trends by Account")
 
-    Parameters:
-    - pnl_df (pd.DataFrame): P&L table with revenue data
-    - ut_df (pd.DataFrame): UT table with headcount data
-    - account_name (str): Final customer / account name to filter
+    # Clean column names
+    df_pnl.columns = df_pnl.columns.str.strip()
+    df_ut.columns = df_ut.columns.str.strip()
 
-    Returns:
-    - dict: Contains summary, trend table, and chart metadata
-    """
-    # Step 1: Filter both datasets for the given account
-    rev_df = pnl_df[pnl_df["Final Customer Name"].str.lower() == account_name.lower()].copy()
-    hc_df = ut_df[ut_df["Final Customer Name"].str.lower() == account_name.lower()].copy()
+    # ✅ Revenue logic
+    revenue_df = df_pnl[
+        (df_pnl['Group1'].isin(['ONSITE', 'OFFSHORE', 'INDIRECT REVENUE']))
+    ].copy()
 
-    if rev_df.empty or hc_df.empty:
-        return {
-            "answer": f"Revenue per person trends not available for account '{account_name}'.",
-            "table": pd.DataFrame(),
-            "chart": None,
-        }
+    if 'Amount in USD' not in revenue_df.columns:
+        st.error("❌ 'Amount in USD' column not found in P&L data.")
+        return
 
-    # Step 2: Standardize month format
-    rev_df["Month"] = pd.to_datetime(rev_df["Month"]).dt.strftime("%b-%Y")
-    hc_df["Month"] = pd.to_datetime(hc_df["Month"]).dt.strftime("%b-%Y")
+    # ✅ Use 'date_a' from UT for all temporal fields
+    if 'date_a' not in df_ut.columns:
+        st.error("❌ 'date_a' column not found in UT data.")
+        return
 
-    # Step 3: Aggregate monthly revenue and HC
-    monthly_revenue = rev_df.groupby("Month")["Amount in USD"].sum().reset_index()
-    monthly_revenue.rename(columns={"Amount in USD": "Revenue"}, inplace=True)
+    df_ut['Month'] = pd.to_datetime(df_ut['date_a'], errors='coerce').dt.to_period('M')
+    df_pnl['Month'] = pd.to_datetime(df_pnl['Date'], errors='coerce').dt.to_period('M')
 
-    monthly_hc = hc_df.groupby("Month")["HC"].sum().reset_index()
-    monthly_hc.rename(columns={"HC": "Headcount"}, inplace=True)
+    # ✅ Join on overlapping fields
+    join_cols = ['Segment', 'PVDG', 'PVDU', 'Exec DG', 'Exec DU',
+                 'FinalCustomerName', 'Contract ID', 'Date', 'wbs id']
+    available_cols = [col for col in join_cols if col in df_pnl.columns and col in df_ut.columns]
 
-    # Step 4: Merge revenue and HC
-    merged = pd.merge(monthly_revenue, monthly_hc, on="Month", how="inner")
-    merged["Revenue per Person"] = (merged["Revenue"] / merged["Headcount"]).round(2)
+    if not available_cols:
+        st.error("❌ No matching join columns found in both datasets.")
+        return
 
-    # Step 5: Format output
-    latest_month = merged["Month"].iloc[-1]
-    latest_val = merged["Revenue per Person"].iloc[-1]
-
-    summary = (
-        f"Revenue per person for account '{account_name}' in {latest_month} was ${latest_val}."
+    merged = pd.merge(
+        revenue_df,
+        df_ut,
+        on=available_cols,
+        how='inner'
     )
 
-    return {
-        "answer": summary,
-        "table": merged[["Month", "Revenue", "Headcount", "Revenue per Person"]],
-        "chart": {
-            "type": "line",
-            "x": merged["Month"].tolist(),
-            "y": merged["Revenue per Person"].tolist(),
-            "title": f"Revenue per Person Trend for {account_name}"
-        }
-    }
+    if merged.empty:
+        st.warning("⚠️ Merge resulted in empty dataset. Please verify join keys or data.")
+        return
+
+    # ✅ Revenue per Person calculation
+    merged['Revenue'] = merged['Amount in USD']
+    merged['Month'] = pd.to_datetime(merged['date_a'], errors='coerce').dt.to_period('M')
+    merged = merged.dropna(subset=['Month'])
+
+    if 'PSNo' not in merged.columns:
+        st.error("❌ Column 'PSNo' not found for headcount calculation.")
+        return
+
+    # Group by Month, FinalCustomerName, and Segment/BU/DU
+    merged['BU'] = merged['Exec DG']
+    merged['DU'] = merged['Exec DU']
+    merged['Segment'] = merged['Segment']
+    merged['Account'] = merged['FinalCustomerName']
+
+    # Pivot helper
+    def build_pivot(index_dim):
+        grouped = (
+            merged.groupby(['Month', index_dim])
+            .agg({
+                'Revenue': 'sum',
+                'PSNo': pd.Series.nunique
+            })
+            .reset_index()
+        )
+        grouped['Revenue per Person'] = grouped['Revenue'] / grouped['PSNo']
+        pivot = grouped.pivot(index='Month', columns=index_dim, values='Revenue per Person')
+        pivot = pivot.fillna(0).round(1)
+        pivot.index = pivot.index.astype(str)
+        return pivot
+
+    # Build Subtabs
+    tabs = st.tabs(["📊 By Segment", "🏢 By BU", "🏭 By DU"])
+    dim_map = {'📊 By Segment': 'Segment', '🏢 By BU': 'BU', '🏭 By DU': 'DU'}
+
+    for i, (tab, dim) in enumerate(dim_map.items()):
+        with tabs[i]:
+            st.markdown(f"#### Revenue per Person by Account and {dim}")
+            pivot = build_pivot('Account' if dim == 'Segment' else dim)
+            st.dataframe(pivot.reset_index(), hide_index=True)
