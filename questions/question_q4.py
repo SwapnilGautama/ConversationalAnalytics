@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (Chart-Free Version, with Segment Filter Support + Totals)
+# ✅ FINAL Q4 CODE (with Segment Filter, Totals, and Movement Impact Metric)
 import pandas as pd
 import re
 
@@ -21,7 +21,6 @@ def run(df, user_question=None):
         df['Segment'] = df['Segment'].fillna('').str.strip()
         df = df[df['Segment'].str.lower() == segment_filter.lower()]
 
-    # BU/DU prep
     df['DU'] = df.get('Exec DU', 'Unknown')
     df['BU'] = df.get('Exec DG', 'Unknown')
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
@@ -59,6 +58,7 @@ def run(df, user_question=None):
     df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
     df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
     df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
+    df_summary['Rev-C&B Movement Diff'] = df_summary[rev_label] - df_summary[cb_label]
     df_summary = df_summary.round(2)
 
     # 📊 Summary Block
@@ -71,18 +71,29 @@ def run(df, user_question=None):
             f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
 
-    # 📋 Summary Table (with Total)
+    # 📋 Summary Table
     st.markdown("### Summary Table")
     df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
-    total_row = pd.DataFrame([{
-        'Period': 'Total',
-        'C&B (Million USD)': df_sum_display['C&B (Million USD)'].sum(),
-        'Revenue (Million USD)': df_sum_display['Revenue (Million USD)'].sum(),
-        'C&B % of Revenue': '',
-        cb_label: '',
-        rev_label: ''
-    }])
-    df_sum_display = pd.concat([df_sum_display, total_row], ignore_index=True)
+
+    # ✅ Totals (including C&B % of Revenue and Rev-C&B Diff)
+    total_cb = df_sum_display['C&B (Million USD)'].sum()
+    total_rev = df_sum_display['Revenue (Million USD)'].sum()
+    avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
+    avg_cb_chg = df_sum_display[cb_label].mean()
+    avg_rev_chg = df_sum_display[rev_label].mean()
+    avg_diff = avg_rev_chg - avg_cb_chg
+
+    total_row = {
+        'Period': '**Total**',
+        'C&B (Million USD)': f"**{total_cb:.2f}**",
+        'Revenue (Million USD)': f"**{total_rev:.2f}**",
+        'C&B % of Revenue': f"**{avg_cb_pct:.2f}**",
+        cb_label: f"**{avg_cb_chg:.2f}**",
+        rev_label: f"**{avg_rev_chg:.2f}**",
+        'Rev-C&B Movement Diff': f"**{avg_diff:+.2f}**"
+    }
+
+    df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
     st.dataframe(df_sum_display, hide_index=True)
 
     # 🧾 BU/DU Revenue Tables
