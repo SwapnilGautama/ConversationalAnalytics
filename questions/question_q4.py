@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (with Segment Filter, Totals, and Movement Impact Metric, and FORMATTING)
+# ✅ FINAL Q4 CODE with formatting, totals, and visual enhancements
 import pandas as pd
 import re
 
@@ -61,6 +61,7 @@ def run(df, user_question=None):
     df_summary['Rev-C&B Movement Diff'] = df_summary[rev_label] - df_summary[cb_label]
     df_summary = df_summary.round(2)
 
+    # 📊 Summary Block
     st.markdown(f"### 📊 {title_str}")
     if df_summary.shape[0] >= 2:
         last, prev = df_summary.index[-1], df_summary.index[-2]
@@ -70,10 +71,10 @@ def run(df, user_question=None):
             f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
         )
 
+    # 📋 Summary Table
     st.markdown("### Summary Table")
     df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
 
-    # Totals
     total_cb = df_sum_display['C&B (Million USD)'].sum()
     total_rev = df_sum_display['Revenue (Million USD)'].sum()
     avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
@@ -93,22 +94,53 @@ def run(df, user_question=None):
 
     df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
 
-    def style_table(df, pastel_color="#E8F1FF"):
-        return df.style\
-            .apply(lambda x: ['background-color: #f0f0f0' if i%2==0 else 'white' for i in range(len(x))], axis=0)\
-            .set_table_styles([{'selector': 'thead', 'props': [('background-color', pastel_color)]}])\
-            .applymap(lambda v: 'font-weight: bold' if str(v).lower().startswith('total') or ('**' in str(v)) else '')
+    def highlight_totals(row):
+        return ['font-weight: bold' if row['Period'] == 'Total' else '' for _ in row]
 
-    st.dataframe(style_table(df_sum_display))
+    def highlight_diff(val):
+        try:
+            if isinstance(val, str): return ''
+            return 'color: green;' if val > 0 else 'color: red;'
+        except:
+            return ''
 
-    # BU/DU Tables
+    st.dataframe(
+        df_sum_display.style
+        .apply(highlight_totals, axis=1)
+        .applymap(highlight_diff, subset=['Rev-C&B Movement Diff'])
+        .set_properties(**{'border': '1px solid lightgrey'})
+        .set_table_styles([
+            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]},  # Light pastel blue
+        ])
+        .format("{:.2f}", subset=df_sum_display.columns.drop('Period'))
+    )
+
+    # 🧾 BU/DU Revenue Tables
+    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
     df_rev['Period'] = period
+
     pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_bu.loc['Total'] = pivot_bu.sum()
+    pivot_bu.loc['Total'] = pivot_bu.sum().round(1)
     st.markdown("#### Revenue by BU (Million USD)")
-    st.dataframe(style_table(pivot_bu.reset_index(), pastel_color="#FCE9F1"))
+    st.dataframe(
+        pivot_bu.reset_index().style
+        .apply(lambda r: ['font-weight: bold' if r['Period'] == 'Total' else '' for _ in r], axis=1)
+        .set_properties(**{'border': '1px solid lightgrey'})
+        .set_table_styles([
+            {'selector': 'thead th', 'props': [('background-color', '#fce7f3')]}  # Light pastel pink
+        ])
+        .format("{:.1f}")
+    )
 
     pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_du.loc['Total'] = pivot_du.sum()
+    pivot_du.loc['Total'] = pivot_du.sum().round(1)
     st.markdown("#### Revenue by DU (Million USD)")
-    st.dataframe(style_table(pivot_du.reset_index(), pastel_color="#E5FBEF"))
+    st.dataframe(
+        pivot_du.reset_index().style
+        .apply(lambda r: ['font-weight: bold' if r['Period'] == 'Total' else '' for _ in r], axis=1)
+        .set_properties(**{'border': '1px solid lightgrey'})
+        .set_table_styles([
+            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]}  # Alternating pastel
+        ])
+        .format("{:.1f}")
+    )
