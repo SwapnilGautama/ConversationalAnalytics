@@ -1,4 +1,4 @@
-# ✅ FINAL Q4 CODE (with Segment Filter, Totals, and Movement Impact Metric)
+# ✅ ENHANCED Q4 CODE: With Sub-tabs under MoM / QoQ / YoY
 import pandas as pd
 import re
 
@@ -29,83 +29,86 @@ def run(df, user_question=None):
     df_cb = df[df['Group3'].str.contains('C&B', na=False)]
     df_rev = df[df['Type'].str.lower() == 'revenue']
 
-    freq_option = st.radio("Choose trend frequency", ['MoM', 'QoQ', 'YoY'], horizontal=True)
+    # === Main Tabs ===
+    trend_tabs = st.tabs(["📈 MoM", "📊 QoQ", "📉 YoY"])
 
-    if freq_option == 'MoM':
-        period = df['Month'].dt.to_period('M')
-        title_str = "MoM Revenue vs C&B % of Revenue"
-        cb_label = "MoM C&B Change (%)"
-        rev_label = "MoM Revenue Change (%)"
-    elif freq_option == 'QoQ':
-        period = df['Month'].dt.to_period('Q')
-        title_str = "QoQ Revenue vs C&B % of Revenue"
-        cb_label = "QoQ C&B Change (%)"
-        rev_label = "QoQ Revenue Change (%)"
-    else:
-        period = df['Month'].dt.to_period('Y')
-        title_str = "YoY Revenue vs C&B % of Revenue"
-        cb_label = "YoY C&B Change (%)"
-        rev_label = "YoY Revenue Change (%)"
+    for i, freq_option in enumerate(['MoM', 'QoQ', 'YoY']):
+        with trend_tabs[i]:
+            if freq_option == 'MoM':
+                period = df['Month'].dt.to_period('M')
+                title_str = "MoM Revenue vs C&B % of Revenue"
+                cb_label = "MoM C&B Change (%)"
+                rev_label = "MoM Revenue Change (%)"
+            elif freq_option == 'QoQ':
+                period = df['Month'].dt.to_period('Q')
+                title_str = "QoQ Revenue vs C&B % of Revenue"
+                cb_label = "QoQ C&B Change (%)"
+                rev_label = "QoQ Revenue Change (%)"
+            else:
+                period = df['Month'].dt.to_period('Y')
+                title_str = "YoY Revenue vs C&B % of Revenue"
+                cb_label = "YoY C&B Change (%)"
+                rev_label = "YoY Revenue Change (%)"
 
-    cb_agg = df_cb.groupby(period)[amount_col].sum()
-    rev_agg = df_rev.groupby(period)[amount_col].sum()
+            cb_agg = df_cb.groupby(period)[amount_col].sum()
+            rev_agg = df_rev.groupby(period)[amount_col].sum()
 
-    df_summary = pd.DataFrame({
-        'C&B (Million USD)': cb_agg / 1e6,
-        'Revenue (Million USD)': rev_agg / 1e6
-    }).dropna()
+            df_summary = pd.DataFrame({
+                'C&B (Million USD)': cb_agg / 1e6,
+                'Revenue (Million USD)': rev_agg / 1e6
+            }).dropna()
 
-    df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
-    df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
-    df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
-    df_summary['Rev-C&B Movement Diff'] = df_summary[rev_label] - df_summary[cb_label]
-    df_summary = df_summary.round(2)
+            df_summary['C&B % of Revenue'] = (df_summary['C&B (Million USD)'] / df_summary['Revenue (Million USD)']) * 100
+            df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
+            df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
+            df_summary['Rev-C&B Movement Diff'] = df_summary[rev_label] - df_summary[cb_label]
+            df_summary = df_summary.round(2)
 
-    # 📊 Summary Block
-    st.markdown(f"### 📊 {title_str}")
-    if df_summary.shape[0] >= 2:
-        last, prev = df_summary.index[-1], df_summary.index[-2]
-        cb_chg = df_summary.loc[last, cb_label]
-        rev_chg = df_summary.loc[last, rev_label]
-        st.markdown(
-            f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
-        )
+            # 📊 Trend Summary Header
+            st.markdown(f"### 📊 {title_str}")
+            if df_summary.shape[0] >= 2:
+                last, prev = df_summary.index[-1], df_summary.index[-2]
+                cb_chg = df_summary.loc[last, cb_label]
+                rev_chg = df_summary.loc[last, rev_label]
+                st.markdown(
+                    f"📌 In **{last}**, C&B cost changed by **{cb_chg:+.1f}%** while revenue changed by **{rev_chg:+.1f}%** vs **{prev}**."
+                )
 
-    # 📋 Summary Table
-    st.markdown("### Summary Table")
-    df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
+            # === Sub-tabs ===
+            sub_tabs = st.tabs(["📋 Summary Table", "🏢 Revenue by BU", "🏭 Revenue by DU"])
 
-    # ✅ Totals (including C&B % of Revenue and Rev-C&B Diff)
-    total_cb = df_sum_display['C&B (Million USD)'].sum()
-    total_rev = df_sum_display['Revenue (Million USD)'].sum()
-    avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
-    avg_cb_chg = df_sum_display[cb_label].mean()
-    avg_rev_chg = df_sum_display[rev_label].mean()
-    avg_diff = avg_rev_chg - avg_cb_chg
+            with sub_tabs[0]:
+                df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
 
-    total_row = {
-        'Period': '**Total**',
-        'C&B (Million USD)': f"**{total_cb:.2f}**",
-        'Revenue (Million USD)': f"**{total_rev:.2f}**",
-        'C&B % of Revenue': f"**{avg_cb_pct:.2f}**",
-        cb_label: f"**{avg_cb_chg:.2f}**",
-        rev_label: f"**{avg_rev_chg:.2f}**",
-        'Rev-C&B Movement Diff': f"**{avg_diff:+.2f}**"
-    }
+                total_cb = df_sum_display['C&B (Million USD)'].sum()
+                total_rev = df_sum_display['Revenue (Million USD)'].sum()
+                avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
+                avg_cb_chg = df_sum_display[cb_label].mean()
+                avg_rev_chg = df_sum_display[rev_label].mean()
+                avg_diff = avg_rev_chg - avg_cb_chg
 
-    df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
-    st.dataframe(df_sum_display, hide_index=True)
+                total_row = {
+                    'Period': '**Total**',
+                    'C&B (Million USD)': f"**{total_cb:.2f}**",
+                    'Revenue (Million USD)': f"**{total_rev:.2f}**",
+                    'C&B % of Revenue': f"**{avg_cb_pct:.2f}**",
+                    cb_label: f"**{avg_cb_chg:.2f}**",
+                    rev_label: f"**{avg_rev_chg:.2f}**",
+                    'Rev-C&B Movement Diff': f"**{avg_diff:+.2f}**"
+                }
 
-    # 🧾 BU/DU Revenue Tables
-    st.markdown("### 🧾 Revenue Breakdown by BU and DU")
-    df_rev['Period'] = period
+                df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(df_sum_display, hide_index=True)
 
-    pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_bu.loc['Total'] = pivot_bu.sum()
-    st.markdown("#### Revenue by BU (Million USD)")
-    st.dataframe(pivot_bu.round(1).reset_index())
+            with sub_tabs[1]:
+                df_rev['Period'] = period
+                pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+                pivot_bu.loc['Total'] = pivot_bu.sum()
+                st.markdown("#### Revenue by BU (Million USD)")
+                st.dataframe(pivot_bu.round(1).reset_index())
 
-    pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-    pivot_du.loc['Total'] = pivot_du.sum()
-    st.markdown("#### Revenue by DU (Million USD)")
-    st.dataframe(pivot_du.round(1).reset_index())
+            with sub_tabs[2]:
+                pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+                pivot_du.loc['Total'] = pivot_du.sum()
+                st.markdown("#### Revenue by DU (Million USD)")
+                st.dataframe(pivot_du.round(1).reset_index())
