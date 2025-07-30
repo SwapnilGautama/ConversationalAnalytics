@@ -1,104 +1,82 @@
 import pandas as pd
 import streamlit as st
+from kpi_engine.revenue import calculate_revenue
+from kpi_engine.utilization import calculate_utilization
+from style_utils import style_table_grey_and_white
 
-def run(realized_rate_threshold=3):
-    st.header("Accounts with Significant Realized Rate Drop")
+# Title
+st.subheader("Accounts with Significant Realized Rate Drop")
 
-    # Load UT data
-    try:
-        ut_df = pd.read_excel("sample_data/LNTData.xlsx", engine='openpyxl')
-    except:
-        st.error("Could not load UT data file.")
-        return
+# Inputs
+threshold = st.number_input("Realized Rate Drop Threshold ($):", min_value=0.0, value=3.0)
+segment_filter = st.text_input("Optional Segment Filter (leave blank for all):").strip().lower()
 
-    # Load P&L data
-    try:
-        pnl_df = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL", engine='openpyxl')
-    except:
-        st.error("Could not load P&L data file.")
-        return
+# Load data
+try:
+    pnl_df = st.session_state['pnl_df'].copy()
+    ut_df = st.session_state['ut_df'].copy()
+except:
+    st.error("Required data not found in session_state.")
+    st.stop()
 
-    # Clean columns
-    ut_df.columns = ut_df.columns.str.strip()
-    pnl_df.columns = pnl_df.columns.str.strip()
+# Clean and prepare date fields
+if 'Month' in pnl_df.columns:
+    pnl_df['Month'] = pd.to_datetime(pnl_df['Month'], errors='coerce')
+    pnl_df['Quarter'] = pnl_df['Month'].dt.to_period('Q').astype(str)
+    pnl_df['Year'] = pnl_df['Month'].dt.year
+    pnl_df['Month_Year'] = pnl_df['Month'].dt.strftime('%b-%Y')
+else:
+    st.error("P&L data is missing 'Month' column.")
+    st.stop()
 
-    # Rename common fields
-    if 'Final Customer name' in pnl_df.columns:
-        pnl_df.rename(columns={'Final Customer name': 'FinalCustomerName'}, inplace=True)
-    if 'Final Customer name' in ut_df.columns:
-        ut_df.rename(columns={'Final Customer name': 'FinalCustomerName'}, inplace=True)
-    if 'Amount in USD' in pnl_df.columns:
-        pnl_df.rename(columns={'Amount in USD': 'Amount'}, inplace=True)
+if 'Month' in ut_df.columns:
+    ut_df['Month'] = pd.to_datetime(ut_df['Month'], errors='coerce')
+    ut_df['Quarter'] = ut_df['Month'].dt.to_period('Q').astype(str)
+    ut_df['Year'] = ut_df['Month'].dt.year
+    ut_df['Month_Year'] = ut_df['Month'].dt.strftime('%b-%Y')
+else:
+    st.error("UT data is missing 'Month' column.")
+    st.stop()
 
-    # Fill missing Month/Year columns
-    for df, name in [(pnl_df, 'P&L'), (ut_df, 'UT')]:
-        if 'Month' not in df.columns or 'Year' not in df.columns:
-            st.warning(f"Month or Year column missing in {name} data. Attempting to construct from Month_Year...")
-            if 'Month_Year' in df.columns:
-                df[['Month', 'Year']] = df['Month_Year'].astype(str).str.split('-', expand=True)
-            else:
-                st.error(f"{name} data is missing both Month/Year and Month_Year columns.")
-                return
+# Filter by segment if provided
+if segment_filter:
+    pnl_df = pnl_df[pnl_df['Segment'].str.lower() == segment_filter]
+    ut_df = ut_df[ut_df['Segment'].str.lower() == segment_filter]
 
-        df['Month'] = df['Month'].astype(str).str.zfill(2)
-        df['Year'] = df['Year'].astype(str)
+# Compute Revenue (filtered to revenue entries only)
+revenue_df = pnl_df[
+    (pnl_df['Group1'].str.upper().isin(['ONSITE', 'OFFSHORE', 'INDIRECT REVENUE'])) &
+    (pnl_df['Type'].str.lower() == 'revenue')
+]
+revenue_grouped = revenue_df.groupby(['FinalCustomerName', 'Quarter'])['Amount in USD'].sum().reset_index()
+revenue_grouped.rename(columns={'Amount in USD': 'Revenue'}, inplace=True)
 
-    # Create unified Quarter column
-    pnl_df['Quarter'] = pd.PeriodIndex(
-        pd.to_datetime(pnl_df['Month'] + '-01-' + pnl_df['Year'], format='%m-%d-%Y'),
-        freq='Q'
-    )
-    ut_df['Quarter'] = pd.PeriodIndex(
-        pd.to_datetime(ut_df['Month'] + '-01-' + ut_df['Year'], format='%m-%d-%Y'),
-        freq='Q'
-    )
+# Compute Available Hours
+ut_grouped = ut_df.groupby(['FinalCustomerName', 'Quarter'])['Net Available Hrs'].sum().reset_index()
+ut_grouped.rename(columns={'Net Available Hrs': 'AvailableHrs'}, inplace=True)
 
-    # Add segment filter
-    segments = sorted(set(pnl_df['Segment'].dropna().unique()) | set(ut_df['Segment'].dropna().unique()))
-    selected_segment = st.selectbox("Select Segment (Optional)", ["All"] + segments)
+# Merge and calculate Realized Rate
+merged = pd.merge(revenue_grouped, ut_grouped, on=['FinalCustomerName', 'Quarter'], how='inner')
+merged['RealizedRate'] = merged['Revenue'] / merged['AvailableHrs']
 
-    # Filter by segment if selected
-    if selected_segment != "All":
-        pnl_df = pnl_df[pnl_df['Segment'] == selected_segment]
-        ut_df = ut_df[ut_df['Segment'] == selected_segment]
+# Pivot to compare 2 most recent quarters
+latest_quarters = sorted(merged['Quarter'].unique())[-2:]
+if len(latest_quarters) < 2:
+    st.warning("Not enough quarter data to compare.")
+    st.stop()
 
-    # Revenue filtering from Group1
-    revenue_df = pnl_df[pnl_df['Group1'].isin(["ONSITE", "OFFSHORE", "INDIRECT REVENUE"])].copy()
-    revenue_df = revenue_df.groupby(['FinalCustomerName', 'Quarter'])['Amount'].sum().reset_index()
-    revenue_df.rename(columns={'Amount': 'Revenue'}, inplace=True)
+pivot = merged.pivot(index='FinalCustomerName', columns='Quarter', values='RealizedRate')
+pivot['Drop'] = pivot[latest_quarters[1]] - pivot[latest_quarters[0]]
+pivot['DropAbs'] = pivot['Drop'].abs()
 
-    # Aggregate UT
-    ut_grouped = ut_df.groupby(['FinalCustomerName', 'Quarter'])['Net Available Hrs'].sum().reset_index()
+# Filter by threshold
+result = pivot[pivot['DropAbs'] >= threshold].reset_index()
+result = result[['FinalCustomerName', latest_quarters[0], latest_quarters[1], 'Drop']]
+result.columns = ['FinalCustomerName', f'{latest_quarters[0]} Rate', f'{latest_quarters[1]} Rate', 'Rate Change']
+result = result.sort_values(by='Rate Change')
 
-    # Merge
-    merged = pd.merge(revenue_df, ut_grouped, on=['FinalCustomerName', 'Quarter'], how='inner')
-    merged['Realized Rate'] = merged['Revenue'] / merged['Net Available Hrs']
-    merged = merged.dropna()
-
-    # Compare last two quarters
-    quarters = sorted(merged['Quarter'].unique())
-    if len(quarters) < 2:
-        st.warning("Not enough quarters of data.")
-        return
-
-    q1, q2 = quarters[-2], quarters[-1]
-    prev_q = merged[merged['Quarter'] == q1][['FinalCustomerName', 'Realized Rate']]
-    curr_q = merged[merged['Quarter'] == q2][['FinalCustomerName', 'Realized Rate']]
-    prev_q.rename(columns={'Realized Rate': 'Previous RR'}, inplace=True)
-    curr_q.rename(columns={'Realized Rate': 'Current RR'}, inplace=True)
-
-    final = pd.merge(prev_q, curr_q, on='FinalCustomerName')
-    final['Drop'] = final['Previous RR'] - final['Current RR']
-    final = final[final['Drop'] > realized_rate_threshold]
-    final = final.round(2)
-
-    st.markdown(f"### Realized Rate Drop > ${realized_rate_threshold} (from {q1} to {q2})")
-    if final.empty:
-        st.info("No significant realized rate drop found.")
-    else:
-        st.dataframe(final.sort_values(by='Drop', ascending=False).reset_index(drop=True))
-
-# For Streamlit interface
-if __name__ == "__main__":
-    threshold = st.slider("Realized Rate Drop Threshold ($)", 1, 10, 3)
-    run(realized_rate_threshold=threshold)
+# Show table
+if result.empty:
+    st.info("No accounts found with significant realized rate drop.")
+else:
+    st.dataframe(style_table_grey_and_white(result))
