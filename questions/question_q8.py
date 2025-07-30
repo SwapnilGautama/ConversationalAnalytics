@@ -8,7 +8,7 @@ def run(prompt=None):
         df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Correct filename
         df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
         df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
-        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)  # ✅ Convert Period to string
+        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)
         df['Year'] = df['Date_a'].dt.year
         df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
         df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
@@ -44,18 +44,23 @@ def run(prompt=None):
     else:
         group_col = "Year"
 
-    # DU Table
-    st.subheader("Utilization % by DU")
-    du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(du_pivot.style.format("{:.2f}"))
+    # === Tabs for each level ===
+    level_tabs = st.tabs(["🏭 DU Level", "🏢 BU Level", "🧑 Agent Level"])
 
-    # BU Table
-    st.subheader("Utilization % by BU")
-    bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
-    st.dataframe(bu_pivot.style.format("{:.2f}"))
+    with level_tabs[0]:
+        st.subheader("Utilization % by DU")
+        du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
+        st.dataframe(du_pivot.style.format("{:.2f}"))
 
-    # Optional Agent Level Table
-    if not agents:
-        st.subheader("Agent-Level Summary Table")
-        agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
-        st.dataframe(agent_table.style.format("{:.2f}"))
+    with level_tabs[1]:
+        st.subheader("Utilization % by BU")
+        bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
+        st.dataframe(bu_pivot.style.format("{:.2f}"))
+
+    with level_tabs[2]:
+        if not agents:
+            st.subheader("Agent-Level Summary Table")
+            agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
+            st.dataframe(agent_table.style.format("{:.2f}"))
+        else:
+            st.info("Agent table is hidden when specific agents are selected.")
