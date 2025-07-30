@@ -15,8 +15,8 @@ def run(_, user_question=None):
 
     # === 📁 Load Data ===
     try:
-        df_pnl = pd.read_excel("data/LnTPnL.xlsx", sheet_name="LnTPnL")
-        df_ut = pd.read_excel("data/LNTData.xlsx", sheet_name="LNTData")
+        df_pnl = pd.read_excel("sample_data/LnTPnL.xlsx", sheet_name="LnTPnL")
+        df_ut = pd.read_excel("sample_data/LNTData.xlsx", sheet_name="LNTData")
     except Exception as e:
         st.error(f"❌ Error loading data: {e}")
         return
