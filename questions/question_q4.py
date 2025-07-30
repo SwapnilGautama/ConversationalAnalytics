@@ -110,7 +110,7 @@ def run(df, user_question=None):
         .applymap(highlight_diff, subset=['Rev-C&B Movement Diff'])
         .set_properties(**{'border': '1px solid lightgrey'})
         .set_table_styles([
-            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]},  # Light pastel blue
+            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]}  # Light pastel blue
         ])
         .format("{:.2f}", subset=df_sum_display.columns.drop('Period'))
     )
@@ -140,7 +140,7 @@ def run(df, user_question=None):
         .apply(lambda r: ['font-weight: bold' if r['Period'] == 'Total' else '' for _ in r], axis=1)
         .set_properties(**{'border': '1px solid lightgrey'})
         .set_table_styles([
-            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]}  # Alternating pastel
+            {'selector': 'thead th', 'props': [('background-color', '#dbeafe')]}  # Light pastel blue
         ])
         .format("{:.1f}")
     )
