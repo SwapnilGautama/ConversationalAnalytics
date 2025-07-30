@@ -79,10 +79,10 @@ PROMPT_BANK = {
         "fresher utilization trend by DU"
     ],
     "Q6": [
-        "Realize Rate Drop",
-        "realize rate drop",
-        "Realize Rate",
-        "realize rate"
+        "Realized Rate Drop",
+        "realized rate drop",
+        "Realized Rate",
+        "realized rate"
     ]
 }
 
