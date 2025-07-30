@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 import re
 
-from realized_rate import calculate_realized_rate
+from kpi_engine.realized_rate import calculate_realized_rate
 
 def run(pnl_df: pd.DataFrame, ut_df: pd.DataFrame, user_question: str = ""):
     st.markdown("## Q6. Realized Rate Analysis")
