@@ -7,7 +7,6 @@ def get_revenue_aggregated(pnl_path):
     df = df[df['Type'].str.lower() == 'revenue']
 
     if 'Month' in df.columns:
-        # Convert Month field to datetime, then extract short month name
         df['Month'] = pd.to_datetime(df['Month'], errors='coerce').dt.month.map({
             1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
             7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
