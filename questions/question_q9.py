@@ -1,51 +1,77 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
-from datetime import datetime
-import os
 
-# Title
-st.markdown("### Revenue per Person Analysis by Account")
+from kpi_engine.revenue_aggregated import revenue_aggregated
+from kpi_engine.headcount_aggregated import headcount_aggregated
 
-# Load data
-df_pnl = pd.read_excel("sample_data/LnTPnL.xlsx")
-df_ut = pd.read_excel("sample_data/LNTData.xlsx")
+def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
+    st.header("Revenue per Person Analysis by Account")
 
-# 🟢 Ensure date format in UT data
-df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
-df_ut = df_ut.dropna(subset=['Date_a'])  # Drop rows with invalid dates
-df_ut['Month'] = df_ut['Date_a'].dt.month
+    # Load revenue and headcount aggregates
+    df_rev = revenue_aggregated(df_pnl)
+    df_hc = headcount_aggregated(df_ut)
 
-# 🟢 Filter only billable resources
-df_ut = df_ut[df_ut['Status'].str.lower().str.contains("bill", na=False)]
+    # Merge on keys
+    df_merged = pd.merge(
+        df_rev,
+        df_hc,
+        on=["FinalCustomerName", "Segment", "Year", "Month_Num"],
+        how="inner"
+    )
 
-# ✅ Group PnL revenue by Month only (no Company_code)
-df_revenue = df_pnl[df_pnl['Type'].str.lower() == 'revenue']
-df_revenue = df_revenue.groupby(['Month'])['Amount in USD'].sum().reset_index()
+    # Calculate Revenue per Person
+    df_merged["Revenue_per_Person"] = (
+        df_merged["Total_Revenue_USD"] / df_merged["Distinct_Headcount"]
+    )
 
-# ✅ Count FTEs from UT by Month only
-df_ut_grouped = df_ut.groupby(['Month'])['PSNo'].nunique().reset_index()
-df_ut_grouped = df_ut_grouped.rename(columns={'PSNo': 'FTEs'})
+    # Format Month Name
+    df_merged["Month_Name"] = pd.to_datetime(df_merged["Month_Num"], format="%m").dt.strftime("%b")
 
-# ✅ Merge datasets by Month only
-merged = pd.merge(df_revenue, df_ut_grouped, on='Month', how='inner')
-merged['Revenue per Person'] = merged['Amount in USD'] / merged['FTEs']
+    # UI: Segment filter
+    segments = sorted(df_merged["Segment"].dropna().unique())
+    selected_segment = st.selectbox("Select Segment", options=segments)
 
-# ✅ Month name mapping (FIXED LINE)
-month_map = {
-    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-}
-merged['Month'] = merged['Month'].map(month_map)
+    df_segment = df_merged[df_merged["Segment"] == selected_segment]
 
-# ✅ Show table
-st.dataframe(merged[['Month', 'Revenue per Person']].set_index('Month').style.format("{:.0f}"))
+    # Output Table
+    table = df_segment[[
+        "FinalCustomerName", "Year", "Month_Name",
+        "Total_Revenue_USD", "Distinct_Headcount", "Revenue_per_Person"
+    ]].sort_values(["FinalCustomerName", "Year", "Month_Name"])
 
-# ✅ Plot trend
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(merged['Month'], merged['Revenue per Person'], marker='o', color='steelblue')
-ax.set_title("Revenue per Person Trend")
-ax.set_xlabel("Month")
-ax.set_ylabel("Revenue per Person")
-ax.grid(True)
-st.pyplot(fig)
+    table_display = table.rename(columns={
+        "FinalCustomerName": "Account",
+        "Total_Revenue_USD": "Revenue ($)",
+        "Distinct_Headcount": "Headcount",
+        "Revenue_per_Person": "Revenue per Person ($)",
+        "Month_Name": "Month"
+    })
+
+    st.subheader("Revenue per Person Table")
+    st.dataframe(table_display.style
+        .format({
+            "Revenue ($)": "{:,.0f}",
+            "Headcount": "{:,.0f}",
+            "Revenue per Person ($)": "{:,.0f}"
+        })
+        .set_properties(**{"border-color": "#ccc", "border-width": "1px", "border-style": "solid"})
+    )
+
+    # Plot: Line chart of Revenue per Person by Month (avg across accounts)
+    st.subheader("Monthly Revenue per Person Trend (Average Across Accounts)")
+    df_plot = (
+        df_segment.groupby(["Year", "Month_Num"], as_index=False)["Revenue_per_Person"]
+        .mean()
+    )
+    df_plot["Month_Label"] = pd.to_datetime(df_plot["Month_Num"], format="%m").dt.strftime("%b")
+    df_plot["Label"] = df_plot["Month_Label"] + " " + df_plot["Year"].astype(str)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(df_plot["Label"], df_plot["Revenue_per_Person"], marker="o")
+    plt.xticks(rotation=45)
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.xlabel("Month")
+    plt.ylabel("Avg Revenue per Person ($)")
+    plt.tight_layout()
+    st.pyplot(plt)
