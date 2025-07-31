@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from kpi_engine.revenue_aggregated import get_revenue_aggregated
-from kpi_engine.headcount_aggregated import get_headcount_aggregated
+from revenue_aggregated import get_revenue_aggregated
+from headcount_aggregated import get_headcount_aggregated
 
 def run(df=None, user_question=None):
     st.title("Revenue per Person by Account")
@@ -10,29 +10,26 @@ def run(df=None, user_question=None):
     df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
     df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
 
-    if df_revenue.empty or df_headcount.empty:
-        st.error("Data loading failed. Please check input files.")
-        return
-
+    # 🔍 Merge
     merged = pd.merge(
         df_revenue,
         df_headcount,
-        on=["FinalCustomerName", "Month"],
+        on=["FinalCustomerName", "Segment", "BU", "DU", "Month"],
         how="inner"
     )
 
+    # ✅ DEBUG: Show what columns are actually in merged
+    st.write("🔍 Columns in merged dataframe:", merged.columns.tolist())
+
+    # 🔢 Calculation
     merged['Revenue per Person'] = merged['Revenue'] / merged['Headcount']
     merged.dropna(subset=['Revenue per Person'], inplace=True)
 
-    # Sort month
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    # Strip whitespace and drop invalid months
-    merged['Month'] = merged['Month'].astype(str).str.strip()
-    merged = merged[merged['Month'].isin(month_order)]
     merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
 
-
+    # 📊 Tabs
     tabs = st.tabs(["Segment", "BU", "DU"])
 
     def render_table(tab, group_col):
