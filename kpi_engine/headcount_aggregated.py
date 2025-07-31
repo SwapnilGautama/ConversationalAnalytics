@@ -11,9 +11,17 @@ def get_headcount_aggregated(ut_path):
     })
 
     df = df[df['Status'].str.lower().str.contains("bill", na=False)]
-    df['Segment'] = df.get('Segment', 'Unknown')
-    df['BU'] = df.get('Exec DG', 'Unknown')
-    df['DU'] = df.get('Exec DU', 'Unknown')
+    if 'Segment' not in df.columns:
+       df['Segment'] = 'Unknown'
+   if 'Exec DG' in df.columns:
+       df['BU'] = df['Exec DG']
+   else:
+       df['BU'] = 'Unknown'
+   if 'Exec DU' in df.columns:
+       df['DU'] = df['Exec DU']
+   else:
+       df['DU'] = 'Unknown'
+
 
     grouped = df.groupby(['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month'])['PSNo'].nunique().reset_index()
     grouped = grouped.rename(columns={'PSNo': 'Headcount'})
