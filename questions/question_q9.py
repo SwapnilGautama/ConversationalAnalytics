@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from revenue_aggregated import get_revenue_aggregated
-from headcount_aggregated import get_headcount_aggregated
+from kpi_engine.revenue_aggregated import get_revenue_aggregated
+from kpi_engine.headcount_aggregated import get_headcount_aggregated
 
 def run(df=None, user_question=None):
     st.title("Revenue per Person by Account")
