@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 from revenue_aggregated import get_revenue_aggregated
 from headcount_aggregated import get_headcount_aggregated
 
@@ -10,18 +9,15 @@ def run(df=None, user_question=None):
     df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
     df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
 
-    # 🔍 Merge
+    # ✅ Join only on reliable keys
     merged = pd.merge(
         df_revenue,
         df_headcount,
-        on=["FinalCustomerName", "Segment", "BU", "DU", "Month"],
+        on=["FinalCustomerName", "Month"],
         how="inner"
     )
 
-    # ✅ DEBUG: Show what columns are actually in merged
-    st.write("🔍 Columns in merged dataframe:", merged.columns.tolist())
-
-    # 🔢 Calculation
+    # 🔢 Compute ratio
     merged['Revenue per Person'] = merged['Revenue'] / merged['Headcount']
     merged.dropna(subset=['Revenue per Person'], inplace=True)
 
