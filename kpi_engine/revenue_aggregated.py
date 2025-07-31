@@ -6,9 +6,16 @@ def get_revenue_aggregated(pnl_path):
     df.columns = df.columns.str.strip()
     df = df[df['Type'].str.lower() == 'revenue']
 
-    df['Segment'] = df.get('Segment', 'Unknown')
-    df['BU'] = df.get('Exec DG', 'Unknown')
-    df['DU'] = df.get('Exec DU', 'Unknown')
+    if 'Segment' not in df.columns:
+        df['Segment'] = 'Unknown'
+    if 'Exec DG' in df.columns:
+       df['BU'] = df['Exec DG']
+   else:
+       df['BU'] = 'Unknown'
+   if 'Exec DU' in df.columns:
+       df['DU'] = df['Exec DU']
+   else:
+       df['DU'] = 'Unknown'
 
     # Ensure Month column is integer
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
