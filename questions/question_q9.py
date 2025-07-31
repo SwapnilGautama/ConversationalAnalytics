@@ -27,7 +27,11 @@ def run(df=None, user_question=None):
     # Sort month
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    # Strip whitespace and drop invalid months
+    merged['Month'] = merged['Month'].astype(str).str.strip()
+    merged = merged[merged['Month'].isin(month_order)]
     merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
+
 
     tabs = st.tabs(["Segment", "BU", "DU"])
 
