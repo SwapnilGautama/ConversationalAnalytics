@@ -9,17 +9,16 @@ def get_revenue_aggregated(pnl_path):
     if 'Segment' not in df.columns:
         df['Segment'] = 'Unknown'
     if 'Exec DG' in df.columns:
-       df['BU'] = df['Exec DG']
-   else:
-       df['BU'] = 'Unknown'
-   if 'Exec DU' in df.columns:
-       df['DU'] = df['Exec DU']
-   else:
-       df['DU'] = 'Unknown'
+        df['BU'] = df['Exec DG']
+    else:
+        df['BU'] = 'Unknown'
+    if 'Exec DU' in df.columns:
+        df['DU'] = df['Exec DU']
+    else:
+        df['DU'] = 'Unknown'
 
     # Ensure Month column is integer
     df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
-    
     df['Month'] = df['Month'].dt.month
 
     # Map to month name
