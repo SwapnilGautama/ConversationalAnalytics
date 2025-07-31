@@ -11,7 +11,9 @@ def get_revenue_aggregated(pnl_path):
     df['DU'] = df.get('Exec DU', 'Unknown')
 
     # Ensure Month column is integer
-    df['Month'] = df['Month'].astype(int)
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    
+    df['Month'] = df['Month'].dt.month
 
     # Map to month name
     df['Month'] = df['Month'].map({
