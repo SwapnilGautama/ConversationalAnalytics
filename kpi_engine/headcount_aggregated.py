@@ -4,7 +4,7 @@ def get_headcount_aggregated(ut_path):
     df = pd.read_excel(ut_path)
 
     df.columns = df.columns.str.strip()
-    df['date_a'] = pd.to_datetime(df['date_a'], errors='coerce')
+    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
     df['Month'] = df['date_a'].dt.month.map({
         1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
         7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
