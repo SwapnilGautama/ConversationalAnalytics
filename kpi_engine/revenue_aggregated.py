@@ -1,23 +1,24 @@
 import pandas as pd
 
-def revenue_aggregated(df_pnl: pd.DataFrame) -> pd.DataFrame:
-    # Filter for valid revenue Group1 categories
-    valid_groups = ["ONSITE", "OFFSHORE", "INDIRECT REVENUE"]
-    df_filtered = df_pnl[
-        (df_pnl["Group1"].isin(valid_groups)) &
-        (df_pnl["Type"].str.upper() == "REVENUE")
-    ].copy()
+def get_revenue_aggregated(pnl_path):
+    df = pd.read_excel(pnl_path)
 
-    # Create Month and Year columns from the 'Month' field (string like 'Jun 2025')
-    df_filtered["Month"] = pd.to_datetime(df_filtered["Month"], format="%b %Y")
-    df_filtered["Month_Num"] = df_filtered["Month"].dt.month
-    df_filtered["Year"] = df_filtered["Month"].dt.year
+    df.columns = df.columns.str.strip()
+    amount_col = next((col for col in df.columns if col.lower() in ['amount in usd', 'amount', 'amountinusd']), None)
 
-    # Group and sum revenue
-    df_revenue = df_filtered.groupby(
-        ["FinalCustomerName", "Segment", "Year", "Month_Num"], as_index=False
-    )["Amount in USD"].sum()
+    if amount_col is None or 'Month' not in df.columns:
+        return pd.DataFrame()
 
-    df_revenue.rename(columns={"Amount in USD": "Total_Revenue_USD"}, inplace=True)
+    df['Month'] = df['Month'].astype(int).map({
+        1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+        7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+    })
 
-    return df_revenue
+    df['Segment'] = df.get('Segment', 'Unknown')
+    df['BU'] = df.get('Exec DG', 'Unknown')
+    df['DU'] = df.get('Exec DU', 'Unknown')
+
+    df_rev = df[df['Type'].str.lower() == 'revenue']
+    df_rev = df_rev.groupby(['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month'])[amount_col].sum().reset_index()
+    df_rev = df_rev.rename(columns={amount_col: 'Revenue'})
+    return df_rev
