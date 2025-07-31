@@ -1,20 +1,20 @@
 import pandas as pd
 
-def headcount_aggregated(df_ut: pd.DataFrame) -> pd.DataFrame:
-    df = df_ut.copy()
+def get_headcount_aggregated(ut_path):
+    df = pd.read_excel(ut_path)
 
-    # Convert Date_a to datetime
-    df["Date_a"] = pd.to_datetime(df["Date_a"], dayfirst=True, errors='coerce')
-    df.dropna(subset=["Date_a"], inplace=True)
+    df.columns = df.columns.str.strip()
+    df['date_a'] = pd.to_datetime(df['date_a'], errors='coerce')
+    df['Month'] = df['date_a'].dt.month.map({
+        1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+        7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+    })
 
-    df["Month_Num"] = df["Date_a"].dt.month
-    df["Year"] = df["Date_a"].dt.year
+    df = df[df['Status'].str.lower().str.contains("bill", na=False)]
+    df['Segment'] = df.get('Segment', 'Unknown')
+    df['BU'] = df.get('Exec DG', 'Unknown')
+    df['DU'] = df.get('Exec DU', 'Unknown')
 
-    # Group and count distinct PSNo
-    df_hc = df.groupby(
-        ["FinalCustomerName", "Segment", "Year", "Month_Num"], as_index=False
-    )["PSNo"].nunique()
-
-    df_hc.rename(columns={"PSNo": "Distinct_Headcount"}, inplace=True)
-
-    return df_hc
+    grouped = df.groupby(['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month'])['PSNo'].nunique().reset_index()
+    grouped = grouped.rename(columns={'PSNo': 'Headcount'})
+    return grouped
