@@ -1,42 +1,48 @@
-# ✅ FINAL Q9: Revenue per Person Trends by Account (fully working)
+# question_q9.py
 import streamlit as st
 import pandas as pd
-import re
-from kpi_engine.revenue_aggregated import revenue_aggregated
-from kpi_engine.headcount_aggregated import headcount_aggregated
+import matplotlib.pyplot as plt
+from revenue_aggregated import get_revenue_aggregated
+from headcount_aggregated import get_headcount_aggregated
 
-def run(df_pnl, df_ut, user_question=None):
-    st.title("Revenue per Person Analysis by Account")
+def run(df=None, user_question=None):
+    st.title("Revenue per Person by Account")
 
-    # ✅ Standardize column names
-    df_pnl.columns = df_pnl.columns.str.strip()
-    df_ut.columns = df_ut.columns.str.strip()
+    # ✅ Load cleaned and aggregated revenue and headcount
+    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
+    df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
 
-    # ✅ Dynamic Revenue Column
-    revenue_col = next((col for col in df_pnl.columns if col.lower().replace(" ", "") in ['amountinusd', 'amount']), None)
-    if not revenue_col:
-        st.error("❌ Column not found: Amount in USD")
-        return
+    # ✅ Merge on FinalCustomerName, Month, and Segment
+    merged = pd.merge(
+        df_revenue,
+        df_headcount,
+        on=["FinalCustomerName", "Month", "Segment"],
+        how="inner"
+    )
 
-    # ✅ Extract Segment if present
-    segment_match = re.search(r"\b(?:in|for)?\s*(Transportation|Med Tech|Media & Technology|Plant Engineering|Industrial Products)\b",
-                              user_question or "", re.IGNORECASE)
-    segment_filter = segment_match.group(1) if segment_match else None
+    # ✅ Calculate Revenue per Person
+    merged['Revenue per Person'] = merged['Revenue'] / merged['Headcount']
+    merged = merged.dropna(subset=['Revenue per Person'])
 
-    # ✅ Load Revenue and Headcount Aggregated
-    revenue_df = calculate_revenue(df_pnl, segment_filter)
-    headcount_df = calculate_headcount(df_ut, segment_filter)
+    # ✅ Month ordering
+    month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
 
-    # ✅ Merge on FinalCustomerName and Month
-    merged_df = pd.merge(revenue_df, headcount_df, on=['FinalCustomerName', 'Month'], how='inner')
-    merged_df['Revenue per Person'] = merged_df['Revenue'] / merged_df['Headcount']
-    merged_df = merged_df.round(2)
+    tabs = st.tabs(["Segment", "BU", "DU"])
 
-    st.subheader("📊 Revenue per Person by Account and Month")
-    st.dataframe(merged_df, hide_index=True)
+    def render_table(tab, group_by_col):
+        with tab:
+            st.subheader(f"Revenue per Person by {group_by_col}")
+            grouped = merged.groupby([group_by_col, 'FinalCustomerName', 'Month'])['Revenue per Person'].mean().reset_index()
+            pivot_table = grouped.pivot_table(
+                index=['FinalCustomerName'],
+                columns='Month',
+                values='Revenue per Person',
+                aggfunc='mean'
+            ).fillna(0)
+            st.dataframe(pivot_table.style.format("{:,.0f}"), use_container_width=True)
 
-    # ✅ Trend Line Chart
-    st.subheader("📈 Trend: Revenue per Person")
-    pivot = merged_df.pivot_table(index='Month', columns='FinalCustomerName', values='Revenue per Person')
-    st.line_chart(pivot)
-
+    render_table(tabs[0], "Segment")
+    render_table(tabs[1], "BU")
+    render_table(tabs[2], "DU")
