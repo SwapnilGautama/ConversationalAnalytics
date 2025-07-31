@@ -2,7 +2,6 @@ import pandas as pd
 
 def get_headcount_aggregated(ut_path):
     df = pd.read_excel(ut_path)
-
     df.columns = df.columns.str.strip()
 
     df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
