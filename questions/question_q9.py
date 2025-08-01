@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -12,7 +11,7 @@ def load_data():
     df_headcount['Month'] = df_headcount['Month'].astype(str).str.strip()
     return df_revenue, df_headcount
 
-def pivot_summary(df, value_field, index_field='Segment'):
+def pivot_summary(df, value_field, index_field='FinalCustomerName'):
     df_pivot = df.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
     df_pivot = df_pivot[[m for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] if m in df_pivot.columns]]
     if value_field != 'Revenue per Person':
@@ -46,11 +45,11 @@ def run(df=None, user_question=None):
     with st.container():
         tabs = st.tabs(["Summary", "Segment", "BU", "DU"])
         with tabs[0]:
-            st.subheader("Revenue per Person by Segment")
+            st.subheader("Revenue per Person by FinalCustomerName")
             merged = pd.merge(
-                df_revenue.groupby(['Segment', 'Month'], as_index=False)['Revenue'].sum(),
-                df_headcount.groupby(['Segment', 'Month'], as_index=False)['Headcount'].sum(),
-                on=['Segment', 'Month'],
+                df_revenue.groupby(['FinalCustomerName', 'Month'], as_index=False)['Revenue'].sum(),
+                df_headcount.groupby(['FinalCustomerName', 'Month'], as_index=False)['Headcount'].sum(),
+                on=['FinalCustomerName', 'Month'],
                 how='outer'
             )
             merged['Revenue'] = merged['Revenue'].fillna(0)
@@ -59,14 +58,14 @@ def run(df=None, user_question=None):
                 lambda row: round(row['Revenue'] / row['Headcount'], 2) if row['Headcount'] > 0 else 0,
                 axis=1
             )
-            st.dataframe(pivot_summary(merged, 'Revenue per Person'))
+            st.dataframe(pivot_summary(merged, 'Revenue per Person', 'FinalCustomerName'))
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("### 💰 Total Revenue by Month")
-                st.dataframe(pivot_summary(merged, 'Revenue'))
+                st.dataframe(pivot_summary(merged, 'Revenue', 'FinalCustomerName'))
             with col2:
                 st.markdown("### 👥 Total Headcount by Month")
-                st.dataframe(pivot_summary(merged, 'Headcount'))
+                st.dataframe(pivot_summary(merged, 'Headcount', 'FinalCustomerName'))
 
         with tabs[1]:
             generate_tab_view(df_revenue, df_headcount, 'Segment', 'Segment')
