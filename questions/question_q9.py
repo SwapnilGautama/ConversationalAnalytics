@@ -13,22 +13,14 @@ def run(df=None, user_question=None):
     # Load data
     df_revenue, df_headcount = load_data()
 
-    # Merge
+    # Merge on broader keys to preserve granularity
+    merge_keys = ["FinalCustomerName", "Segment", "BU", "DU", "Month"]
     merged = pd.merge(
         df_revenue,
         df_headcount,
-        on=["FinalCustomerName", "Month"],
-        how="inner",
-        suffixes=('_rev', '_head')
+        on=merge_keys,
+        how="inner"
     )
-
-    # Assign Segment, BU, DU
-    merged['Segment'] = merged['Segment_rev']
-    merged['BU'] = merged['BU_rev']
-    merged['DU'] = merged['DU_rev']
-
-    # Drop suffix columns
-    merged = merged.drop(columns=[col for col in merged.columns if col.endswith('_rev') or col.endswith('_head')])
 
     # Month ordering
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -56,7 +48,7 @@ def run(df=None, user_question=None):
         with tab:
             st.subheader(f"Revenue per Person by {group_col}")
 
-            # Aggregate revenue and headcount first
+            # Aggregate revenue and headcount
             agg = merged.groupby([group_col, 'Month']).agg({
                 'Revenue': 'sum',
                 'Headcount': 'sum'
@@ -66,13 +58,13 @@ def run(df=None, user_question=None):
             agg['Revenue per Person'] = agg['Revenue'] / agg['Headcount']
             agg = agg.dropna(subset=['Revenue per Person'])
 
-            # Pivot for display
+            # Pivot for main table
             pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue per Person').fillna(0)
             pivot = pivot.reindex(columns=month_order, fill_value=0)
             pivot.index.name = row_label
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
 
-            # Add grouped Total Revenue and Headcount tables
+            # Total Revenue and Headcount tables
             revenue_pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue').reindex(columns=month_order, fill_value=0)
             headcount_pivot = agg.pivot_table(index=group_col, columns='Month', values='Headcount').reindex(columns=month_order, fill_value=0)
 
