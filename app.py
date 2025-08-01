@@ -24,8 +24,16 @@ PROMPT_BANK = [
 if "autofill_text" not in st.session_state:
     st.session_state.autofill_text = ""
 
+if "clear_chat" not in st.session_state:
+    st.session_state.clear_chat = False
+
 def handle_click(prompt):
     st.session_state.autofill_text = prompt
+    st.session_state.clear_chat = False
+
+def clear_input():
+    st.session_state.autofill_text = ""
+    st.session_state.clear_chat = True
 
 @st.cache_data
 def load_data():
@@ -59,14 +67,20 @@ def display_logo():
 
 display_logo()
 
-# ✅ Updated Title – LTTS Blue Branding
+# ✅ Title
 st.markdown("""
 <h1 style='text-align:center; font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin-top: -40px;'>
 Conversational Analytics Assistant
 </h1>
 """, unsafe_allow_html=True)
 
-# Description
+# ✅ Clear Button
+st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+if st.button("🧹 Clear Response"):
+    clear_input()
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ✅ Welcome Text
 st.markdown("""
 <div style='text-align:center; font-size:18px; margin-bottom: 25px;'>
 Welcome to the <b>LTTS BI Assistant</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
@@ -81,7 +95,7 @@ user_question = st.text_input(
 )
 
 # 🧠 Execute selected analysis script
-if user_question:
+if user_question and not st.session_state.clear_chat:
     try:
         best_qid, matched_prompt = find_best_matching_qid(user_question)
         question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
