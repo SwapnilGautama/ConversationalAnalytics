@@ -65,18 +65,22 @@ def run(df=None, user_question=None):
             pivot.index.name = row_label
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
 
-            # Add Total Revenue and Total Headcount tables side by side
+            # Add grouped Total Revenue and Headcount tables
+            revenue_grouped = merged.groupby([group_col, 'Month'])['Revenue'].sum().reset_index()
+            headcount_grouped = merged.groupby([group_col, 'Month'])['Headcount'].sum().reset_index()
+
+            rev_pivot = revenue_grouped.pivot(index=group_col, columns='Month', values='Revenue').reindex(columns=month_order, fill_value=0)
+            head_pivot = headcount_grouped.pivot(index=group_col, columns='Month', values='Headcount').reindex(columns=month_order, fill_value=0)
+
             col1, col2 = st.columns(2)
 
             with col1:
                 st.markdown("#### 🔹 Total Revenue by Month")
-                revenue_totals = merged.groupby('Month')['Revenue'].sum().reindex(month_order).fillna(0)
-                st.dataframe(pd.DataFrame(revenue_totals).T.style.format("{:,.0f}"), use_container_width=True)
+                st.dataframe(rev_pivot.style.format("{:,.0f}"), use_container_width=True)
 
             with col2:
                 st.markdown("#### 🔹 Total Headcount by Month")
-                headcount_totals = merged.groupby('Month')['Headcount'].sum().reindex(month_order).fillna(0)
-                st.dataframe(pd.DataFrame(headcount_totals).T.style.format("{:,.0f}"), use_container_width=True)
+                st.dataframe(head_pivot.style.format("{:,.0f}"), use_container_width=True)
 
     render_table(tabs[0], 'FinalCustomerName', 'FinalCustomerName')
     render_table(tabs[1], 'Segment', 'Segment')
