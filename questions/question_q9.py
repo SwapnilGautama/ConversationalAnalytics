@@ -13,19 +13,27 @@ def run(df=None, user_question=None):
     # Load data
     df_revenue, df_headcount = load_data()
 
-    # Ensure month ordering
+    # Merge
+    merged = pd.merge(
+        df_revenue,
+        df_headcount,
+        on=["FinalCustomerName", "Month"],
+        how="inner",
+        suffixes=('_rev', '_head')
+    )
+
+    # Assign Segment, BU, DU
+    merged['Segment'] = merged['Segment_rev']
+    merged['BU'] = merged['BU_rev']
+    merged['DU'] = merged['DU_rev']
+
+    # Drop suffix columns
+    merged = merged.drop(columns=[col for col in merged.columns if col.endswith('_rev') or col.endswith('_head')])
+
+    # Month ordering
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    df_revenue['Month'] = pd.Categorical(df_revenue['Month'], categories=month_order, ordered=True)
-    df_headcount['Month'] = pd.Categorical(df_headcount['Month'], categories=month_order, ordered=True)
-
-    # Merge correctly on Segment, BU, DU, and Month
-    merge_cols = ['Segment', 'BU', 'DU', 'Month']
-    merged = pd.merge(df_revenue, df_headcount, on=merge_cols, how='inner')
-
-    # Calculate Revenue per Person
-    merged['Revenue per Person'] = merged['Revenue'] / merged['Headcount']
-    merged.dropna(subset=['Revenue per Person'], inplace=True)
+    merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
 
     # 🧾 Sidebar filters
     st.sidebar.header("🔍 Filter")
@@ -47,28 +55,36 @@ def run(df=None, user_question=None):
     def render_table(tab, group_col, row_label):
         with tab:
             st.subheader(f"Revenue per Person by {group_col}")
-            grouped = merged.groupby([group_col, 'Month'])['Revenue per Person'].mean().reset_index()
-            pivot = grouped.pivot(index=group_col, columns='Month', values='Revenue per Person').fillna(0)
-            pivot = pivot.sort_index()
+
+            # Aggregate revenue and headcount first
+            agg = merged.groupby([group_col, 'Month']).agg({
+                'Revenue': 'sum',
+                'Headcount': 'sum'
+            }).reset_index()
+
+            # Calculate Revenue per Person
+            agg['Revenue per Person'] = agg['Revenue'] / agg['Headcount']
+            agg = agg.dropna(subset=['Revenue per Person'])
+
+            # Pivot for display
+            pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue per Person').fillna(0)
+            pivot = pivot.reindex(columns=month_order, fill_value=0)
             pivot.index.name = row_label
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
 
             # Add grouped Total Revenue and Headcount tables
-            revenue_grouped = merged.groupby([group_col, 'Month'])['Revenue'].sum().reset_index()
-            headcount_grouped = merged.groupby([group_col, 'Month'])['Headcount'].sum().reset_index()
-
-            rev_pivot = revenue_grouped.pivot(index=group_col, columns='Month', values='Revenue').reindex(columns=month_order, fill_value=0)
-            head_pivot = headcount_grouped.pivot(index=group_col, columns='Month', values='Headcount').reindex(columns=month_order, fill_value=0)
+            revenue_pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue').reindex(columns=month_order, fill_value=0)
+            headcount_pivot = agg.pivot_table(index=group_col, columns='Month', values='Headcount').reindex(columns=month_order, fill_value=0)
 
             col1, col2 = st.columns(2)
 
             with col1:
                 st.markdown("#### 🔹 Total Revenue by Month")
-                st.dataframe(rev_pivot.style.format("{:,.0f}"), use_container_width=True)
+                st.dataframe(revenue_pivot.style.format("{:,.0f}"), use_container_width=True)
 
             with col2:
                 st.markdown("#### 🔹 Total Headcount by Month")
-                st.dataframe(head_pivot.style.format("{:,.0f}"), use_container_width=True)
+                st.dataframe(headcount_pivot.style.format("{:,.0f}"), use_container_width=True)
 
     render_table(tabs[0], 'FinalCustomerName', 'FinalCustomerName')
     render_table(tabs[1], 'Segment', 'Segment')
