@@ -4,7 +4,7 @@ import numpy as np
 
 @st.cache_data
 def load_data():
-    return pd.read_excel("sample_data/LNTDataSample.xlsx")
+    return pd.read_excel("sample_data/LNTData.xlsx")
 
 def run(df=None, user_question=None):
     st.title("Utilization % Trends")
