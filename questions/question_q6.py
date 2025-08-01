@@ -8,7 +8,7 @@ def run(df=None, user_question=None):
 
     # Load data
     df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
-    df_hours = get_netavailablehours_aggregated('sample_data/LNTData.xlsx')
+    df_hours = get_net_available_hours_aggregated('sample_data/LNTData.xlsx')
 
     # Merge
     merged = pd.merge(
