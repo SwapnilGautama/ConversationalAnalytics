@@ -3,12 +3,17 @@ import pandas as pd
 from kpi_engine.revenue_aggregated import get_revenue_aggregated
 from kpi_engine.headcount_aggregated import get_headcount_aggregated
 
+@st.cache_data
+def load_data():
+    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
+    df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
+    return df_revenue, df_headcount
+
 def run(df=None, user_question=None):
     st.title("Revenue per Person by Account")
 
     # Load data
-    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
-    df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
+    df_revenue, df_headcount = load_data()
 
     # Merge
     merged = pd.merge(
