@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-from kpi_engine.revenue_aggregated import get_revenue_aggregated
-from kpi_engine.headcount_aggregated import get_headcount_aggregated
 
 @st.cache_data
 def load_data():
-    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
-    df_headcount = get_headcount_aggregated('sample_data/LNTData.xlsx')
+    df_revenue = pd.read_csv('sample_data/revenue.csv')
+    df_headcount = pd.read_csv('sample_data/headcount.csv')
     return df_revenue, df_headcount
 
 def run(df=None, user_question=None):
