@@ -1,0 +1,404 @@
+FinalCustomerName,Segment,BU,DU,Month,NetAvailableHours
+A1,Plant Engineering,Unknown,Unknown,Apr,15541
+A1,Plant Engineering,Unknown,Unknown,Feb,14913
+A1,Plant Engineering,Unknown,Unknown,Jan,17733
+A1,Plant Engineering,Unknown,Unknown,Jun,28620
+A1,Plant Engineering,Unknown,Unknown,Mar,15560
+A1,Plant Engineering,Unknown,Unknown,May,19007
+A10,Transportation,Unknown,Unknown,Apr,4041
+A10,Transportation,Unknown,Unknown,Feb,3630
+A10,Transportation,Unknown,Unknown,Jan,3847
+A10,Transportation,Unknown,Unknown,Jun,4613
+A10,Transportation,Unknown,Unknown,Mar,3743
+A10,Transportation,Unknown,Unknown,May,4865
+A100,Plant Engineering,Unknown,Unknown,Apr,193
+A100,Plant Engineering,Unknown,Unknown,May,305
+A101,Industrial Products,Unknown,Unknown,Jun,77
+A102,Plant Engineering,Unknown,Unknown,Apr,4
+A102,Plant Engineering,Unknown,Unknown,Jun,670
+A102,Plant Engineering,Unknown,Unknown,May,328
+A103,Plant Engineering,Unknown,Unknown,Apr,-4
+A105,Plant Engineering,Unknown,Unknown,Jun,195
+A105,Plant Engineering,Unknown,Unknown,May,185
+A106,Plant Engineering,Unknown,Unknown,Jun,111
+A107,Transportation,Unknown,Unknown,Apr,628
+A107,Transportation,Unknown,Unknown,Jun,-12
+A107,Transportation,Unknown,Unknown,May,551
+A108,Transportation,Unknown,Unknown,Apr,1946
+A108,Transportation,Unknown,Unknown,Jun,1803
+A108,Transportation,Unknown,Unknown,May,1678
+A11,Plant Engineering,Unknown,Unknown,Jun,229
+A11,Plant Engineering,Unknown,Unknown,May,112
+A110,Transportation,Unknown,Unknown,Jun,12
+A111,Industrial Products,Unknown,Unknown,Apr,3706
+A111,Industrial Products,Unknown,Unknown,Jun,4093
+A111,Industrial Products,Unknown,Unknown,May,3869
+A112,Transportation,Unknown,Unknown,Apr,428
+A113,Transportation,Unknown,Unknown,Apr,1221
+A113,Transportation,Unknown,Unknown,Jun,2085
+A113,Transportation,Unknown,Unknown,May,2083
+A114,Plant Engineering,Unknown,Unknown,Apr,555
+A114,Plant Engineering,Unknown,Unknown,Jun,542
+A114,Plant Engineering,Unknown,Unknown,May,519
+A114,Transportation,Unknown,Unknown,Apr,688
+A114,Transportation,Unknown,Unknown,Jun,600
+A114,Transportation,Unknown,Unknown,May,640
+A115,Media & Technology,Unknown,Unknown,Apr,1118
+A115,Media & Technology,Unknown,Unknown,Jun,1562
+A115,Media & Technology,Unknown,Unknown,May,528
+A115,Transportation,Unknown,Unknown,May,1044
+A116,Transportation,Unknown,Unknown,Jun,444
+A117,Transportation,Unknown,Unknown,Apr,244
+A118,Transportation,Unknown,Unknown,Jun,14
+A121,Media & Technology,Unknown,Unknown,Apr,695
+A121,Media & Technology,Unknown,Unknown,Jun,731
+A121,Media & Technology,Unknown,Unknown,May,688
+A122,Media & Technology,Unknown,Unknown,Apr,3741
+A122,Media & Technology,Unknown,Unknown,Jun,2999
+A122,Media & Technology,Unknown,Unknown,May,3124
+A123,Media & Technology,Unknown,Unknown,Apr,156
+A123,Media & Technology,Unknown,Unknown,Jun,156
+A123,Media & Technology,Unknown,Unknown,May,156
+A125,Media & Technology,Unknown,Unknown,Apr,253
+A125,Media & Technology,Unknown,Unknown,Jun,677
+A125,Media & Technology,Unknown,Unknown,May,555
+A126,Media & Technology,Unknown,Unknown,Apr,564
+A128,Industrial Products,Unknown,Unknown,May,104
+A129,Plant Engineering,Unknown,Unknown,May,-2
+A13,Plant Engineering,Unknown,Unknown,Feb,253
+A13,Plant Engineering,Unknown,Unknown,Mar,343
+A130,Transportation,Unknown,Unknown,Apr,10000
+A130,Transportation,Unknown,Unknown,Jun,8873
+A130,Transportation,Unknown,Unknown,May,9349
+A131,Transportation,Unknown,Unknown,Apr,185
+A131,Transportation,Unknown,Unknown,Jun,528
+A131,Transportation,Unknown,Unknown,May,510
+A132,Transportation,Unknown,Unknown,Apr,573
+A132,Transportation,Unknown,Unknown,Jun,519
+A132,Transportation,Unknown,Unknown,May,537
+A133,Transportation,Unknown,Unknown,Apr,1110
+A133,Transportation,Unknown,Unknown,Jun,795
+A133,Transportation,Unknown,Unknown,May,1074
+A135,Transportation,Unknown,Unknown,Jun,355
+A136,Transportation,Unknown,Unknown,Apr,240
+A136,Transportation,Unknown,Unknown,Jun,490
+A136,Transportation,Unknown,Unknown,May,328
+A14,Plant Engineering,Unknown,Unknown,Jun,46
+A14,Plant Engineering,Unknown,Unknown,May,32
+A140,Media & Technology,Unknown,Unknown,Apr,1164
+A140,Media & Technology,Unknown,Unknown,Jun,944
+A140,Media & Technology,Unknown,Unknown,May,944
+A141,Industrial Products,Unknown,Unknown,Apr,108
+A141,Industrial Products,Unknown,Unknown,Jun,392
+A141,Industrial Products,Unknown,Unknown,May,164
+A143,Transportation,Unknown,Unknown,Apr,1700
+A143,Transportation,Unknown,Unknown,Jun,1291
+A143,Transportation,Unknown,Unknown,May,1335
+A145,Media & Technology,Unknown,Unknown,Apr,673
+A145,Media & Technology,Unknown,Unknown,Jun,1959
+A145,Media & Technology,Unknown,Unknown,May,1621
+A148,Transportation,Unknown,Unknown,Apr,5
+A150,Media & Technology,Unknown,Unknown,Apr,695
+A150,Media & Technology,Unknown,Unknown,Jun,1260
+A150,Media & Technology,Unknown,Unknown,May,879
+A151,Media & Technology,Unknown,Unknown,Apr,343
+A151,Media & Technology,Unknown,Unknown,Jun,412
+A152,Plant Engineering,Unknown,Unknown,Apr,334
+A152,Plant Engineering,Unknown,Unknown,Jun,325
+A152,Plant Engineering,Unknown,Unknown,May,325
+A156,Media & Technology,Unknown,Unknown,Apr,336
+A156,Media & Technology,Unknown,Unknown,Jun,328
+A156,Media & Technology,Unknown,Unknown,May,328
+A16,Media & Technology,Unknown,Unknown,Apr,18199
+A16,Media & Technology,Unknown,Unknown,Jun,17319
+A16,Media & Technology,Unknown,Unknown,May,17735
+A161,Transportation,Unknown,Unknown,Apr,7
+A17,Plant Engineering,Unknown,Unknown,Apr,3253
+A17,Plant Engineering,Unknown,Unknown,Jun,3534
+A17,Plant Engineering,Unknown,Unknown,May,3409
+A19,Media & Technology,Unknown,Unknown,Apr,7011
+A19,Media & Technology,Unknown,Unknown,Jun,9245
+A19,Media & Technology,Unknown,Unknown,May,7894
+A2,Plant Engineering,Unknown,Unknown,Apr,1171
+A2,Plant Engineering,Unknown,Unknown,Feb,1094
+A2,Plant Engineering,Unknown,Unknown,Jan,1267
+A2,Plant Engineering,Unknown,Unknown,Jun,918
+A2,Plant Engineering,Unknown,Unknown,Mar,1310
+A2,Plant Engineering,Unknown,Unknown,May,874
+A20,Media & Technology,Unknown,Unknown,Apr,561
+A20,Media & Technology,Unknown,Unknown,Jun,587
+A20,Media & Technology,Unknown,Unknown,May,537
+A21,Industrial Products,Unknown,Unknown,Apr,2636
+A21,Industrial Products,Unknown,Unknown,Jun,2191
+A21,Industrial Products,Unknown,Unknown,May,2341
+A21,Plant Engineering,Unknown,Unknown,Apr,1484
+A21,Plant Engineering,Unknown,Unknown,Jun,3832
+A21,Plant Engineering,Unknown,Unknown,May,1295
+A21,Transportation,Unknown,Unknown,Apr,172
+A21,Transportation,Unknown,Unknown,Jun,132
+A21,Transportation,Unknown,Unknown,May,156
+A22,Plant Engineering,Unknown,Unknown,Feb,311
+A22,Plant Engineering,Unknown,Unknown,Jan,243
+A23,Med Tech,Unknown,Unknown,Apr,1228
+A23,Med Tech,Unknown,Unknown,Feb,1157
+A23,Med Tech,Unknown,Unknown,Jan,512
+A23,Med Tech,Unknown,Unknown,Jun,829
+A23,Med Tech,Unknown,Unknown,Mar,1450
+A23,Med Tech,Unknown,Unknown,May,1320
+A25,Plant Engineering,Unknown,Unknown,Apr,1743
+A25,Plant Engineering,Unknown,Unknown,Feb,5436
+A25,Plant Engineering,Unknown,Unknown,Jan,5970
+A25,Plant Engineering,Unknown,Unknown,Jun,1010
+A25,Plant Engineering,Unknown,Unknown,Mar,3896
+A25,Plant Engineering,Unknown,Unknown,May,2140
+A26,Plant Engineering,Unknown,Unknown,Apr,5125
+A26,Plant Engineering,Unknown,Unknown,Feb,7006
+A26,Plant Engineering,Unknown,Unknown,Jan,6498
+A26,Plant Engineering,Unknown,Unknown,Jun,8159
+A26,Plant Engineering,Unknown,Unknown,Mar,4896
+A26,Plant Engineering,Unknown,Unknown,May,5777
+A27,Plant Engineering,Unknown,Unknown,Apr,1477
+A27,Plant Engineering,Unknown,Unknown,Feb,282
+A27,Plant Engineering,Unknown,Unknown,Jan,1479
+A27,Plant Engineering,Unknown,Unknown,Jun,1111
+A27,Plant Engineering,Unknown,Unknown,Mar,837
+A27,Plant Engineering,Unknown,Unknown,May,1106
+A28,Plant Engineering,Unknown,Unknown,Apr,8924
+A28,Plant Engineering,Unknown,Unknown,Feb,8132
+A28,Plant Engineering,Unknown,Unknown,Jan,8325
+A28,Plant Engineering,Unknown,Unknown,Jun,9482
+A28,Plant Engineering,Unknown,Unknown,Mar,9459
+A28,Plant Engineering,Unknown,Unknown,May,8132
+A29,Plant Engineering,Unknown,Unknown,Apr,860
+A29,Plant Engineering,Unknown,Unknown,Feb,844
+A29,Plant Engineering,Unknown,Unknown,Jan,865
+A29,Plant Engineering,Unknown,Unknown,Jun,743
+A29,Plant Engineering,Unknown,Unknown,Mar,817
+A29,Plant Engineering,Unknown,Unknown,May,1131
+A30,Plant Engineering,Unknown,Unknown,Apr,4498
+A30,Plant Engineering,Unknown,Unknown,Feb,6283
+A30,Plant Engineering,Unknown,Unknown,Jan,2401
+A30,Plant Engineering,Unknown,Unknown,Jun,5907
+A30,Plant Engineering,Unknown,Unknown,Mar,3717
+A30,Plant Engineering,Unknown,Unknown,May,5626
+A32,Plant Engineering,Unknown,Unknown,Apr,506
+A32,Plant Engineering,Unknown,Unknown,Feb,335
+A32,Plant Engineering,Unknown,Unknown,Jan,461
+A32,Plant Engineering,Unknown,Unknown,Jun,663
+A32,Plant Engineering,Unknown,Unknown,Mar,422
+A32,Plant Engineering,Unknown,Unknown,May,974
+A34,Plant Engineering,Unknown,Unknown,Feb,60
+A34,Plant Engineering,Unknown,Unknown,Jan,27
+A35,Plant Engineering,Unknown,Unknown,Apr,1415
+A35,Plant Engineering,Unknown,Unknown,Feb,2785
+A35,Plant Engineering,Unknown,Unknown,Jan,4732
+A35,Plant Engineering,Unknown,Unknown,Jun,2903
+A35,Plant Engineering,Unknown,Unknown,Mar,1426
+A35,Plant Engineering,Unknown,Unknown,May,1920
+A36,Plant Engineering,Unknown,Unknown,Apr,3391
+A36,Plant Engineering,Unknown,Unknown,Feb,3148
+A36,Plant Engineering,Unknown,Unknown,Jan,1935
+A36,Plant Engineering,Unknown,Unknown,Jun,3067
+A36,Plant Engineering,Unknown,Unknown,Mar,3044
+A36,Plant Engineering,Unknown,Unknown,May,1521
+A37,Plant Engineering,Unknown,Unknown,Apr,987
+A37,Plant Engineering,Unknown,Unknown,Feb,475
+A37,Plant Engineering,Unknown,Unknown,Jan,151
+A37,Plant Engineering,Unknown,Unknown,Jun,529
+A37,Plant Engineering,Unknown,Unknown,Mar,1200
+A37,Plant Engineering,Unknown,Unknown,May,747
+A38,Plant Engineering,Unknown,Unknown,Apr,-4
+A41,Industrial Products,Unknown,Unknown,Apr,986
+A41,Industrial Products,Unknown,Unknown,Feb,717
+A41,Industrial Products,Unknown,Unknown,Jan,658
+A41,Industrial Products,Unknown,Unknown,Jun,865
+A41,Industrial Products,Unknown,Unknown,Mar,928
+A41,Industrial Products,Unknown,Unknown,May,800
+A43,Plant Engineering,Unknown,Unknown,Apr,3574
+A43,Plant Engineering,Unknown,Unknown,Feb,4123
+A43,Plant Engineering,Unknown,Unknown,Jan,5671
+A43,Plant Engineering,Unknown,Unknown,Jun,1667
+A43,Plant Engineering,Unknown,Unknown,Mar,3855
+A43,Plant Engineering,Unknown,Unknown,May,2851
+A44,Plant Engineering,Unknown,Unknown,Apr,96
+A44,Plant Engineering,Unknown,Unknown,Feb,75
+A44,Plant Engineering,Unknown,Unknown,Jan,78
+A44,Plant Engineering,Unknown,Unknown,Mar,108
+A44,Plant Engineering,Unknown,Unknown,May,144
+A46,Plant Engineering,Unknown,Unknown,Apr,134
+A46,Plant Engineering,Unknown,Unknown,May,134
+A47,Plant Engineering,Unknown,Unknown,Apr,3177
+A47,Plant Engineering,Unknown,Unknown,Feb,1055
+A47,Plant Engineering,Unknown,Unknown,Jan,349
+A47,Plant Engineering,Unknown,Unknown,Jun,1101
+A47,Plant Engineering,Unknown,Unknown,Mar,1542
+A47,Plant Engineering,Unknown,Unknown,May,3407
+A48,Plant Engineering,Unknown,Unknown,Apr,352
+A48,Plant Engineering,Unknown,Unknown,May,411
+A49,Industrial Products,Unknown,Unknown,Apr,180
+A49,Industrial Products,Unknown,Unknown,Feb,172
+A49,Industrial Products,Unknown,Unknown,Jan,106
+A49,Industrial Products,Unknown,Unknown,Jun,210
+A49,Industrial Products,Unknown,Unknown,Mar,173
+A49,Industrial Products,Unknown,Unknown,May,156
+A5,Plant Engineering,Unknown,Unknown,Apr,4051
+A5,Plant Engineering,Unknown,Unknown,Feb,3867
+A5,Plant Engineering,Unknown,Unknown,Jan,3284
+A5,Plant Engineering,Unknown,Unknown,Jun,4005
+A5,Plant Engineering,Unknown,Unknown,Mar,3363
+A5,Plant Engineering,Unknown,Unknown,May,4850
+A50,Media & Technology,Unknown,Unknown,Apr,2461
+A50,Media & Technology,Unknown,Unknown,Feb,2335
+A50,Media & Technology,Unknown,Unknown,Jan,2949
+A50,Media & Technology,Unknown,Unknown,Jun,1273
+A50,Media & Technology,Unknown,Unknown,Mar,2305
+A50,Plant Engineering,Unknown,Unknown,Apr,175
+A50,Plant Engineering,Unknown,Unknown,Feb,339
+A50,Plant Engineering,Unknown,Unknown,Jan,392
+A50,Plant Engineering,Unknown,Unknown,Jun,370
+A50,Plant Engineering,Unknown,Unknown,Mar,375
+A50,Plant Engineering,Unknown,Unknown,May,1464
+A52,Plant Engineering,Unknown,Unknown,Apr,2719
+A52,Plant Engineering,Unknown,Unknown,Feb,4430
+A52,Plant Engineering,Unknown,Unknown,Jan,4971
+A52,Plant Engineering,Unknown,Unknown,Jun,2896
+A52,Plant Engineering,Unknown,Unknown,Mar,4473
+A52,Plant Engineering,Unknown,Unknown,May,2767
+A53,Plant Engineering,Unknown,Unknown,Apr,2815
+A53,Plant Engineering,Unknown,Unknown,Feb,1756
+A53,Plant Engineering,Unknown,Unknown,Jan,1021
+A53,Plant Engineering,Unknown,Unknown,Jun,2449
+A53,Plant Engineering,Unknown,Unknown,Mar,2220
+A53,Plant Engineering,Unknown,Unknown,May,2237
+A54,Plant Engineering,Unknown,Unknown,Apr,-4
+A54,Plant Engineering,Unknown,Unknown,Feb,146
+A54,Plant Engineering,Unknown,Unknown,Jan,168
+A54,Plant Engineering,Unknown,Unknown,Jun,41
+A54,Plant Engineering,Unknown,Unknown,Mar,121
+A56,Plant Engineering,Unknown,Unknown,Apr,2846
+A56,Plant Engineering,Unknown,Unknown,Feb,2560
+A56,Plant Engineering,Unknown,Unknown,Jan,2568
+A56,Plant Engineering,Unknown,Unknown,Jun,1953
+A56,Plant Engineering,Unknown,Unknown,Mar,3074
+A56,Plant Engineering,Unknown,Unknown,May,2284
+A58,Plant Engineering,Unknown,Unknown,Jan,64
+A59,Plant Engineering,Unknown,Unknown,Apr,64
+A59,Plant Engineering,Unknown,Unknown,May,65
+A6,Plant Engineering,Unknown,Unknown,Apr,132
+A6,Plant Engineering,Unknown,Unknown,Feb,156
+A6,Plant Engineering,Unknown,Unknown,Jan,1184
+A6,Plant Engineering,Unknown,Unknown,Mar,124
+A6,Plant Engineering,Unknown,Unknown,May,76
+A60,Plant Engineering,Unknown,Unknown,Apr,697
+A60,Plant Engineering,Unknown,Unknown,Feb,592
+A60,Plant Engineering,Unknown,Unknown,Jan,682
+A60,Plant Engineering,Unknown,Unknown,Jun,643
+A60,Plant Engineering,Unknown,Unknown,Mar,628
+A60,Plant Engineering,Unknown,Unknown,May,705
+A61,Med Tech,Unknown,Unknown,Apr,883
+A61,Med Tech,Unknown,Unknown,Feb,174
+A61,Med Tech,Unknown,Unknown,Jan,221
+A61,Med Tech,Unknown,Unknown,Jun,320
+A61,Med Tech,Unknown,Unknown,Mar,321
+A61,Med Tech,Unknown,Unknown,May,419
+A63,Plant Engineering,Unknown,Unknown,Apr,198
+A63,Plant Engineering,Unknown,Unknown,May,151
+A65,Plant Engineering,Unknown,Unknown,Apr,42
+A65,Plant Engineering,Unknown,Unknown,May,101
+A66,Media & Technology,Unknown,Unknown,Jan,10
+A67,Transportation,Unknown,Unknown,Apr,121
+A67,Transportation,Unknown,Unknown,Jan,47
+A67,Transportation,Unknown,Unknown,Jun,155
+A67,Transportation,Unknown,Unknown,Mar,208
+A67,Transportation,Unknown,Unknown,May,52
+A68,Plant Engineering,Unknown,Unknown,Apr,1924
+A68,Plant Engineering,Unknown,Unknown,Feb,1884
+A68,Plant Engineering,Unknown,Unknown,Jan,1979
+A68,Plant Engineering,Unknown,Unknown,Jun,1829
+A68,Plant Engineering,Unknown,Unknown,Mar,1823
+A68,Plant Engineering,Unknown,Unknown,May,1814
+A7,Plant Engineering,Unknown,Unknown,Apr,-17
+A7,Plant Engineering,Unknown,Unknown,May,-28
+A70,Plant Engineering,Unknown,Unknown,Apr,3267
+A70,Plant Engineering,Unknown,Unknown,Feb,3114
+A70,Plant Engineering,Unknown,Unknown,Jan,2645
+A70,Plant Engineering,Unknown,Unknown,Jun,2861
+A70,Plant Engineering,Unknown,Unknown,Mar,2661
+A70,Plant Engineering,Unknown,Unknown,May,2885
+A71,Plant Engineering,Unknown,Unknown,Apr,531
+A71,Plant Engineering,Unknown,Unknown,Feb,1178
+A71,Plant Engineering,Unknown,Unknown,Jan,1590
+A71,Plant Engineering,Unknown,Unknown,Jun,842
+A71,Plant Engineering,Unknown,Unknown,Mar,561
+A71,Plant Engineering,Unknown,Unknown,May,456
+A72,Plant Engineering,Unknown,Unknown,Apr,104
+A72,Plant Engineering,Unknown,Unknown,Mar,162
+A73,Plant Engineering,Unknown,Unknown,Apr,1779
+A73,Plant Engineering,Unknown,Unknown,Feb,1758
+A73,Plant Engineering,Unknown,Unknown,Jan,1419
+A73,Plant Engineering,Unknown,Unknown,Jun,143
+A73,Plant Engineering,Unknown,Unknown,Mar,1622
+A73,Plant Engineering,Unknown,Unknown,May,657
+A75,Plant Engineering,Unknown,Unknown,Jun,-47
+A75,Plant Engineering,Unknown,Unknown,May,243
+A76,Media & Technology,Unknown,Unknown,Apr,10141
+A76,Media & Technology,Unknown,Unknown,Jun,11990
+A76,Media & Technology,Unknown,Unknown,May,10983
+A77,Transportation,Unknown,Unknown,Apr,20176
+A77,Transportation,Unknown,Unknown,Jun,21730
+A77,Transportation,Unknown,Unknown,May,20833
+A78,Transportation,Unknown,Unknown,Apr,13635
+A78,Transportation,Unknown,Unknown,Jun,12528
+A78,Transportation,Unknown,Unknown,May,13321
+A80,Industrial Products,Unknown,Unknown,Apr,1944
+A80,Industrial Products,Unknown,Unknown,Jun,2136
+A80,Industrial Products,Unknown,Unknown,May,2196
+A81,Media & Technology,Unknown,Unknown,Apr,14090
+A81,Media & Technology,Unknown,Unknown,Jun,13133
+A81,Media & Technology,Unknown,Unknown,May,13565
+A82,Transportation,Unknown,Unknown,Apr,3914
+A82,Transportation,Unknown,Unknown,Jun,3069
+A82,Transportation,Unknown,Unknown,May,3276
+A83,Media & Technology,Unknown,Unknown,Apr,5678
+A83,Media & Technology,Unknown,Unknown,Jun,5141
+A83,Media & Technology,Unknown,Unknown,May,5071
+A84,Transportation,Unknown,Unknown,Apr,2534
+A84,Transportation,Unknown,Unknown,Jun,2475
+A84,Transportation,Unknown,Unknown,May,2278
+A85,Transportation,Unknown,Unknown,Apr,36382
+A85,Transportation,Unknown,Unknown,Jun,36463
+A85,Transportation,Unknown,Unknown,May,35527
+A86,Transportation,Unknown,Unknown,Apr,5336
+A86,Transportation,Unknown,Unknown,Jun,5440
+A86,Transportation,Unknown,Unknown,May,5496
+A87,Transportation,Unknown,Unknown,Apr,4548
+A87,Transportation,Unknown,Unknown,Jun,5738
+A87,Transportation,Unknown,Unknown,May,6224
+A89,Plant Engineering,Unknown,Unknown,Apr,-8
+A89,Plant Engineering,Unknown,Unknown,Jun,253
+A89,Plant Engineering,Unknown,Unknown,May,389
+A91,Industrial Products,Unknown,Unknown,Apr,341
+A91,Industrial Products,Unknown,Unknown,Jun,325
+A91,Industrial Products,Unknown,Unknown,May,313
+A91,Transportation,Unknown,Unknown,Apr,24017
+A91,Transportation,Unknown,Unknown,Jun,23990
+A91,Transportation,Unknown,Unknown,May,23167
+A92,Media & Technology,Unknown,Unknown,Apr,3796
+A92,Media & Technology,Unknown,Unknown,Jun,4453
+A92,Media & Technology,Unknown,Unknown,May,4373
+A94,Transportation,Unknown,Unknown,Apr,4420
+A94,Transportation,Unknown,Unknown,Jun,4476
+A94,Transportation,Unknown,Unknown,May,4500
+A95,Transportation,Unknown,Unknown,Apr,4840
+A95,Transportation,Unknown,Unknown,Jun,4470
+A95,Transportation,Unknown,Unknown,May,5065
+A96,Transportation,Unknown,Unknown,Apr,4528
+A96,Transportation,Unknown,Unknown,Jun,6081
+A96,Transportation,Unknown,Unknown,May,4490
+A97,Industrial Products,Unknown,Unknown,Apr,1708
+A97,Industrial Products,Unknown,Unknown,Jun,916
+A97,Industrial Products,Unknown,Unknown,May,772
+A97,Media & Technology,Unknown,Unknown,Jun,12
+A97,Transportation,Unknown,Unknown,May,8
+A99,Plant Engineering,Unknown,Unknown,Jun,161
+A99,Plant Engineering,Unknown,Unknown,May,154
