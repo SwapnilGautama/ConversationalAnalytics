@@ -3,12 +3,17 @@ import pandas as pd
 from kpi_engine.revenue_aggregated import get_revenue_aggregated
 from kpi_engine.net_available_hours_aggregated import get_net_available_hours_aggregated
 
+@st.cache_data
+def load_data():
+    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
+    df_hours = get_net_available_hours_aggregated('sample_data/LNTData.xlsx')
+    return df_revenue, df_hours
+
 def run(df=None, user_question=None):
     st.title("Realized Rate by Account")
 
     # Load data
-    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
-    df_hours = get_net_available_hours_aggregated('sample_data/LNTData.xlsx')
+    df_revenue, df_hours = load_data()
 
     # Merge
     merged = pd.merge(
