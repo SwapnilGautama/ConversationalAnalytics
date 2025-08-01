@@ -78,8 +78,11 @@ def run(query):
                                             aggfunc='sum').reset_index()
             billable_pivot = billable_pivot.sort_values(['Year', 'MonthOrder'])
             billable_pivot.drop(columns='Year', inplace=True)
-            styled_billable = billable_pivot.drop(columns='MonthOrder').style.format('{:,.0f}').set_properties(
-                **{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
+
+            numeric_cols_billable = billable_pivot.select_dtypes(include='number').columns
+            styled_billable = billable_pivot.drop(columns='MonthOrder').style.format(
+                {col: "{:,.0f}" for col in numeric_cols_billable if col != 'MonthShort'}
+            ).set_properties(**{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
             st.dataframe(styled_billable, use_container_width=True)
 
         # NetAvailableHours Table
@@ -91,8 +94,11 @@ def run(query):
                                              aggfunc='sum').reset_index()
             available_pivot = available_pivot.sort_values(['Year', 'MonthOrder'])
             available_pivot.drop(columns='Year', inplace=True)
-            styled_available = available_pivot.drop(columns='MonthOrder').style.format('{:,.0f}').set_properties(
-                **{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
+
+            numeric_cols_available = available_pivot.select_dtypes(include='number').columns
+            styled_available = available_pivot.drop(columns='MonthOrder').style.format(
+                {col: "{:,.0f}" for col in numeric_cols_available if col != 'MonthShort'}
+            ).set_properties(**{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
             st.dataframe(styled_available, use_container_width=True)
 
     except Exception as e:
