@@ -13,31 +13,19 @@ def run(df=None, user_question=None):
     # Load data
     df_revenue, df_headcount = load_data()
 
-    # Merge
-    merged = pd.merge(
-        df_revenue,
-        df_headcount,
-        on=["FinalCustomerName", "Month"],
-        how="inner",
-        suffixes=('_rev', '_head')
-    )
+    # Ensure month ordering
+    month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    df_revenue['Month'] = pd.Categorical(df_revenue['Month'], categories=month_order, ordered=True)
+    df_headcount['Month'] = pd.Categorical(df_headcount['Month'], categories=month_order, ordered=True)
 
-    # Assign Segment, BU, DU
-    merged['Segment'] = merged['Segment_rev']
-    merged['BU'] = merged['BU_rev']
-    merged['DU'] = merged['DU_rev']
-
-    # Drop suffix columns
-    merged = merged.drop(columns=[col for col in merged.columns if col.endswith('_rev') or col.endswith('_head')])
+    # Merge correctly on Segment, BU, DU, and Month
+    merge_cols = ['Segment', 'BU', 'DU', 'Month']
+    merged = pd.merge(df_revenue, df_headcount, on=merge_cols, how='inner')
 
     # Calculate Revenue per Person
     merged['Revenue per Person'] = merged['Revenue'] / merged['Headcount']
     merged.dropna(subset=['Revenue per Person'], inplace=True)
-
-    # Month ordering
-    month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
 
     # 🧾 Sidebar filters
     st.sidebar.header("🔍 Filter")
@@ -60,7 +48,7 @@ def run(df=None, user_question=None):
         with tab:
             st.subheader(f"Revenue per Person by {group_col}")
             grouped = merged.groupby([group_col, 'Month'])['Revenue per Person'].mean().reset_index()
-            pivot = grouped.pivot_table(index=group_col, columns='Month', values='Revenue per Person', aggfunc='mean').fillna(0)
+            pivot = grouped.pivot(index=group_col, columns='Month', values='Revenue per Person').fillna(0)
             pivot = pivot.sort_index()
             pivot.index.name = row_label
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
