@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from kpi_engine.revenue_aggregated import get_revenue_aggregated
-from kpi_engine.netavailablehours_aggregated import get_netavailablehours_aggregated
+from kpi_engine.net_available_hours_aggregated import get_netavailablehours_aggregated
 
 def run(df=None, user_question=None):
     st.title("Realized Rate by Account")
