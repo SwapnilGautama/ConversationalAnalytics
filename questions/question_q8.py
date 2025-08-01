@@ -2,49 +2,87 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+@st.cache_data
 def load_data():
-    df = pd.read_excel("sample_data/LNTData.xlsx", sheet_name="LNTData")
-    return df
-
-def calculate_ut(df):
-    df = df.copy()
-    df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
-    df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
-    df = df[df['Status'] == 'Billable']
-    df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
-    df = df.dropna(subset=['UT%', 'NetAvailableHours', 'TotalBillableHours'])
-    df['Month'] = df['Month'].apply(lambda x: int(x) if not pd.isna(x) else x)
-    month_order = [1,2,3,4,5,6,7,8,9,10,11,12]
-    df['MonthName'] = pd.to_datetime(df['Month'], format='%m').dt.strftime('%b')
-    df['MonthName'] = pd.Categorical(df['MonthName'], categories=[pd.to_datetime(m, format='%m').strftime('%b') for m in month_order], ordered=True)
-    return df
-
-def pivot_table(df, index_col, value_col):
-    return pd.pivot_table(df, index=index_col, columns='MonthName', values=value_col, aggfunc='mean').round(2)
-
-def agg_table(df, index_col, value_col):
-    return pd.pivot_table(df, index=index_col, columns='MonthName', values=value_col, aggfunc='sum').round(0)
+    return pd.read_excel("sample_data/LNTDataSample.xlsx")
 
 def run(df=None, user_question=None):
-    st.title("Revenue per Person by Account")
-    df = load_data() if df is None else df
-    df = calculate_ut(df)
+    st.title("Utilization % Trends")
 
-    tabs = st.tabs(["Summary", "BU", "DU", "Segment"])
+    df = load_data()
 
-    for i, groupby in enumerate(["FinalCustomerName", "BusinessUnit", "Delivery_Unit", "Segment"]):
-        with tabs[i]:
-            st.subheader(f"Utilization % by {groupby}")
-            ut_table = pivot_table(df, groupby, 'UT%')
-            st.dataframe(ut_table.style.set_caption(f"Avg UT% by {groupby} and Month"))
+    df["MonthName"] = df["Month"].apply(lambda x: pd.to_datetime(f"{x}", format="%m").strftime("%b"))
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"### Total Net Available Hours by {groupby}")
-                avail = agg_table(df, groupby, 'NetAvailableHours')
-                st.dataframe(avail.style.set_caption("NetAvailableHours"))
+    df_filtered = df[df["Status"] == "Billable"]
 
-            with col2:
-                st.markdown(f"### Total Billable Hours by {groupby}")
-                bill = agg_table(df, groupby, 'TotalBillableHours')
-                st.dataframe(bill.style.set_caption("TotalBillableHours"))
+    df_filtered["Date_a"] = pd.to_datetime(df_filtered["Date_a"])
+    df_filtered["MonthYear"] = df_filtered["Date_a"].dt.to_period("M").astype(str)
+
+    def pivot_table(df, index, values):
+        return pd.pivot_table(
+            df,
+            index=index,
+            columns="MonthName",
+            values=values,
+            aggfunc="sum",
+            fill_value=0
+        ).reindex(columns=["Apr", "May", "Jun"], fill_value=0)
+
+    tabs = st.tabs(["BU-DU", "Segment"])
+
+    # BU-DU Tab
+    with tabs[0]:
+        st.subheader("Utilization % by BU and DU")
+        df_grouped = df_filtered.groupby(["BusinessUnit", "Delivery_Unit", "MonthName"]).agg({
+            "NetAvailableHours": "sum",
+            "TotalBillableHours": "sum"
+        }).reset_index()
+
+        df_grouped["Utilization %"] = (df_grouped["TotalBillableHours"] / df_grouped["NetAvailableHours"]) * 100
+
+        ut_table = df_grouped.pivot_table(
+            index=["BusinessUnit", "Delivery_Unit"],
+            columns="MonthName",
+            values="Utilization %",
+            aggfunc="mean"
+        ).reindex(columns=["Apr", "May", "Jun"], fill_value=0)
+
+        st.dataframe(ut_table.style.format("{:.2f}"))
+
+        st.markdown("##### 🔹 NetBillableHours")
+        st.dataframe(
+            pivot_table(df_filtered, ["BusinessUnit", "Delivery_Unit"], "TotalBillableHours").style.format("{:,.0f}")
+        )
+
+        st.markdown("##### 🔹 NetAvailableHours")
+        st.dataframe(
+            pivot_table(df_filtered, ["BusinessUnit", "Delivery_Unit"], "NetAvailableHours").style.format("{:,.0f}")
+        )
+
+    # Segment Tab
+    with tabs[1]:
+        st.subheader("Utilization % by Segment")
+        df_seg = df_filtered.groupby(["Segment", "MonthName"]).agg({
+            "NetAvailableHours": "sum",
+            "TotalBillableHours": "sum"
+        }).reset_index()
+        df_seg["Utilization %"] = (df_seg["TotalBillableHours"] / df_seg["NetAvailableHours"]) * 100
+
+        ut_seg_table = df_seg.pivot_table(
+            index="Segment",
+            columns="MonthName",
+            values="Utilization %",
+            aggfunc="mean"
+        ).reindex(columns=["Apr", "May", "Jun"], fill_value=0)
+
+        st.dataframe(ut_seg_table.style.format("{:.2f}"))
+
+        st.markdown("##### 🔹 NetBillableHours")
+        st.dataframe(
+            pivot_table(df_filtered, ["Segment"], "TotalBillableHours").style.format("{:,.0f}")
+        )
+
+        st.markdown("##### 🔹 NetAvailableHours")
+        st.dataframe(
+            pivot_table(df_filtered, ["Segment"], "NetAvailableHours").style.format("{:,.0f}")
+        )
