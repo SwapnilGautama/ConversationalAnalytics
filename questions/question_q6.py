@@ -1,59 +1,68 @@
-import pandas as pd
 import streamlit as st
-from kpi_engine.realized_rate import calculate_realized_rate_quarterly
-from dateutil.relativedelta import relativedelta
+import pandas as pd
+from kpi_engine.revenue_aggregated import get_revenue_aggregated
+from kpi_engine.netavailablehours_aggregated import get_netavailablehours_aggregated
 
-def run(df_pnl: pd.DataFrame, df_ut: pd.DataFrame):
-    st.title("Realized Rate Drop Analysis")
+def run(df=None, user_question=None):
+    st.title("Realized Rate by Account")
 
-    # Sidebar filters
-    segment_filter = st.sidebar.selectbox("Select Segment", options=sorted(df_pnl["Segment"].dropna().unique()))
-    threshold = st.sidebar.slider("Drop Threshold ($)", min_value=1, max_value=10, value=5)
+    # Load data
+    df_revenue = get_revenue_aggregated('sample_data/LnTPnL.xlsx')
+    df_hours = get_netavailablehours_aggregated('sample_data/LNTData.xlsx')
 
-    # Apply segment filter
-    df_pnl_filtered = df_pnl[df_pnl["Segment"] == segment_filter]
-
-    # Calculate realized rate
-    realized_df = calculate_realized_rate_quarterly(df_pnl_filtered, df_ut, segment_filter=segment_filter, drop_threshold=threshold)
-
-    if realized_df.empty:
-        st.warning("No data available after filtering.")
-        return
-
-    # Convert month to quarter
-    realized_df["Quarter"] = realized_df["Month"].dt.to_period("Q")
-
-    # Average realized rate per customer per quarter
-    quarter_df = (
-        realized_df.groupby(["FinalCustomerName", "Quarter"], as_index=False)
-        .agg({"Realized_Rate": "mean"})
+    # Merge
+    merged = pd.merge(
+        df_revenue,
+        df_hours,
+        on=["FinalCustomerName", "Month"],
+        how="inner",
+        suffixes=('_rev', '_hrs')
     )
 
-    # Sort and pivot to compare latest vs previous quarter
-    quarter_df.sort_values(["FinalCustomerName", "Quarter"], inplace=True)
+    # Assign Segment, BU, DU
+    merged['Segment'] = merged['Segment_rev']
+    merged['BU'] = merged['BU_rev']
+    merged['DU'] = merged['DU_rev']
 
-    # Get the latest two quarters
-    latest_quarters = sorted(quarter_df["Quarter"].unique())[-2:]
-    if len(latest_quarters) < 2:
-        st.warning("Not enough quarters to compare.")
-        return
+    # Drop suffix columns
+    merged = merged.drop(columns=[col for col in merged.columns if col.endswith('_rev') or col.endswith('_hrs')])
 
-    q1, q2 = latest_quarters  # e.g., Q4, Q1
-    pivot_df = quarter_df[quarter_df["Quarter"].isin([q1, q2])].pivot(index="FinalCustomerName", columns="Quarter", values="Realized_Rate").reset_index()
-    pivot_df.columns.name = None  # Clean column name
+    # Calculate Realized Rate
+    merged['Realized Rate'] = merged['Revenue'] / merged['NetAvailableHours']
+    merged.dropna(subset=['Realized Rate'], inplace=True)
 
-    # Rename columns
-    pivot_df = pivot_df.rename(columns={q1: f"{q1} Rate", q2: f"{q2} Rate"})
+    # Month ordering
+    month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
 
-    # Calculate difference
-    pivot_df["Drop"] = pivot_df[f"{q1} Rate"] - pivot_df[f"{q2} Rate"]
+    # 🧾 Sidebar filters
+    st.sidebar.header("🔍 Filter")
+    selected_segment = st.sidebar.multiselect("Select Segment", merged['Segment'].dropna().unique())
+    selected_bu = st.sidebar.multiselect("Select BU", merged['BU'].dropna().unique())
+    selected_du = st.sidebar.multiselect("Select DU", merged['DU'].dropna().unique())
 
-    # Filter where drop > threshold
-    result_df = pivot_df[pivot_df["Drop"] > threshold].sort_values("Drop", ascending=False)
+    # Apply filters
+    if selected_segment:
+        merged = merged[merged['Segment'].isin(selected_segment)]
+    if selected_bu:
+        merged = merged[merged['BU'].isin(selected_bu)]
+    if selected_du:
+        merged = merged[merged['DU'].isin(selected_du)]
 
-    # Show results
-    if result_df.empty:
-        st.success(f"No accounts had a realized rate drop greater than ${threshold}.")
-    else:
-        st.markdown(f"### Accounts with Realized Rate Drop > ${threshold}")
-        st.dataframe(result_df.style.format({"Drop": "${:,.2f}"}))
+    # 📊 Tabs
+    tabs = st.tabs(["Summary", "Segment", "BU", "DU"])
+
+    def render_table(tab, group_col, row_label):
+        with tab:
+            st.subheader(f"Realized Rate by {group_col}")
+            grouped = merged.groupby([group_col, 'Month'])['Realized Rate'].mean().reset_index()
+            pivot = grouped.pivot_table(index=group_col, columns='Month', values='Realized Rate', aggfunc='mean').fillna(0)
+            pivot = pivot.sort_index()
+            pivot.index.name = row_label
+            st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
+
+    render_table(tabs[0], 'FinalCustomerName', 'FinalCustomerName')
+    render_table(tabs[1], 'Segment', 'Segment')
+    render_table(tabs[2], 'BU', 'BU')
+    render_table(tabs[3], 'DU', 'DU')
