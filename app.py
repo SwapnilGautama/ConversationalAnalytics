@@ -74,25 +74,24 @@ Conversational Analytics Assistant
 </h1>
 """, unsafe_allow_html=True)
 
-# ✅ Clear Button
-st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
-if st.button("🧹 Clear Response"):
-    clear_input()
-st.markdown("</div>", unsafe_allow_html=True)
-
 # ✅ Welcome Text
 st.markdown("""
-<div style='text-align:center; font-size:18px; margin-bottom: 25px;'>
+<div style='text-align:center; font-size:18px; margin-bottom: 10px;'>
 Welcome to the <b>LTTS BI Assistant</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 </div>
 """, unsafe_allow_html=True)
 
-# 👉 Chat Input
-user_question = st.text_input(
-    label="👉 Start by typing your business question:",
-    placeholder="e.g. List accounts with margin % less than 30% in the last quarter",
-    value=st.session_state.autofill_text
-)
+# 👉 Chat Input + Clear Button (Right Aligned)
+chat_col, clear_col = st.columns([4, 1])
+with chat_col:
+    user_question = st.text_input(
+        label="👉 Start by typing your business question:",
+        placeholder="e.g. List accounts with margin % less than 30% in the last quarter",
+        value=st.session_state.autofill_text
+    )
+with clear_col:
+    if st.button("🧹 Clear Response"):
+        clear_input()
 
 # 🧠 Execute selected analysis script
 if user_question and not st.session_state.clear_chat:
