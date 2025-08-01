@@ -13,7 +13,6 @@ def run(prompt=None):
         df['Year'] = df['Date_a'].dt.year
         df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
         df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
-        df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
         return df
 
     df = load_data()
@@ -39,17 +38,18 @@ def run(prompt=None):
     if quarters:
         df_filtered = df_filtered[df_filtered['Quarter'].isin(quarters)]
 
-    # Helper to build UT + side-by-side billable/available hours table
     def show_tables(df, group_cols, level_name):
         st.subheader(f"Utilization % by {level_name}")
-        ut_pivot = df.groupby(group_cols + ['Month_Year'])['UT%'].mean().reset_index()
-        ut_df = ut_pivot.pivot_table(index=group_cols, columns='Month_Year', values='UT%', aggfunc='mean').fillna(0)
 
-        # Add Total row
+        # Group by and calculate correct UT%
+        agg = df.groupby(group_cols + ['Month_Year'])[['TotalBillableHours', 'NetAvailableHours']].sum().reset_index()
+        agg['UT%'] = (agg['TotalBillableHours'] / agg['NetAvailableHours']) * 100
+        ut_df = agg.pivot_table(index=group_cols, columns='Month_Year', values='UT%').fillna(0)
+
         ut_df.loc['Total'] = ut_df.sum(numeric_only=True)
         st.dataframe(ut_df.style.format("{:.2f}"))
 
-        # Side-by-side tables
+        # Side-by-side raw data tables
         col1, col2 = st.columns(2)
 
         with col1:
