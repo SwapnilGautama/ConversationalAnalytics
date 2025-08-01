@@ -1,66 +1,50 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import numpy as np
 
-def run(prompt=None):
-    # Load data
-    @st.cache_data
-    def load_data():
-        df = pd.read_excel("sample_data/LNTData.xlsx")  # ✅ Correct filename
-        df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-        df['Month_Year'] = df['Date_a'].dt.strftime('%b %Y')
-        df['Quarter'] = df['Date_a'].dt.to_period("Q").astype(str)
-        df['Year'] = df['Date_a'].dt.year
-        df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
-        df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
-        df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
-        return df
+def load_data():
+    df = pd.read_excel("sample_data/LNTData.xlsx", sheet_name="LNTData")
+    return df
 
-    df = load_data()
+def calculate_ut(df):
+    df = df.copy()
+    df['NetAvailableHours'] = pd.to_numeric(df['NetAvailableHours'], errors='coerce')
+    df['TotalBillableHours'] = pd.to_numeric(df['TotalBillableHours'], errors='coerce')
+    df = df[df['Status'] == 'Billable']
+    df['UT%'] = (df['TotalBillableHours'] / df['NetAvailableHours']) * 100
+    df = df.dropna(subset=['UT%', 'NetAvailableHours', 'TotalBillableHours'])
+    df['Month'] = df['Month'].apply(lambda x: int(x) if not pd.isna(x) else x)
+    month_order = [1,2,3,4,5,6,7,8,9,10,11,12]
+    df['MonthName'] = pd.to_datetime(df['Month'], format='%m').dt.strftime('%b')
+    df['MonthName'] = pd.Categorical(df['MonthName'], categories=[pd.to_datetime(m, format='%m').strftime('%b') for m in month_order], ordered=True)
+    return df
 
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    time_view = st.sidebar.radio("Select Trend Type:", ["Month", "Quarter", "Year"])
-    segments = st.sidebar.multiselect("Select Segment(s):", df['Segment'].dropna().unique(), default=None)
-    bus = st.sidebar.multiselect("Select BU(s):", df['DeliveryGroup'].dropna().unique(), default=None)
-    dus = st.sidebar.multiselect("Select DU(s):", df['Delivery_Unit'].dropna().unique(), default=None)
-    agents = st.sidebar.multiselect("Select Agent(s):", df['PSNo'].dropna().unique(), default=None)
+def pivot_table(df, index_col, value_col):
+    return pd.pivot_table(df, index=index_col, columns='MonthName', values=value_col, aggfunc='mean').round(2)
 
-    # Filter data
-    df_filtered = df.copy()
-    if segments:
-        df_filtered = df_filtered[df_filtered['Segment'].isin(segments)]
-    if bus:
-        df_filtered = df_filtered[df_filtered['DeliveryGroup'].isin(bus)]
-    if dus:
-        df_filtered = df_filtered[df_filtered['Delivery_Unit'].isin(dus)]
-    if agents:
-        df_filtered = df_filtered[df_filtered['PSNo'].isin(agents)]
+def agg_table(df, index_col, value_col):
+    return pd.pivot_table(df, index=index_col, columns='MonthName', values=value_col, aggfunc='sum').round(0)
 
-    # Grouping by time dimension
-    if time_view == "Month":
-        group_col = "Month_Year"
-    elif time_view == "Quarter":
-        group_col = "Quarter"
-    else:
-        group_col = "Year"
+def run(df=None, user_question=None):
+    st.title("Revenue per Person by Account")
+    df = load_data() if df is None else df
+    df = calculate_ut(df)
 
-    # === Tabs for each level ===
-    level_tabs = st.tabs(["🏭 DU Level", "🏢 BU Level", "🧑 Agent Level"])
+    tabs = st.tabs(["Summary", "BU", "DU", "Segment"])
 
-    with level_tabs[0]:
-        st.subheader("Utilization % by DU")
-        du_pivot = df_filtered.groupby([group_col, 'Delivery_Unit'])['UT%'].mean().unstack().sort_index()
-        st.dataframe(du_pivot.style.format("{:.2f}"))
+    for i, groupby in enumerate(["FinalCustomerName", "BusinessUnit", "Delivery_Unit", "Segment"]):
+        with tabs[i]:
+            st.subheader(f"Utilization % by {groupby}")
+            ut_table = pivot_table(df, groupby, 'UT%')
+            st.dataframe(ut_table.style.set_caption(f"Avg UT% by {groupby} and Month"))
 
-    with level_tabs[1]:
-        st.subheader("Utilization % by BU")
-        bu_pivot = df_filtered.groupby([group_col, 'DeliveryGroup'])['UT%'].mean().unstack().sort_index()
-        st.dataframe(bu_pivot.style.format("{:.2f}"))
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"### Total Net Available Hours by {groupby}")
+                avail = agg_table(df, groupby, 'NetAvailableHours')
+                st.dataframe(avail.style.set_caption("NetAvailableHours"))
 
-    with level_tabs[2]:
-        if not agents:
-            st.subheader("Agent-Level Summary Table")
-            agent_table = df_filtered.groupby(['PSNo', group_col])['UT%'].mean().unstack().sort_index()
-            st.dataframe(agent_table.style.format("{:.2f}"))
-        else:
-            st.info("Agent table is hidden when specific agents are selected.")
+            with col2:
+                st.markdown(f"### Total Billable Hours by {groupby}")
+                bill = agg_table(df, groupby, 'TotalBillableHours')
+                st.dataframe(bill.style.set_caption("TotalBillableHours"))
