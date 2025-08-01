@@ -13,72 +13,36 @@ def run(df=None, user_question=None):
     # Load data
     df_revenue, df_headcount = load_data()
 
-    # Merge on broader keys to preserve granularity
-    merge_keys = ["FinalCustomerName", "Segment", "BU", "DU", "Month"]
-    merged = pd.merge(
-        df_revenue,
-        df_headcount,
-        on=merge_keys,
-        how="inner"
-    )
+    # Clean currency formatting and strip whitespace
+    df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
+    df_headcount['Headcount'] = df_headcount['Headcount'].replace('[\$,]', '', regex=True).astype(float)
+    df_revenue['Month'] = df_revenue['Month'].astype(str).str.strip()
+    df_headcount['Month'] = df_headcount['Month'].astype(str).str.strip()
 
-    # Month ordering
-    month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    merged['Month'] = pd.Categorical(merged['Month'], categories=month_order, ordered=True)
+    # Aggregated Revenue and Headcount separately
+    rev_agg = df_revenue.groupby(['Segment', 'Month'], as_index=False).agg({'Revenue': 'sum'})
+    hc_agg = df_headcount.groupby(['Segment', 'Month'], as_index=False).agg({'Headcount': 'sum'})
 
-    # 🧾 Sidebar filters
-    st.sidebar.header("🔍 Filter")
-    selected_segment = st.sidebar.multiselect("Select Segment", merged['Segment'].dropna().unique())
-    selected_bu = st.sidebar.multiselect("Select BU", merged['BU'].dropna().unique())
-    selected_du = st.sidebar.multiselect("Select DU", merged['DU'].dropna().unique())
+    # Merge on Segment and Month only
+    merged = pd.merge(rev_agg, hc_agg, on=['Segment', 'Month'], how='inner')
+    merged['Revenue per Person'] = (merged['Revenue'] / merged['Headcount']).round(2)
 
-    # Apply filters
-    if selected_segment:
-        merged = merged[merged['Segment'].isin(selected_segment)]
-    if selected_bu:
-        merged = merged[merged['BU'].isin(selected_bu)]
-    if selected_du:
-        merged = merged[merged['DU'].isin(selected_du)]
+    # Pivot tables for display
+    rev_table = merged.pivot(index='Segment', columns='Month', values='Revenue').fillna(0).astype(int)
+    hc_table = merged.pivot(index='Segment', columns='Month', values='Headcount').fillna(0).astype(int)
+    rpp_table = merged.pivot(index='Segment', columns='Month', values='Revenue per Person').fillna(0).round(2)
 
-    # 📊 Tabs
-    tabs = st.tabs(["Summary", "Segment", "BU", "DU"])
+    # Show in tabs
+    tab1, tab2, tab3 = st.tabs(["Summary", "Segment", "BU", "DU"][:3])
 
-    def render_table(tab, group_col, row_label):
-        with tab:
-            st.subheader(f"Revenue per Person by {group_col}")
+    with tab1:
+        st.subheader("Revenue per Person by Segment")
+        st.dataframe(rpp_table.style.format("{:,.2f}"))
 
-            # Aggregate revenue and headcount
-            agg = merged.groupby([group_col, 'Month']).agg({
-                'Revenue': 'sum',
-                'Headcount': 'sum'
-            }).reset_index()
-
-            # Calculate Revenue per Person
-            agg['Revenue per Person'] = agg['Revenue'] / agg['Headcount']
-            agg = agg.dropna(subset=['Revenue per Person'])
-
-            # Pivot for main table
-            pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue per Person').fillna(0)
-            pivot = pivot.reindex(columns=month_order, fill_value=0)
-            pivot.index.name = row_label
-            st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
-
-            # Total Revenue and Headcount tables
-            revenue_pivot = agg.pivot_table(index=group_col, columns='Month', values='Revenue').reindex(columns=month_order, fill_value=0)
-            headcount_pivot = agg.pivot_table(index=group_col, columns='Month', values='Headcount').reindex(columns=month_order, fill_value=0)
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown("#### 🔹 Total Revenue by Month")
-                st.dataframe(revenue_pivot.style.format("{:,.0f}"), use_container_width=True)
-
-            with col2:
-                st.markdown("#### 🔹 Total Headcount by Month")
-                st.dataframe(headcount_pivot.style.format("{:,.0f}"), use_container_width=True)
-
-    render_table(tabs[0], 'FinalCustomerName', 'FinalCustomerName')
-    render_table(tabs[1], 'Segment', 'Segment')
-    render_table(tabs[2], 'BU', 'BU')
-    render_table(tabs[3], 'DU', 'DU')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 🔷 Total Revenue by Month")
+            st.dataframe(rev_table.style.format("{:,.0f}"))
+        with col2:
+            st.markdown("### 🔷 Total Headcount by Month")
+            st.dataframe(hc_table.style.format("{:,.0f}"))
