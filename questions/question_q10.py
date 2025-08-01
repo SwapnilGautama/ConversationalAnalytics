@@ -16,34 +16,26 @@ def run(query):
             'BU': 'Business_Unit'
         }
 
-        # Rename columns based on q8.py logic
         for standard_col, actual_col in column_map.items():
             if actual_col in df.columns:
                 df.rename(columns={actual_col: standard_col}, inplace=True)
                 required_fields.append(standard_col)
 
-        # Check all required columns exist
         missing_cols = [col for col in required_fields if col not in df.columns]
         if missing_cols:
             st.error(f"Missing required columns: {', '.join(missing_cols)}")
             return
 
-        # Map Year to numeric year
         df['Year'] = df['Year'].astype(str).str.extract(r'(\d{4})').astype(int)
-
-        # Calculate Utilization %
         df["Utilization %"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
         df = df.replace([float('inf'), float('-inf')], pd.NA).dropna(subset=['Utilization %'])
 
-        # Month mapping (1 → Jan, 2 → Feb, ...)
         df['MonthShort'] = df['Month'].apply(lambda x: calendar.month_abbr[int(x)])
         df['MonthOrder'] = df['Month']
 
-        # Filter only rows with FresherAgeingCategory
         df = df[df['FresherAgeingCategory'].notna()]
 
-        # --- KEY INSIGHTS ---
-        
+        # --- Insights ---
         latest_month = df.sort_values(["Year", "MonthOrder"]).dropna(subset=["Utilization %"]).iloc[-1]
         latest_year = latest_month["Year"]
         latest_month_num = latest_month["MonthOrder"]
@@ -55,26 +47,53 @@ def run(query):
         top_increase = category_summary.dropna().head(3)
         top_decrease = category_summary.dropna().sort_values().head(3)
 
-        
-        # --- TABLE ONLY ---
-        
-        pivot_df = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
+        # --- UT% Table ---
+        pivot_ut = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
                                   columns='FresherAgeingCategory',
                                   values='Utilization %',
                                   aggfunc='mean').reset_index()
 
-        pivot_df = pivot_df.sort_values(["Year", "MonthOrder"])
-        pivot_df.drop(columns="Year", inplace=True)
+        pivot_ut = pivot_ut.sort_values(["Year", "MonthOrder"])
+        pivot_ut.drop(columns="Year", inplace=True)
 
-        # Format and display table as whole number percentages
-        numeric_cols = pivot_df.select_dtypes(include='number').columns
-        styled_df = pivot_df.drop(columns='MonthOrder').style.format(
-            {col: lambda x: f"{int(round(x))}%" if pd.notnull(x) else "" for col in numeric_cols}
+        numeric_cols_ut = pivot_ut.select_dtypes(include='number').columns
+        styled_ut = pivot_ut.drop(columns='MonthOrder').style.format(
+            {col: lambda x: f"{int(round(x))}%" if pd.notnull(x) else "" for col in numeric_cols_ut}
         ).set_properties(**{
             'border': '1px solid lightgrey',
             'border-collapse': 'collapse'
         })
-        st.dataframe(styled_df, use_container_width=True)
+
+        st.dataframe(styled_ut, use_container_width=True)
+
+        # --- TotalBillableHours and NetAvailableHours Tables (Side by Side) ---
+        col1, col2 = st.columns(2)
+
+        # TotalBillableHours Table
+        with col1:
+            st.markdown("🔹 **TotalBillableHours**")
+            billable_pivot = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
+                                            columns='FresherAgeingCategory',
+                                            values='TotalBillableHours',
+                                            aggfunc='sum').reset_index()
+            billable_pivot = billable_pivot.sort_values(['Year', 'MonthOrder'])
+            billable_pivot.drop(columns='Year', inplace=True)
+            styled_billable = billable_pivot.drop(columns='MonthOrder').style.format('{:,.0f}').set_properties(
+                **{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
+            st.dataframe(styled_billable, use_container_width=True)
+
+        # NetAvailableHours Table
+        with col2:
+            st.markdown("🔹 **NetAvailableHours**")
+            available_pivot = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
+                                             columns='FresherAgeingCategory',
+                                             values='NetAvailableHours',
+                                             aggfunc='sum').reset_index()
+            available_pivot = available_pivot.sort_values(['Year', 'MonthOrder'])
+            available_pivot.drop(columns='Year', inplace=True)
+            styled_available = available_pivot.drop(columns='MonthOrder').style.format('{:,.0f}').set_properties(
+                **{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
+            st.dataframe(styled_available, use_container_width=True)
 
     except Exception as e:
         st.error(f"Error running analysis: {e}")
