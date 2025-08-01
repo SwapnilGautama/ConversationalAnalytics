@@ -46,7 +46,12 @@ def run(prompt=None):
         agg['UT%'] = (agg['TotalBillableHours'] / agg['NetAvailableHours']) * 100
         ut_df = agg.pivot_table(index=group_cols, columns='Month_Year', values='UT%').fillna(0)
 
-        ut_df.loc['Total'] = ut_df.sum(numeric_only=True)
+        # Weighted average for Total row
+        billable_totals = df.groupby(['Month_Year'])['TotalBillableHours'].sum()
+        available_totals = df.groupby(['Month_Year'])['NetAvailableHours'].sum()
+        total_ut = (billable_totals / available_totals * 100).round(2)
+        ut_df.loc['Total'] = total_ut
+
         st.dataframe(ut_df.style.format("{:.2f}"))
 
         # Side-by-side raw data tables
