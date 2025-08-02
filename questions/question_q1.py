@@ -1,107 +1,52 @@
-# questions/question_q1.py
-
 import pandas as pd
-from dateutil.relativedelta import relativedelta
 import streamlit as st
 import re
 
-def compute_margin(df):
-    df = df.copy()
-    pivot = df.pivot_table(index=["Month", "Client"], 
-                           columns="Type", 
-                           values="Amount", 
-                           aggfunc="sum").reset_index()
-    pivot["Revenue"] = pivot.get("Revenue", 0)
-    pivot["Cost"] = pivot.get("Cost", 0)
-
-    # ✅ Correct Margin calculation using full precision
-    pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"]) * 100
-    return pivot
-
-def extract_threshold(user_question, default_threshold=30):
-    if user_question:
-        patterns = [
-            r"margin\s*<\s*(\d+)",
-            r"less than\s*(\d+)",
-            r"below\s*(\d+)",
-            r"under\s*(\d+)",
-            r"margin.*?(\d+)\s*%"
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, user_question.lower())
-            if match:
-                return float(match.group(1))
-    return default_threshold
-
-def extract_month(user_question):
-    months = {
-        "january": 1, "february": 2, "march": 3, "april": 4,
-        "may": 5, "june": 6, "july": 7, "august": 8,
-        "september": 9, "october": 10, "november": 11, "december": 12
-    }
-    if user_question:
-        user_question = user_question.lower()
-        for name, num in months.items():
-            if name in user_question:
-                year_match = re.search(rf"{name}\s*(\d{{4}})", user_question)
-                if year_match:
-                    year = int(year_match.group(1))
-                    return pd.Timestamp(year=year, month=num, day=1)
-    return None
-
 def run(df, user_question=None):
-    df_margin = compute_margin(df)
+    df.columns = df.columns.str.strip()
 
-    if "Month" not in df_margin or "Client" not in df_margin or "Margin %" not in df_margin:
-        st.error("Required fields missing. Ensure Margin % calculation is correctly applied.")
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    df = df.dropna(subset=['Month'])
+    df['Quarter'] = df['Month'].dt.to_period('Q')
+
+    amount_col = next((col for col in df.columns if col.lower() in ['amount', 'amount in usd']), None)
+    company_col = next((col for col in df.columns if 'company' in col.lower()), None)
+
+    if amount_col is None or company_col is None or 'Type' not in df.columns:
+        st.error("❌ Required columns not found.")
         return
 
-    threshold = extract_threshold(user_question)
-    target_month = extract_month(user_question)
+    latest_q = df['Quarter'].max()
 
-    if target_month:
-        filtered_data = df_margin[df_margin["Month"].dt.to_period("M") == target_month.to_period("M")]
-        time_label = target_month.strftime("%B %Y")
-    else:
-        latest_month = df_margin["Month"].max()
-        quarter_start = latest_month - relativedelta(months=2)
-        filtered_data = df_margin[(df_margin["Month"] >= quarter_start) & (df_margin["Month"] <= latest_month)]
-        time_label = "the last quarter"
+    rev_df = df[(df['Type'].str.lower() == 'revenue') & (df['Quarter'] == latest_q)]
+    cost_df = df[(df['Type'].str.lower() == 'cost') & (df['Quarter'] == latest_q)]
 
-    agg = filtered_data.groupby("Client").agg({
-        "Margin %": "mean",       # Calculated from full precision values
-        "Revenue": "sum",
-        "Cost": "sum"
-    }).reset_index()
+    rev_by_client = rev_df.groupby(company_col)[amount_col].sum()
+    cost_by_client = cost_df.groupby(company_col)[amount_col].sum()
 
-    agg.rename(columns={
-        "Margin %": "Latest Margin %",
-        "Revenue": "Revenue (Million USD)",
-        "Cost": "Cost (Million USD)"
-    }, inplace=True)
+    common_clients = rev_by_client.index.union(cost_by_client.index)
+    data = []
 
-    # ✅ Round only for display after all calculations
-    agg["Revenue (Million USD)"] = agg["Revenue (Million USD)"] / 1e6
-    agg["Cost (Million USD)"] = agg["Cost (Million USD)"] / 1e6
-    agg["Latest Margin %"] = agg["Latest Margin %"]
+    for client in common_clients:
+        rev = rev_by_client.get(client, 0)
+        cost = cost_by_client.get(client, 0)
+        if rev == 0:
+            continue
+        margin_pct = ((rev - cost) / rev) * 100
+        data.append({
+            'Client': client,
+            'Latest Margin %': round(margin_pct, 1),
+            'Revenue (Million USD)': round(rev / 1e6, 2),
+            'Cost (Million USD)': round(cost / 1e6, 2)
+        })
 
-    filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (Million USD)"] > 0)]
+    df_margin = pd.DataFrame(data)
+    filtered_df = df_margin[df_margin['Latest Margin %'] < 30]
 
-    top_10 = filtered_df.sort_values("Latest Margin %", ascending=False).head(10)
+    total_clients = len(df_margin)
+    low_margin_clients = len(filtered_df)
+    percent = (low_margin_clients / total_clients) * 100 if total_clients else 0
 
-    total_clients = agg["Client"].nunique()
-    low_margin_count = filtered_df["Client"].nunique()
-    proportion = (low_margin_count / total_clients * 100) if total_clients else 0
-
-    st.markdown(
-        f"🔍 **For {time_label}**, **{low_margin_count} accounts** had an average margin below **{threshold}%** "
-        f"and non-zero revenue, which is **{proportion:.1f}%** of all **{total_clients} accounts**."
-    )
-
-    st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
-    st.dataframe(
-        top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]]
-        .round(2)
-        .reset_index(drop=True),
-        use_container_width=True
-    )
+    st.markdown("### 🧾 Accounts with Margin < 30.0% (non-zero revenue)")
+    st.markdown(f"📌 **For the last quarter**, **{low_margin_clients} accounts** had an average margin below **30.0%** and non-zero revenue, which is **{percent:.1f}%** of all **{total_clients} accounts**.")
+    st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True)
