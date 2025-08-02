@@ -12,7 +12,7 @@ def load_data():
     return df_revenue, df_hours
 
 def pivot_summary(df, value_field, index_field='FinalCustomerName'):
-    df_pivot = df.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
+    df_pivot = df.pivot_table(index=index_field, columns='Month', values=value_field, aggfunc='sum', fill_value=0)
     df_pivot = df_pivot[[m for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] if m in df_pivot.columns]]
     if value_field != 'Realized Rate':
         df_pivot = df_pivot.astype(int)
@@ -84,6 +84,7 @@ def run(df=None, user_question=None):
 
             merged = merged[merged['Realized Rate'] <= threshold]
 
+            # ✅ Use pivot_table to avoid reshaping errors
             st.dataframe(pivot_summary(merged, 'Realized Rate', 'FinalCustomerName'))
 
             col1, col2 = st.columns(2)
