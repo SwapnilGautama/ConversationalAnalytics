@@ -13,8 +13,8 @@ def compute_margin(df):
                            aggfunc="sum").reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
-    
-    # ✅ Updated Margin % formula
+
+    # ✅ Correct Margin calculation using full precision
     pivot["Margin %"] = ((pivot["Revenue"] - pivot["Cost"]) / pivot["Revenue"]) * 100
     return pivot
 
@@ -69,7 +69,7 @@ def run(df, user_question=None):
         time_label = "the last quarter"
 
     agg = filtered_data.groupby("Client").agg({
-        "Margin %": "mean",
+        "Margin %": "mean",       # Calculated from full precision values
         "Revenue": "sum",
         "Cost": "sum"
     }).reset_index()
@@ -80,9 +80,10 @@ def run(df, user_question=None):
         "Cost": "Cost (Million USD)"
     }, inplace=True)
 
-    agg["Revenue (Million USD)"] = (agg["Revenue (Million USD)"] / 1e6).round(2)
-    agg["Cost (Million USD)"] = (agg["Cost (Million USD)"] / 1e6).round(2)
-    agg["Latest Margin %"] = agg["Latest Margin %"].round(2)
+    # ✅ Round only for display after all calculations
+    agg["Revenue (Million USD)"] = agg["Revenue (Million USD)"] / 1e6
+    agg["Cost (Million USD)"] = agg["Cost (Million USD)"] / 1e6
+    agg["Latest Margin %"] = agg["Latest Margin %"]
 
     filtered_df = agg[(agg["Latest Margin %"] < threshold) & (agg["Revenue (Million USD)"] > 0)]
 
@@ -99,8 +100,8 @@ def run(df, user_question=None):
 
     st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
     st.dataframe(
-        top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]].reset_index(drop=True),
+        top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]]
+        .round(2)
+        .reset_index(drop=True),
         use_container_width=True
     )
-
-    return None
