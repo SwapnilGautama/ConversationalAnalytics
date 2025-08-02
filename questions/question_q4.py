@@ -4,7 +4,6 @@ import re
 
 def run(df, user_question=None):
     import streamlit as st
-    import streamlit.components.v1 as components
 
     df.columns = df.columns.str.strip()
 
@@ -70,7 +69,7 @@ def run(df, user_question=None):
             df_summary[cb_label] = df_summary['C&B (Million USD)'].pct_change() * 100
             df_summary[rev_label] = df_summary['Revenue (Million USD)'].pct_change() * 100
             df_summary['Rev-C&B Movement Diff'] = df_summary[rev_label] - df_summary[cb_label]
-            df_summary = df_summary.round(2)
+            df_summary = df_summary.round(1)
 
             # 📊 Trend Summary Header
             st.markdown(f"### 📊 {title_str}")
@@ -83,11 +82,10 @@ def run(df, user_question=None):
                 )
 
             # === Sub-tabs ===
-            sub_tabs = st.tabs(["📋 Summary Table", "🏢 Revenue by BU", "🏭 Revenue by DU"])
+            sub_tabs = st.tabs(["📋 Summary Table", "🏢 Revenue by BU", "🏭 Revenue by DU", "🚛 Revenue by Segment"])
 
             with sub_tabs[0]:
                 df_sum_display = df_summary.reset_index().rename(columns={'Month': 'Period'})
-
                 total_cb = df_sum_display['C&B (Million USD)'].sum()
                 total_rev = df_sum_display['Revenue (Million USD)'].sum()
                 avg_cb_pct = (total_cb / total_rev) * 100 if total_rev else 0
@@ -97,12 +95,12 @@ def run(df, user_question=None):
 
                 total_row = {
                     'Period': '**Total**',
-                    'C&B (Million USD)': f"**{total_cb:.2f}**",
-                    'Revenue (Million USD)': f"**{total_rev:.2f}**",
-                    'C&B % of Revenue': f"**{avg_cb_pct:.2f}**",
-                    cb_label: f"**{avg_cb_chg:.2f}**",
-                    rev_label: f"**{avg_rev_chg:.2f}**",
-                    'Rev-C&B Movement Diff': f"**{avg_diff:+.2f}**"
+                    'C&B (Million USD)': f"**{total_cb:.1f}**",
+                    'Revenue (Million USD)': f"**{total_rev:.1f}**",
+                    'C&B % of Revenue': f"**{avg_cb_pct:.1f}**",
+                    cb_label: f"**{avg_cb_chg:.1f}**",
+                    rev_label: f"**{avg_rev_chg:.1f}**",
+                    'Rev-C&B Movement Diff': f"**{avg_diff:+.1f}**"
                 }
 
                 df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
@@ -119,15 +117,19 @@ def run(df, user_question=None):
 
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-            with sub_tabs[1]:
+            # Pivot table function (reuse for DU/BU/Segment)
+            def pivot_and_display(group_field, label):
                 df_rev['Period'] = period
-                pivot_bu = pd.pivot_table(df_rev, index='Period', columns='BU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-                pivot_bu.loc['Total'] = pivot_bu.sum()
-                st.markdown("#### Revenue by BU (Million USD)")
-                st.dataframe(pivot_bu.round(1).reset_index())
+                pivot_df = pd.pivot_table(df_rev, index=group_field, columns='Period', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+                pivot_df.loc['Total'] = pivot_df.sum()
+                st.markdown(f"#### Revenue by {label} (Million USD)")
+                st.dataframe(pivot_df.round(1).reset_index())
+
+            with sub_tabs[1]:
+                pivot_and_display('BU', 'BU')
 
             with sub_tabs[2]:
-                pivot_du = pd.pivot_table(df_rev, index='Period', columns='DU', values=amount_col, aggfunc='sum').fillna(0) / 1e6
-                pivot_du.loc['Total'] = pivot_du.sum()
-                st.markdown("#### Revenue by DU (Million USD)")
-                st.dataframe(pivot_du.round(1).reset_index())
+                pivot_and_display('DU', 'DU')
+
+            with sub_tabs[3]:
+                pivot_and_display('Segment', 'Segment')
