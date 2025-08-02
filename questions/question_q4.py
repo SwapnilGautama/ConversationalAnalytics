@@ -121,9 +121,11 @@ def run(df, user_question=None):
             def pivot_and_display(group_field, label):
                 df_rev['Period'] = period
                 pivot_df = pd.pivot_table(df_rev, index=group_field, columns='Period', values=amount_col, aggfunc='sum').fillna(0) / 1e6
+                pivot_df = pivot_df.round(1)
                 pivot_df.loc['Total'] = pivot_df.sum()
+                pivot_df = pivot_df.round(1)
                 st.markdown(f"#### Revenue by {label} (Million USD)")
-                st.dataframe(pivot_df.round(1).reset_index())
+                st.dataframe(pivot_df.reset_index(), use_container_width=True)
 
             with sub_tabs[1]:
                 pivot_and_display('BU', 'BU')
