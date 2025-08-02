@@ -10,15 +10,10 @@ import numpy as np
 def run(df, user_question):
     # Load correct dataset
     df = pd.read_excel("sample_data/LNTData.xlsx")
+
     df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
     df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'PSNo'])
-
-    # Add Month column
     df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
-
-    # ✅ Align headcount logic with headcount_aggregated
-    df = df.sort_values(by=['PSNo', 'Date_a'])
-    df = df.drop_duplicates(subset=['PSNo', 'Month'], keep='last')
 
     tab1, tab2 = st.tabs(["Client-wise View", "Segment-wise View"])
 
