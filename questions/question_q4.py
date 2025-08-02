@@ -1,9 +1,10 @@
-# ✅ FINAL Q4 CODE: Revenue and C&B logic enhanced
+# ✅ FINAL Q4 CODE: Revenue and C&B logic enhanced + formatting improvements
 import pandas as pd
 import re
 
 def run(df, user_question=None):
     import streamlit as st
+    import streamlit.components.v1 as components
 
     df.columns = df.columns.str.strip()
 
@@ -105,7 +106,18 @@ def run(df, user_question=None):
                 }
 
                 df_sum_display = pd.concat([df_sum_display, pd.DataFrame([total_row])], ignore_index=True)
-                st.dataframe(df_sum_display, hide_index=True)
+
+                def highlight_diff(val):
+                    try:
+                        val = float(str(val).replace('**', ''))
+                        color = 'red' if val < 0 else 'black'
+                        return f'color: {color}'
+                    except:
+                        return ''
+
+                styled_df = df_sum_display.style.applymap(highlight_diff, subset=['Rev-C&B Movement Diff'])
+
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
             with sub_tabs[1]:
                 df_rev['Period'] = period
