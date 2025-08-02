@@ -44,12 +44,25 @@ def run(df=None, user_question=None):
 
     with st.container():
         tabs = st.tabs(["Summary", "Segment", "BU", "DU"])
+
+        # ---- Summary Tab ----
         with tabs[0]:
             st.subheader("Realized Rate by FinalCustomerName")
+
+            # 🎯 Left filter pane
+            with st.sidebar:
+                st.markdown("### 🔍 Filters")
+                threshold = st.slider("Maximum Realized Rate", min_value=0, max_value=1000, value=5)
+                segment_filter = st.selectbox("Segment", ["All"] + sorted(df_revenue['Segment'].dropna().unique().tolist()))
+                bu_filter = st.selectbox("BU", ["All"] + sorted(df_revenue['BU'].dropna().unique().tolist()))
+                du_filter = st.selectbox("DU", ["All"] + sorted(df_revenue['DU'].dropna().unique().tolist()))
+                month_filter = st.selectbox("Month", ["All"] + sorted(df_revenue['Month'].dropna().unique().tolist()))
+
+            # 🔄 Merge and Calculate
             merged = pd.merge(
-                df_revenue.groupby(['FinalCustomerName', 'Month'], as_index=False)['Revenue'].sum(),
-                df_hours.groupby(['FinalCustomerName', 'Month'], as_index=False)['NetAvailableHours'].sum(),
-                on=['FinalCustomerName', 'Month'],
+                df_revenue.groupby(['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'], as_index=False)['Revenue'].sum(),
+                df_hours.groupby(['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'], as_index=False)['NetAvailableHours'].sum(),
+                on=['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'],
                 how='outer'
             )
             merged['Revenue'] = merged['Revenue'].fillna(0)
@@ -58,7 +71,21 @@ def run(df=None, user_question=None):
                 lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
                 axis=1
             )
+
+            # 🔍 Apply Filters
+            if segment_filter != "All":
+                merged = merged[merged['Segment'] == segment_filter]
+            if bu_filter != "All":
+                merged = merged[merged['BU'] == bu_filter]
+            if du_filter != "All":
+                merged = merged[merged['DU'] == du_filter]
+            if month_filter != "All":
+                merged = merged[merged['Month'] == month_filter]
+
+            merged = merged[merged['Realized Rate'] <= threshold]
+
             st.dataframe(pivot_summary(merged, 'Realized Rate', 'FinalCustomerName'))
+
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("### 💰 Total Revenue by Month")
@@ -67,6 +94,7 @@ def run(df=None, user_question=None):
                 st.markdown("### ⏱️ Total Net Available Hours by Month")
                 st.dataframe(pivot_summary(merged, 'NetAvailableHours', 'FinalCustomerName'))
 
+        # ---- Other Tabs ----
         with tabs[1]:
             generate_tab_view(df_revenue, df_hours, 'Segment', 'Segment')
         with tabs[2]:
