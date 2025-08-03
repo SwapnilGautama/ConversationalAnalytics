@@ -1,8 +1,10 @@
-# ✅ FINAL Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Segment, DU, BU, Customer
+# ✅ FINAL Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Segment, DU, BU, Customer | 1 Decimal Formatting
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import re
+
+pd.options.display.float_format = '{:,.1f}'.format  # Force 1 decimal display globally
 
 def compute_margin(df, groupby_fields):
     df = df.copy()
@@ -62,9 +64,8 @@ def margin_analysis(df, group_field, threshold, target_month):
     }).reset_index()
 
     grouped["Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
-    grouped["Revenue (Million USD)"] = (grouped["Revenue"] / 1e6).round(1)
-    grouped["Cost (Million USD)"] = (grouped["Cost"] / 1e6).round(1)
-    grouped["Margin %"] = grouped["Margin %"].round(1)
+    grouped["Revenue (Million USD)"] = (grouped["Revenue"] / 1e6)
+    grouped["Cost (Million USD)"] = (grouped["Cost"] / 1e6)
 
     filtered_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
     top_10 = filtered_df.sort_values("Margin %", ascending=False).head(10)
@@ -78,10 +79,19 @@ def margin_analysis(df, group_field, threshold, target_month):
         f"**{threshold}%**, which is **{proportion:.1f}%** of all **{total_entities} entities**."
     )
 
-    st.dataframe(
-        top_10.reset_index(drop=True),
-        use_container_width=True
-    )
+    if not top_10.empty:
+        st.dataframe(
+            top_10.reset_index(drop=True).style.format({
+                "Revenue": "{:,.1f}",
+                "Cost": "{:,.1f}",
+                "Margin %": "{:,.1f}",
+                "Revenue (Million USD)": "{:,.1f}",
+                "Cost (Million USD)": "{:,.1f}"
+            }),
+            use_container_width=True
+        )
+    else:
+        st.info("No records found below margin threshold.")
 
 def run(df, user_question=None):
     df = df.copy()
