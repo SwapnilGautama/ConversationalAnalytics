@@ -47,18 +47,16 @@ def run(query):
         top_increase = category_summary.dropna().head(3)
         top_decrease = category_summary.dropna().sort_values().head(3)
 
-        # --- UT% Table ---
-        pivot_ut = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
-                                  columns='FresherAgeingCategory',
+        # --- UT% Table (transposed) ---
+        pivot_ut = df.pivot_table(index='FresherAgeingCategory',
+                                  columns='MonthShort',
                                   values='Utilization %',
-                                  aggfunc='mean').reset_index()
+                                  aggfunc='mean')
 
-        pivot_ut = pivot_ut.sort_values(["Year", "MonthOrder"])
-        pivot_ut.drop(columns="Year", inplace=True)
+        pivot_ut = pivot_ut[sorted(pivot_ut.columns, key=lambda x: list(calendar.month_abbr).index(x))]
 
-        numeric_cols_ut = pivot_ut.select_dtypes(include='number').columns
-        styled_ut = pivot_ut.drop(columns='MonthOrder').style.format(
-            {col: lambda x: f"{int(round(x))}%" if pd.notnull(x) else "" for col in numeric_cols_ut}
+        styled_ut = pivot_ut.style.format(
+            lambda x: f"{int(round(x))}%" if pd.notnull(x) else ""
         ).set_properties(**{
             'border': '1px solid lightgrey',
             'border-collapse': 'collapse'
@@ -69,35 +67,29 @@ def run(query):
         # --- TotalBillableHours and NetAvailableHours Tables (Side by Side) ---
         col1, col2 = st.columns(2)
 
-        # TotalBillableHours Table
         with col1:
             st.markdown("🔹 **TotalBillableHours**")
-            billable_pivot = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
-                                            columns='FresherAgeingCategory',
+            billable_pivot = df.pivot_table(index='FresherAgeingCategory',
+                                            columns='MonthShort',
                                             values='TotalBillableHours',
-                                            aggfunc='sum').reset_index()
-            billable_pivot = billable_pivot.sort_values(['Year', 'MonthOrder'])
-            billable_pivot.drop(columns='Year', inplace=True)
+                                            aggfunc='sum')
+            billable_pivot = billable_pivot[sorted(billable_pivot.columns, key=lambda x: list(calendar.month_abbr).index(x))]
 
-            numeric_cols_billable = billable_pivot.select_dtypes(include='number').columns
-            styled_billable = billable_pivot.drop(columns='MonthOrder').style.format(
-                {col: "{:,.0f}" for col in numeric_cols_billable if col != 'MonthShort'}
+            styled_billable = billable_pivot.style.format(
+                "{:,.0f}"
             ).set_properties(**{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
             st.dataframe(styled_billable, use_container_width=True)
 
-        # NetAvailableHours Table
         with col2:
             st.markdown("🔹 **NetAvailableHours**")
-            available_pivot = df.pivot_table(index=['Year', 'MonthOrder', 'MonthShort'],
-                                             columns='FresherAgeingCategory',
+            available_pivot = df.pivot_table(index='FresherAgeingCategory',
+                                             columns='MonthShort',
                                              values='NetAvailableHours',
-                                             aggfunc='sum').reset_index()
-            available_pivot = available_pivot.sort_values(['Year', 'MonthOrder'])
-            available_pivot.drop(columns='Year', inplace=True)
+                                             aggfunc='sum')
+            available_pivot = available_pivot[sorted(available_pivot.columns, key=lambda x: list(calendar.month_abbr).index(x))]
 
-            numeric_cols_available = available_pivot.select_dtypes(include='number').columns
-            styled_available = available_pivot.drop(columns='MonthOrder').style.format(
-                {col: "{:,.0f}" for col in numeric_cols_available if col != 'MonthShort'}
+            styled_available = available_pivot.style.format(
+                "{:,.0f}"
             ).set_properties(**{'border': '1px solid lightgrey', 'border-collapse': 'collapse'})
             st.dataframe(styled_available, use_container_width=True)
 
