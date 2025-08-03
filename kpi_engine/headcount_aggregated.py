@@ -1,40 +1,24 @@
-# ✅ Rebuilt headcount_aggregated.py using exact q7.py logic
-
+# ✅ FINAL: headcount_aggregated.py — uses distinct PSNo like q7.py, grouped by Segment and Month
 import pandas as pd
 
-def compute_headcount(df):
+def run(df):
     df = df.copy()
+    
+    # Ensure correct datetime parsing
+    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
+    df = df.dropna(subset=['Date_a', 'Segment', 'PSNo'])
 
-    # Clean and standardize fields
-    df['Segment'] = df.get('Segment', 'Unknown')
-    df['BU'] = df.get('Exec DG', 'Unknown')
-    df['DU'] = df.get('Exec DU', 'Unknown')
-    df['PSNo'] = df.get('PSNo', 'Unknown')
-    df['Month'] = pd.to_datetime(df['date_a'], errors='coerce').dt.to_period("M")
+    # Create month column in format like 'Jan', 'Feb', etc.
+    df['Month'] = df['Date_a'].dt.strftime('%b')
 
-    # Drop duplicates at Month + PSNo level — ensures unique people per month
-    df_unique = df.drop_duplicates(subset=["Month", "PSNo"])
+    # Include relevant fields
+    df = df[['PSNo', 'Status', 'FinalCustomerName', 'Segment', 'Date_a', 'BU', 'DU', 'Month']]
 
-    # Group and count unique PSNo
-    grouped = (
-        df_unique.groupby(["Segment", "BU", "DU", "Month"])["PSNo"]
-        .nunique()
-        .reset_index(name="Headcount")
-    )
+    # Compute unique headcount (distinct PSNo) by Segment and Month
+    grouped = df.groupby(['Segment', 'Month'])['PSNo'].nunique().reset_index()
+    grouped = grouped.rename(columns={'PSNo': 'Headcount'})
 
-    # Pivot: show months as columns
-    pivot = grouped.pivot_table(
-        index=["Segment", "BU", "DU"],
-        columns="Month",
-        values="Headcount",
-        fill_value=0
-    )
+    # Format headcount to 1 decimal (optional)
+    grouped['Headcount'] = grouped['Headcount'].astype(float).round(1)
 
-    # Sort columns in chronological order
-    pivot = pivot.sort_index(axis=1)
-
-    # Reset index and clean up column names
-    pivot = pivot.reset_index()
-    pivot.columns.name = None
-
-    return pivot
+    return grouped
