@@ -5,20 +5,20 @@ def get_headcount_data(df_ut):
     df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
     df_ut = df_ut.dropna(subset=['Date_a', 'PSNo'])
 
-    # ✅ Remove duplicate PSNo-Date_a entries (like q7.py does)
+    # ✅ Remove duplicates per PSNo + Date
     df_ut = df_ut.drop_duplicates(subset=['PSNo', 'Date_a'])
 
-    # Convert to month period
+    # ✅ Convert date to monthly string
     df_ut['Month'] = df_ut['Date_a'].dt.to_period('M').astype(str)
 
-    # Ensure required fields exist
+    # ✅ Ensure required fields exist
     df_ut['Segment'] = df_ut.get('Segment', 'Unknown')
     df_ut['BU'] = df_ut.get('Exec DG', 'Unknown')
     df_ut['DU'] = df_ut.get('Exec DU', 'Unknown')
     df_ut['FinalCustomerName'] = df_ut.get('FinalCustomerName', 'Unknown')
 
+    # ✅ Explicitly include both Billable and Non-Billable (no filter applied)
     result_frames = []
-
     for groupby_col in ['Segment', 'BU', 'DU', 'FinalCustomerName']:
         monthly_headcount = (
             df_ut.groupby([groupby_col, 'Month'])['PSNo']
