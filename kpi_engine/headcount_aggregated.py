@@ -1,24 +1,30 @@
 import pandas as pd
 
-def get_headcount_aggregated(ut_path):
-    df = pd.read_excel(ut_path)
-    df.columns = df.columns.str.strip()
+def get_headcount_data(df_ut):
+    df_ut = df_ut.copy()
+    df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
+    df_ut = df_ut.dropna(subset=['Date_a', 'PSNo'])
+    df_ut['Month'] = df_ut['Date_a'].dt.to_period('M').astype(str)
 
-    df['Date_a'] = pd.to_datetime(df['Date_a'], errors='coerce')
-    df = df.dropna(subset=['Date_a', 'FinalCustomerName', 'PSNo'])
+    df_ut['Segment'] = df_ut.get('Segment', 'Unknown')
+    df_ut['BU'] = df_ut.get('Exec DG', 'Unknown')
+    df_ut['DU'] = df_ut.get('Exec DU', 'Unknown')
+    df_ut['FinalCustomerName'] = df_ut.get('FinalCustomerName', 'Unknown')
 
-    df['Month'] = df['Date_a'].dt.to_period('M').astype(str)
+    result_frames = []
 
-    df['Segment'] = df.get('Segment', 'Unknown')
-    df['BU'] = df.get('Exec DG', 'Unknown')
-    df['DU'] = df.get('Exec DU', 'Unknown')
+    for groupby_col in ['Segment', 'BU', 'DU', 'FinalCustomerName']:
+        monthly_headcount = df_ut.groupby([groupby_col, 'Month'])['PSNo'].nunique().reset_index()
+        monthly_headcount['FTE'] = monthly_headcount['PSNo'].round(1)
+        monthly_headcount = monthly_headcount.rename(columns={
+            groupby_col: 'Group',
+            'Month': 'Month',
+            'FTE': 'Headcount'
+        })[['Group', 'Month', 'Headcount']]
+        monthly_headcount['Dimension'] = groupby_col
+        result_frames.append(monthly_headcount)
 
-    grouped = (
-        df.groupby(['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month'])['PSNo']
-        .nunique()
-        .reset_index()
-        .rename(columns={'PSNo': 'FTE'})
-    )
+    df_all = pd.concat(result_frames, ignore_index=True)
+    df_all = df_all[['Dimension', 'Group', 'Month', 'Headcount']]
 
-    grouped['FTE'] = grouped['FTE'].round(1)
-    return grouped
+    return df_all
