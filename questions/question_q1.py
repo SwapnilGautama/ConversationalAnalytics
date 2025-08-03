@@ -1,15 +1,12 @@
-# ✅ Fixed question_q1.py — margin now calculated from total revenue and cost
+# ✅ FINAL Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Segment, DU, BU, Customer
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import re
 
-def compute_margin(df):
+def compute_margin(df, groupby_fields):
     df = df.copy()
-    pivot = df.pivot_table(index=["Month", "Client"], 
-                           columns="Type", 
-                           values="Amount", 
-                           aggfunc="sum").reset_index()
+    pivot = df.pivot_table(index=["Month"] + groupby_fields, columns="Type", values="Amount", aggfunc="sum").reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
     return pivot
@@ -45,15 +42,9 @@ def extract_month(user_question):
                     return pd.Timestamp(year=year, month=num, day=1)
     return None
 
-def run(df, user_question=None):
-    df_margin = compute_margin(df)
-
-    if "Month" not in df_margin or "Client" not in df_margin:
-        st.error("Required fields missing. Ensure Margin % calculation is correctly applied.")
-        return
-
-    threshold = extract_threshold(user_question)
-    target_month = extract_month(user_question)
+def margin_analysis(df, group_field, threshold, target_month):
+    group_name = group_field if isinstance(group_field, str) else " × ".join(group_field)
+    df_margin = compute_margin(df, [group_field] if isinstance(group_field, str) else group_field)
 
     if target_month:
         filtered_data = df_margin[df_margin["Month"].dt.to_period("M") == target_month.to_period("M")]
@@ -64,33 +55,56 @@ def run(df, user_question=None):
         filtered_data = df_margin[(df_margin["Month"] >= quarter_start) & (df_margin["Month"] <= latest_month)]
         time_label = "the last quarter"
 
-    # ✅ Compute revenue and cost totals first, then margin
-    grouped = filtered_data.groupby("Client").agg({
+    group_cols = [group_field] if isinstance(group_field, str) else group_field
+    grouped = filtered_data.groupby(group_cols).agg({
         "Revenue": "sum",
         "Cost": "sum"
     }).reset_index()
 
-    grouped["Latest Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
+    grouped["Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
     grouped["Revenue (Million USD)"] = (grouped["Revenue"] / 1e6).round(2)
     grouped["Cost (Million USD)"] = (grouped["Cost"] / 1e6).round(2)
-    grouped["Latest Margin %"] = grouped["Latest Margin %"].round(2)
+    grouped["Margin %"] = grouped["Margin %"].round(2)
 
-    filtered_df = grouped[(grouped["Latest Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
-    top_10 = filtered_df.sort_values("Latest Margin %", ascending=False).head(10)
+    filtered_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
+    top_10 = filtered_df.sort_values("Margin %", ascending=False).head(10)
 
-    total_clients = grouped["Client"].nunique()
-    low_margin_count = filtered_df["Client"].nunique()
-    proportion = (low_margin_count / total_clients * 100) if total_clients else 0
+    total_entities = grouped.shape[0]
+    low_margin_count = filtered_df.shape[0]
+    proportion = (low_margin_count / total_entities * 100) if total_entities else 0
 
     st.markdown(
-        f"🔍 **For {time_label}**, **{low_margin_count} accounts** had an average margin below **{threshold}%** "
-        f"and non-zero revenue, which is **{proportion:.1f}%** of all **{total_clients} accounts**."
+        f"🔍 **{group_name}** - For **{time_label}**, **{low_margin_count} entities** had average margin below "
+        f"**{threshold}%**, which is **{proportion:.1f}%** of all **{total_entities} entities**."
     )
 
-    st.markdown(f"#### 📋 Accounts with Margin < {threshold}% (non-zero revenue)")
     st.dataframe(
-        top_10[["Client", "Latest Margin %", "Revenue (Million USD)", "Cost (Million USD)"]].reset_index(drop=True),
+        top_10.reset_index(drop=True),
         use_container_width=True
     )
 
-    return None
+def run(df, user_question=None):
+    df = df.copy()
+    df['Month'] = pd.to_datetime(df['Month'], errors='coerce')
+    df = df.dropna(subset=["Month"])
+    df["Client"] = df.get("FinalCustomerName", "Unknown")
+    df["Segment"] = df.get("Segment", "Unknown")
+    df["BU"] = df.get("Exec DG", "Unknown")
+    df["DU"] = df.get("Exec DU", "Unknown")
+
+    threshold = extract_threshold(user_question)
+    target_month = extract_month(user_question)
+
+    tabs = st.tabs(["📋 By Client", "🚛 By Segment", "🏢 By BU", "🏭 By DU"])
+
+    with tabs[0]:
+        margin_analysis(df, "Client", threshold, target_month)
+
+    with tabs[1]:
+        margin_analysis(df, "Segment", threshold, target_month)
+
+    with tabs[2]:
+        margin_analysis(df, "BU", threshold, target_month)
+
+    with tabs[3]:
+        margin_analysis(df, "DU", threshold, target_month)
