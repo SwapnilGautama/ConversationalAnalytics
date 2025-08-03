@@ -1,43 +1,45 @@
 import pandas as pd
 
-def get_headcount_data(df_ut):
+def compute_headcount(df_ut):
     df_ut = df_ut.copy()
+
+    # ✅ Parse Date and filter valid records
     df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
     df_ut = df_ut.dropna(subset=['Date_a', 'PSNo'])
 
-    # ✅ Match q7 logic: Only Billable
+    # ✅ Optional: filter for billable only
     df_ut['Status'] = df_ut['Status'].fillna('').str.lower()
     df_ut = df_ut[df_ut['Status'] == 'billable']
 
-    # ✅ Remove duplicates based on PSNo and Date
+    # ✅ Deduplicate by person-date
     df_ut = df_ut.drop_duplicates(subset=['PSNo', 'Date_a'])
 
-    # ✅ Format month to match 'Jun 2024' format
+    # ✅ Add formatted month
     df_ut['Month'] = df_ut['Date_a'].dt.strftime('%b %Y')
 
-    # ✅ Ensure all dimension fields exist
-    df_ut['Segment'] = df_ut.get('Segment', 'Unknown')
-    df_ut['BU'] = df_ut.get('Exec DG', 'Unknown')
-    df_ut['DU'] = df_ut.get('Exec DU', 'Unknown')
-    df_ut['FinalCustomerName'] = df_ut.get('FinalCustomerName', 'Unknown')
-
     result_frames = []
+
     for groupby_col in ['Segment', 'BU', 'DU', 'FinalCustomerName']:
+        df_temp = df_ut.copy()
+
+        # 🔍 Apply transportation filter ONLY for Segment grouping
+        if groupby_col == 'Segment':
+            df_temp['Segment'] = df_temp['Segment'].fillna('').str.strip()
+            df_temp = df_temp[df_temp['Segment'].str.lower() == 'transportation']
+
         monthly_headcount = (
-            df_ut.groupby([groupby_col, 'Month'])['PSNo']
+            df_temp.groupby([groupby_col, 'Month'])['PSNo']
             .nunique()
             .reset_index()
+            .rename(columns={
+                groupby_col: 'Group',
+                'PSNo': 'Headcount'
+            })
         )
-        monthly_headcount['FTE'] = monthly_headcount['PSNo'].round(1)
-        monthly_headcount = monthly_headcount.rename(columns={
-            groupby_col: 'Group',
-            'Month': 'Month',
-            'FTE': 'Headcount'
-        })[['Group', 'Month', 'Headcount']]
-        monthly_headcount['Dimension'] = groupby_col
+
+        monthly_headcount['Group Type'] = groupby_col
         result_frames.append(monthly_headcount)
 
-    df_all = pd.concat(result_frames, ignore_index=True)
-    df_all = df_all[['Dimension', 'Group', 'Month', 'Headcount']]
-
-    return df_all
+    final_df = pd.concat(result_frames, ignore_index=True)
+    final_df = final_df[['Group Type', 'Group', 'Month', 'Headcount']]
+    return final_df
