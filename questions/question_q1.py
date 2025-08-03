@@ -62,9 +62,9 @@ def margin_analysis(df, group_field, threshold, target_month):
     }).reset_index()
 
     grouped["Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
-    grouped["Revenue (Million USD)"] = (grouped["Revenue"] / 1e6).round(2)
-    grouped["Cost (Million USD)"] = (grouped["Cost"] / 1e6).round(2)
-    grouped["Margin %"] = grouped["Margin %"].round(2)
+    grouped["Revenue (Million USD)"] = (grouped["Revenue"] / 1e6).round(1)
+    grouped["Cost (Million USD)"] = (grouped["Cost"] / 1e6).round(1)
+    grouped["Margin %"] = grouped["Margin %"].round(1)
 
     filtered_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
     top_10 = filtered_df.sort_values("Margin %", ascending=False).head(10)
