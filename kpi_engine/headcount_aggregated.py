@@ -1,45 +1,39 @@
-# ✅ FINAL VERSION — Matches q7.py logic with Billable + Non-Billable headcount
+# ✅ FINAL: headcount_aggregated.py aligned to question_q7 logic
 import pandas as pd
 
-def compute_headcount(df_ut):
-    df_ut = df_ut.copy()
+def compute_headcount(df_ut: pd.DataFrame) -> pd.DataFrame:
+    df = df_ut.copy()
+    
+    # ✅ Clean segment and date
+    df = df[df['Segment'].notna()]
+    df['date_a'] = pd.to_datetime(df['date_a'], errors='coerce')
+    df = df[df['date_a'].notna()]
 
-    # ✅ Parse Date and filter valid records
-    df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
-    df_ut = df_ut.dropna(subset=['Date_a', 'PSNo'])
+    # ✅ Use both Billable and Non-Billable
+    df['Status'] = df['Status'].fillna('').str.lower()
+    df = df[df['Status'].isin(['billable', 'non-billable'])]
 
-    # ✅ Remove billable-only filter to include all headcount
-    df_ut['Status'] = df_ut['Status'].fillna('').str.lower()
+    # ✅ FTE handling
+    df['FTE'] = df['FTE'].fillna(1)
 
-    # ✅ Deduplicate by person-date
-    df_ut = df_ut.drop_duplicates(subset=['PSNo', 'Date_a'])
+    # ✅ Extract Month and Year
+    df['Month'] = df['date_a'].dt.to_period("M")
 
-    # ✅ Add formatted month
-    df_ut['Month'] = df_ut['Date_a'].dt.strftime('%b %Y')
+    # ✅ Aggregation by Segment, BU, DU, Month
+    segment = df.groupby(['Month', 'Segment'])['FTE'].sum().reset_index()
+    segment['Group Type'] = 'Segment'
+    segment.rename(columns={'Segment': 'Group', 'FTE': 'Headcount'}, inplace=True)
 
-    result_frames = []
+    bu = df.groupby(['Month', 'Exec DG'])['FTE'].sum().reset_index()
+    bu['Group Type'] = 'BU'
+    bu.rename(columns={'Exec DG': 'Group', 'FTE': 'Headcount'}, inplace=True)
 
-    for groupby_col in ['Segment', 'BU', 'DU', 'FinalCustomerName']:
-        df_temp = df_ut.copy()
+    du = df.groupby(['Month', 'Exec DU'])['FTE'].sum().reset_index()
+    du['Group Type'] = 'DU'
+    du.rename(columns={'Exec DU': 'Group', 'FTE': 'Headcount'}, inplace=True)
 
-        # 🔍 Apply Transportation filter ONLY for Segment grouping
-        if groupby_col == 'Segment':
-            df_temp['Segment'] = df_temp['Segment'].fillna('').str.strip()
-            df_temp = df_temp[df_temp['Segment'].str.lower() == 'transportation']
+    combined = pd.concat([segment, bu, du], ignore_index=True)
+    combined['Headcount'] = combined['Headcount'].round(0).astype(int)
+    combined['Month'] = combined['Month'].astype(str)
 
-        monthly_headcount = (
-            df_temp.groupby([groupby_col, 'Month'])['PSNo']
-            .nunique()
-            .reset_index()
-            .rename(columns={
-                groupby_col: 'Group',
-                'PSNo': 'Headcount'
-            })
-        )
-
-        monthly_headcount['Group Type'] = groupby_col
-        result_frames.append(monthly_headcount)
-
-    final_df = pd.concat(result_frames, ignore_index=True)
-    final_df = final_df[['Group Type', 'Group', 'Month', 'Headcount']]
-    return final_df
+    return combined[['Month', 'Group Type', 'Group', 'Headcount']]
