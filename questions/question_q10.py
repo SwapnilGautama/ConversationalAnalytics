@@ -30,30 +30,32 @@ def run(query):
         df["Utilization %"] = (df["TotalBillableHours"] / df["NetAvailableHours"]) * 100
         df = df.replace([float('inf'), float('-inf')], pd.NA).dropna(subset=['Utilization %'])
 
-        df['MonthShort'] = df['Month'].apply(lambda x: calendar.month_abbr[int(x)])
-        df['MonthOrder'] = df['Month']
-
         df = df[df['FresherAgeingCategory'].notna()]
 
+        # Format Month-Year column for pivot
+        df['MonthYear'] = df.apply(lambda row: f"{calendar.month_abbr[int(row['Month'])]}-{row['Year']}", axis=1)
+        df['MonthOrder'] = df['Year'] * 100 + df['Month']  # For proper sorting
+
         # --- Insights ---
-        latest_month = df.sort_values(["Year", "MonthOrder"]).dropna(subset=["Utilization %"]).iloc[-1]
+        latest_month = df.sort_values(["Year", "Month"], ascending=[True, True]).dropna(subset=["Utilization %"]).iloc[-1]
         latest_year = latest_month["Year"]
-        latest_month_num = latest_month["MonthOrder"]
+        latest_month_num = latest_month["Month"]
         latest_month_name = calendar.month_name[int(latest_month_num)]
 
-        summary = df[(df["Year"] == latest_year) & (df["MonthOrder"] == latest_month_num)]
+        summary = df[(df["Year"] == latest_year) & (df["Month"] == latest_month_num)]
         category_summary = summary.groupby("FresherAgeingCategory")["Utilization %"].mean().sort_values(ascending=False)
 
         top_increase = category_summary.dropna().head(3)
         top_decrease = category_summary.dropna().sort_values().head(3)
 
-        # --- UT% Table (transposed) ---
+        # --- UT% Table ---
         pivot_ut = df.pivot_table(index='FresherAgeingCategory',
-                                  columns='MonthShort',
+                                  columns='MonthYear',
                                   values='Utilization %',
                                   aggfunc='mean')
 
-        pivot_ut = pivot_ut[sorted(pivot_ut.columns, key=lambda x: list(calendar.month_abbr).index(x))]
+        sorted_cols = df[['MonthYear', 'MonthOrder']].drop_duplicates().sort_values('MonthOrder')['MonthYear']
+        pivot_ut = pivot_ut[sorted_cols]
 
         styled_ut = pivot_ut.style.format(
             lambda x: f"{int(round(x))}%" if pd.notnull(x) else ""
@@ -70,10 +72,10 @@ def run(query):
         with col1:
             st.markdown("🔹 **TotalBillableHours**")
             billable_pivot = df.pivot_table(index='FresherAgeingCategory',
-                                            columns='MonthShort',
+                                            columns='MonthYear',
                                             values='TotalBillableHours',
                                             aggfunc='sum')
-            billable_pivot = billable_pivot[sorted(billable_pivot.columns, key=lambda x: list(calendar.month_abbr).index(x))]
+            billable_pivot = billable_pivot[sorted_cols]
 
             styled_billable = billable_pivot.style.format(
                 "{:,.0f}"
@@ -83,10 +85,10 @@ def run(query):
         with col2:
             st.markdown("🔹 **NetAvailableHours**")
             available_pivot = df.pivot_table(index='FresherAgeingCategory',
-                                             columns='MonthShort',
+                                             columns='MonthYear',
                                              values='NetAvailableHours',
                                              aggfunc='sum')
-            available_pivot = available_pivot[sorted(available_pivot.columns, key=lambda x: list(calendar.month_abbr).index(x))]
+            available_pivot = available_pivot[sorted_cols]
 
             styled_available = available_pivot.style.format(
                 "{:,.0f}"
