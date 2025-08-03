@@ -5,17 +5,17 @@ def get_headcount_data(df_ut):
     df_ut['Date_a'] = pd.to_datetime(df_ut['Date_a'], errors='coerce')
     df_ut = df_ut.dropna(subset=['Date_a', 'PSNo'])
 
-    # ✅ Filter to only Billable
+    # ✅ Match q7 logic: Only Billable
     df_ut['Status'] = df_ut['Status'].fillna('').str.lower()
     df_ut = df_ut[df_ut['Status'] == 'billable']
 
-    # ✅ Remove duplicates per PSNo + Date
+    # ✅ Remove duplicates based on PSNo and Date
     df_ut = df_ut.drop_duplicates(subset=['PSNo', 'Date_a'])
 
-    # ✅ Convert date to monthly string
-    df_ut['Month'] = df_ut['Date_a'].dt.to_period('M').astype(str)
+    # ✅ Format month to match 'Jun 2024' format
+    df_ut['Month'] = df_ut['Date_a'].dt.strftime('%b %Y')
 
-    # ✅ Ensure required fields exist
+    # ✅ Ensure all dimension fields exist
     df_ut['Segment'] = df_ut.get('Segment', 'Unknown')
     df_ut['BU'] = df_ut.get('Exec DG', 'Unknown')
     df_ut['DU'] = df_ut.get('Exec DU', 'Unknown')
