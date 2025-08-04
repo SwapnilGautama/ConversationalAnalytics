@@ -5,10 +5,18 @@ import pandas as pd
 def load_data():
     df_revenue = pd.read_csv('sample_data/revenue.csv')
     df_hours = pd.read_csv('sample_data/netavailablehours.csv')
+
+    # Clean values
     df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
     df_hours['NetAvailableHours'] = df_hours['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
-    df_revenue['Month'] = df_revenue['Month'].astype(str).str.strip()
-    df_hours['Month'] = df_hours['Month'].astype(str).str.strip()
+
+    # Strip whitespace and enforce consistency on key fields
+    for col in ['Month', 'Segment', 'BU', 'DU', 'FinalCustomerName']:
+        if col in df_revenue.columns:
+            df_revenue[col] = df_revenue[col].astype(str).str.strip()
+        if col in df_hours.columns:
+            df_hours[col] = df_hours[col].astype(str).str.strip()
+
     return df_revenue, df_hours
 
 def pivot_summary(df, value_field, index_field='FinalCustomerName'):
@@ -45,11 +53,9 @@ def run(df=None, user_question=None):
     with st.container():
         tabs = st.tabs(["Summary", "Segment", "BU", "DU"])
 
-        # ---- Summary Tab ----
         with tabs[0]:
             st.subheader("Realized Rate by FinalCustomerName")
 
-            # 🎯 Left filter pane
             with st.sidebar:
                 st.markdown("### 🔍 Filters")
                 threshold = st.slider("Maximum Realized Rate", min_value=0, max_value=1000, value=5)
@@ -58,13 +64,13 @@ def run(df=None, user_question=None):
                 du_filter = st.selectbox("DU", ["All"] + sorted(df_revenue['DU'].dropna().unique().tolist()))
                 month_filter = st.selectbox("Month", ["All"] + sorted(df_revenue['Month'].dropna().unique().tolist()))
 
-            # 🔄 Merge and Calculate
             merged = pd.merge(
                 df_revenue.groupby(['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'], as_index=False)['Revenue'].sum(),
                 df_hours.groupby(['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'], as_index=False)['NetAvailableHours'].sum(),
                 on=['FinalCustomerName', 'Month', 'Segment', 'BU', 'DU'],
                 how='outer'
             )
+
             merged['Revenue'] = merged['Revenue'].fillna(0)
             merged['NetAvailableHours'] = merged['NetAvailableHours'].fillna(0)
             merged['Realized Rate'] = merged.apply(
@@ -72,7 +78,6 @@ def run(df=None, user_question=None):
                 axis=1
             )
 
-            # 🔍 Apply Filters
             if segment_filter != "All":
                 merged = merged[merged['Segment'] == segment_filter]
             if bu_filter != "All":
@@ -84,7 +89,6 @@ def run(df=None, user_question=None):
 
             merged = merged[merged['Realized Rate'] <= threshold]
 
-            # ✅ Use pivot_table to avoid reshaping errors
             st.dataframe(pivot_summary(merged, 'Realized Rate', 'FinalCustomerName'))
 
             col1, col2 = st.columns(2)
@@ -95,7 +99,6 @@ def run(df=None, user_question=None):
                 st.markdown("### ⏱️ Total Net Available Hours by Month")
                 st.dataframe(pivot_summary(merged, 'NetAvailableHours', 'FinalCustomerName'))
 
-        # ---- Other Tabs ----
         with tabs[1]:
             generate_tab_view(df_revenue, df_hours, 'Segment', 'Segment')
         with tabs[2]:
