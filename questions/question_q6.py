@@ -86,8 +86,27 @@ def run(df=None, user_question=None):
     # Apply filters
     filtered_df = apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter)
 
-    # Summary Table
+    # Summary Header
     st.subheader("Realized Rate by FinalCustomerName")
+
+    # ✅ Add summary: how many accounts match threshold
+    full_df = pd.merge(df_revenue, df_hours, on=['FinalCustomerName', 'Month'], how='inner')
+    full_df['Revenue'] = full_df['Revenue'].fillna(0)
+    full_df['NetAvailableHours'] = full_df['NetAvailableHours'].fillna(0)
+    full_df['Realized Rate'] = full_df.apply(
+        lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
+        axis=1
+    )
+    all_accounts = set(full_df['FinalCustomerName'].dropna().unique())
+    filtered_accounts = set(filtered_df['FinalCustomerName'].dropna().unique())
+
+    total_count = len(all_accounts)
+    filtered_count = len(filtered_accounts)
+    pct = round((filtered_count / total_count) * 100, 1) if total_count > 0 else 0
+
+    st.markdown(f"✅ **{filtered_count} of {total_count} accounts** met the selected Realized Rate threshold (**{pct}%**)")
+
+    # Main Table
     st.dataframe(pivot_summary(filtered_df, 'Realized Rate', 'FinalCustomerName'))
 
     col1, col2 = st.columns(2)
