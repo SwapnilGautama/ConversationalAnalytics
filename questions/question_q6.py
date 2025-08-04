@@ -4,7 +4,7 @@ import pandas as pd
 @st.cache_data
 def load_data():
     df_revenue = pd.read_csv('sample_data/revenue.csv')
-    df_hours = pd.read_csv('sample_data/headcount.csv')  # using same file if NetAvailableHours lives here
+    df_hours = pd.read_csv('sample_data/netavailablehours.csv')  # using same file if NetAvailableHours lives here
 
     df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
     df_hours['NetAvailableHours'] = df_hours['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
