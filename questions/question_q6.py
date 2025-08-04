@@ -69,7 +69,10 @@ def run(df=None, user_question=None):
 
     # Sidebar Filters
     st.sidebar.header("🔍 Filters")
-    min_rate, max_rate = st.sidebar.slider("Realized Rate", 0.0, 1000.0, (0.0, 1000.0))
+
+    # 👇 Replace slider with input number fields
+    min_rate = st.sidebar.number_input("Minimum Realized Rate", min_value=0.0, max_value=1000.0, value=0.0, step=0.1)
+    max_rate = st.sidebar.number_input("Maximum Realized Rate", min_value=0.0, max_value=1000.0, value=1000.0, step=0.1)
 
     segment_list = ['All'] + sorted(df_revenue['Segment'].dropna().unique())
     segment = st.sidebar.selectbox("Segment", segment_list)
