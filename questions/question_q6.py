@@ -23,7 +23,9 @@ def load_data():
     return df_revenue, df_hours
 
 def pivot_summary(df, value_field, index_field='FinalCustomerName'):
-    df_pivot = df.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
+    # Group before pivoting to avoid duplicate index error
+    df_grouped = df.groupby([index_field, 'Month'])[value_field].sum().reset_index()
+    df_pivot = df_grouped.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
     df_pivot = df_pivot[[m for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] if m in df_pivot.columns]]
     if value_field != 'Realized Rate':
         df_pivot = df_pivot.astype(int)
