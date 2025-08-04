@@ -48,6 +48,13 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         axis=1
     )
 
+    # 🔁 Reattach Segment, BU, DU if missing from df_hours
+    for col in ['Segment', 'BU', 'DU']:
+        if col not in merged.columns and col in df_revenue.columns:
+            merged[col] = df_revenue.set_index(['FinalCustomerName', 'Month']).loc[
+                pd.MultiIndex.from_frame(merged[['FinalCustomerName', 'Month']]), col
+            ].values
+
     if segment != "All":
         merged = merged[merged['Segment'] == segment]
     if bu != "All":
@@ -101,7 +108,7 @@ def run(df=None, user_question=None):
     filtered_count = len(filtered_accounts)
     pct = round((filtered_count / total_count) * 100, 1) if total_count > 0 else 0
 
-    st.markdown(f"✅ **{filtered_count} of {total_count} accounts** met the selected Realized Rate threshold (**{pct}%**)")
+    st.markdown(f"✅ **{filtered_count} of {total_count} accounts** met the selected Realized Rate threshold (**{pct}%**)\n")
 
     # Tabs
     tab1, tab2 = st.tabs(["📊 Account View", "🏷️ Segment View"])
