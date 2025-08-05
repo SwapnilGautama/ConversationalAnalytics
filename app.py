@@ -77,7 +77,7 @@ Conversational Analytics Assistant
 # ✅ Welcome Text
 st.markdown("""
 <div style='text-align:center; font-size:18px; margin-bottom: 10px;'>
-Welcome to the <b>LTTS BI Assistant</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+Welcome to <b>AIde</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
 </div>
 """, unsafe_allow_html=True)
 
