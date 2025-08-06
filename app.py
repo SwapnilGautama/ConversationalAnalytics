@@ -56,34 +56,27 @@ except Exception as e:
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-# ✅ Logo Rendering (Top Right, Small)
-def display_logo_top_right():
+# ✅ Clean logo rendering: aligned right with crisp scaling
+def display_logo_inline_right():
     logo_path = "sample_data/Logo.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path)
-        max_width = 150
-        aspect_ratio = logo.height / logo.width
-        resized_logo = logo.resize((max_width, int(max_width * aspect_ratio)))
         buffered = BytesIO()
-        resized_logo.save(buffered, format="PNG")
+        logo.save(buffered, format="PNG")
         encoded_image = base64.b64encode(buffered.getvalue()).decode()
         st.markdown(
             f"""
-            <div style='position: absolute; top: 10px; right: 20px; z-index: 999;'>
-                <img src="data:image/png;base64,{encoded_image}" width="{max_width}"/>
+            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; margin-top: -20px;'>
+                <h1 style='font-family: "Segoe UI", sans-serif; font-size: 38px; color: #002D62; margin: 0;'>
+                    Conversational Analytics Assistant
+                </h1>
+                <img src="data:image/png;base64,{encoded_image}" width="140" style="margin-left: auto;" />
             </div>
             """,
             unsafe_allow_html=True
         )
 
-display_logo_top_right()
-
-# ✅ Title
-st.markdown("""
-<h1 style='text-align:center; font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin-top: 20px;'>
-Conversational Analytics Assistant
-</h1>
-""", unsafe_allow_html=True)
+display_logo_inline_right()
 
 # ✅ Welcome Text
 st.markdown("""
