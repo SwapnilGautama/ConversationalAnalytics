@@ -4,28 +4,21 @@ import pandas as pd
 @st.cache_data
 def load_data():
     df_revenue = pd.read_csv('sample_data/revenue.csv')
-    df_hours_raw = pd.read_csv('sample_data/netavailablehours.csv')
+    df_hours = pd.read_csv('sample_data/netavailablehours.csv')
 
+    # Clean numeric fields
     df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
-    df_hours_raw['NetAvailableHours'] = df_hours_raw['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
+    df_hours['NetAvailableHours'] = df_hours['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
 
     df_revenue['Month'] = df_revenue['Month'].astype(str).str.strip()
-    df_hours_raw['Month'] = df_hours_raw['Month'].astype(str).str.strip()
+    df_hours['Month'] = df_hours['Month'].astype(str).str.strip()
 
     # Add Quarter
-    month_to_qtr = {'Jan': 'Q4', 'Feb': 'Q4', 'Mar': 'Q4', 
-                    'Apr': 'Q1', 'May': 'Q1', 'Jun': 'Q1', 
-                    'Jul': 'Q2', 'Aug': 'Q2', 'Sep': 'Q2', 
+    month_to_qtr = {'Jan': 'Q4', 'Feb': 'Q4', 'Mar': 'Q4',
+                    'Apr': 'Q1', 'May': 'Q1', 'Jun': 'Q1',
+                    'Jul': 'Q2', 'Aug': 'Q2', 'Sep': 'Q2',
                     'Oct': 'Q3', 'Nov': 'Q3', 'Dec': 'Q3'}
     df_revenue['Quarter'] = df_revenue['Month'].map(month_to_qtr)
-    df_hours_raw['Quarter'] = df_hours_raw['Month'].map(month_to_qtr)
-
-    # ✅ Aggregate net hours correctly
-    df_hours = df_hours_raw.groupby(['FinalCustomerName', 'Month']).agg({
-        'NetAvailableHours': 'sum'
-    }).reset_index()
-
-    # Restore quarter for merged view
     df_hours['Quarter'] = df_hours['Month'].map(month_to_qtr)
 
     return df_revenue, df_hours
@@ -41,9 +34,13 @@ def pivot_summary(df, value_field, index_field='FinalCustomerName'):
     return df_pivot
 
 def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter):
+    # ✅ FIX: Aggregate hours to avoid inflation
+    df_hours_agg = df_hours.groupby(['FinalCustomerName', 'Month'], as_index=False)['NetAvailableHours'].sum()
+
+    # Merge
     merged = pd.merge(
         df_revenue,
-        df_hours,
+        df_hours_agg,
         on=['FinalCustomerName', 'Month'],
         how='inner'
     )
@@ -55,9 +52,9 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         axis=1
     )
 
-    # Reattach Segment, BU, DU from revenue (if not in hours)
-    for col in ['Segment', 'BU', 'DU']:
-        if col not in merged.columns and col in df_revenue.columns:
+    # Add back filters from df_revenue
+    for col in ['Segment', 'BU', 'DU', 'Quarter']:
+        if col in df_revenue.columns and col not in merged.columns:
             merged[col] = df_revenue.set_index(['FinalCustomerName', 'Month']).loc[
                 pd.MultiIndex.from_frame(merged[['FinalCustomerName', 'Month']]), col
             ].values
@@ -76,10 +73,9 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
 
 def run(df=None, user_question=None):
     st.title("Realized Rate by Account")
-
     df_revenue, df_hours = load_data()
 
-    # Sidebar Filters
+    # Sidebar filters
     st.sidebar.header("🔍 Filters")
     min_rate = st.sidebar.number_input("Minimum Realized Rate", min_value=0.0, max_value=1000.0, value=0.0, step=0.1)
     max_rate = st.sidebar.number_input("Maximum Realized Rate", min_value=0.0, max_value=1000.0, value=1000.0, step=0.1)
@@ -96,20 +92,21 @@ def run(df=None, user_question=None):
     quarter_list = ['All'] + ['Q1', 'Q2', 'Q3', 'Q4']
     quarter = st.sidebar.selectbox("Quarter", quarter_list)
 
-    # Apply filters
+    # Filtered data
     filtered_df = apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter)
 
-    # Summary
+    # Summary Header
     st.subheader("Realized Rate by FinalCustomerName")
 
-    full_df = pd.merge(df_revenue, df_hours, on=['FinalCustomerName', 'Month'], how='inner')
+    # Show % passing threshold
+    df_hours_agg = df_hours.groupby(['FinalCustomerName', 'Month'], as_index=False)['NetAvailableHours'].sum()
+    full_df = pd.merge(df_revenue, df_hours_agg, on=['FinalCustomerName', 'Month'], how='inner')
     full_df['Revenue'] = full_df['Revenue'].fillna(0)
     full_df['NetAvailableHours'] = full_df['NetAvailableHours'].fillna(0)
     full_df['Realized Rate'] = full_df.apply(
         lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
         axis=1
     )
-
     all_accounts = set(full_df['FinalCustomerName'].dropna().unique())
     filtered_accounts = set(filtered_df['FinalCustomerName'].dropna().unique())
 
@@ -119,7 +116,8 @@ def run(df=None, user_question=None):
 
     st.markdown(f"✅ **{filtered_count} of {total_count} accounts** met the selected Realized Rate threshold (**{pct}%**)")
 
-    # Main Table
+    # Table outputs
+    st.markdown("### 💸 Realized Rate by Account")
     st.dataframe(pivot_summary(filtered_df, 'Realized Rate', 'FinalCustomerName'))
 
     col1, col2 = st.columns(2)
