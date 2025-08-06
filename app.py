@@ -56,27 +56,31 @@ except Exception as e:
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-# ✅ Clean logo rendering: aligned right with crisp scaling
-def display_logo_inline_right():
+# ✅ Unified header with centered title + right-aligned logo
+def display_header():
     logo_path = "sample_data/Logo.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path)
         buffered = BytesIO()
         logo.save(buffered, format="PNG")
         encoded_image = base64.b64encode(buffered.getvalue()).decode()
-        st.markdown(
-            f"""
-            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; margin-top: -20px;'>
+
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -20px; margin-bottom: 10px;">
+            <div style="flex: 1;"></div>
+            <div style="flex: 2; text-align: center;">
                 <h1 style='font-family: "Segoe UI", sans-serif; font-size: 38px; color: #002D62; margin: 0;'>
                     Conversational Analytics Assistant
                 </h1>
-                <img src="data:image/png;base64,{encoded_image}" width="140" style="margin-left: auto;" />
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+            <div style="flex: 1; text-align: right;">
+                <img src="data:image/png;base64,{encoded_image}" width="140" />
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-display_logo_inline_right()
+# 🔁 Call the updated header
+display_header()
 
 # ✅ Welcome Text
 st.markdown("""
