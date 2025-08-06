@@ -1,54 +1,117 @@
 import streamlit as st
 import pandas as pd
 
-def run_question_q6(df_revenue: pd.DataFrame, df_hours: pd.DataFrame):
-    st.markdown("## 💡 Realized Rate Analysis (by FinalCustomerName & Segment)")
+@st.cache_data
+def load_data():
+    df_revenue = pd.read_csv('sample_data/revenue.csv')
+    df_hours = pd.read_csv('sample_data/netavailablehours.csv')
 
-    # ⏱️ Left Filter Pane
-    with st.sidebar:
-        st.markdown("### 🎛️ Filters")
-        min_rate = st.slider("Minimum Realized Rate", 0.0, 1000.0, 0.0, step=1.0)
-        max_rate = st.slider("Maximum Realized Rate", 0.0, 1000.0, 1000.0, step=1.0)
+    # Convert numbers to float
+    df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
+    df_hours['NetAvailableHours'] = df_hours['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
 
-        segment_options = ["All"] + sorted(df_hours["Segment"].dropna().unique())
-        segment = st.selectbox("Segment", segment_options)
+    df_revenue['Month'] = df_revenue['Month'].astype(str).str.strip()
+    df_hours['Month'] = df_hours['Month'].astype(str).str.strip()
 
-        bu_options = ["All"] + sorted(df_hours["BU"].dropna().unique())
-        bu = st.selectbox("BU", bu_options)
+    # Add Quarter column
+    month_to_qtr = {'Jan': 'Q4', 'Feb': 'Q4', 'Mar': 'Q4',
+                    'Apr': 'Q1', 'May': 'Q1', 'Jun': 'Q1',
+                    'Jul': 'Q2', 'Aug': 'Q2', 'Sep': 'Q2',
+                    'Oct': 'Q3', 'Nov': 'Q3', 'Dec': 'Q3'}
+    df_revenue['Quarter'] = df_revenue['Month'].map(month_to_qtr)
+    df_hours['Quarter'] = df_hours['Month'].map(month_to_qtr)
 
-        du_options = ["All"] + sorted(df_hours["DU"].dropna().unique())
-        du = st.selectbox("DU", du_options)
+    return df_revenue, df_hours
 
-    # 🧹 Clean + filter
-    for df in [df_revenue, df_hours]:
-        df["Month"] = df["date_a"].dt.strftime("%b")
-        df["Year"] = df["date_a"].dt.year.astype(str)
-        df["MonthYear"] = df["Month"] + " " + df["Year"]
+def pivot_summary(df, value_field, index_field='FinalCustomerName'):
+    df_grouped = df.groupby([index_field, 'Month'])[value_field].sum().reset_index()
+    df_pivot = df_grouped.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
+    month_order = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    df_pivot = df_pivot[[m for m in month_order if m in df_pivot.columns]]
+    if value_field != 'Realized Rate':
+        df_pivot = df_pivot.astype(int)
+    else:
+        df_pivot = df_pivot.round(2)
+    return df_pivot
 
-    if segment != "All":
-        df_hours = df_hours[df_hours["Segment"] == segment]
-    if bu != "All":
-        df_hours = df_hours[df_hours["BU"] == bu]
-    if du != "All":
-        df_hours = df_hours[df_hours["DU"] == du]
+def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter):
+    # 🔧 Fix: Aggregate NetAvailableHours first to prevent duplication
+    df_hours_grouped = df_hours.groupby(['FinalCustomerName', 'Month'])['NetAvailableHours'].sum().reset_index()
 
-    # 🧮 Aggregate before merging to avoid duplication
-    agg_hours = df_hours.groupby(["FinalCustomerName", "MonthYear", "Segment", "BU", "DU"], as_index=False)["NetAvailableHours"].sum()
-    agg_rev = df_revenue.groupby(["FinalCustomerName", "MonthYear"], as_index=False)["Revenue"].sum()
+    # Merge cleanly
+    merged = pd.merge(
+        df_revenue,
+        df_hours_grouped,
+        on=['FinalCustomerName', 'Month'],
+        how='inner'
+    )
 
-    # 🔗 Merge
-    df = pd.merge(agg_rev, agg_hours, on=["FinalCustomerName", "MonthYear"], how="inner")
-
-    # 🧾 Compute Realized Rate
-    df["RealizedRate"] = df.apply(
-        lambda row: round(row["Revenue"] / row["NetAvailableHours"], 2) if row["NetAvailableHours"] > 0 else 0,
+    merged['Revenue'] = merged['Revenue'].fillna(0)
+    merged['NetAvailableHours'] = merged['NetAvailableHours'].fillna(0)
+    merged['Realized Rate'] = merged.apply(
+        lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
         axis=1
     )
 
-    # 🎚️ Apply Rate filter
-    df_filtered = df[(df["RealizedRate"] >= min_rate) & (df["RealizedRate"] <= max_rate)]
+    if segment != "All":
+        merged = merged[merged['Segment'] == segment]
+    if bu != "All":
+        merged = merged[merged['BU'] == bu]
+    if du != "All":
+        merged = merged[merged['DU'] == du]
+    if quarter != "All":
+        merged = merged[merged['Quarter'] == quarter]
+    merged = merged[(merged['Realized Rate'] >= min_rate) & (merged['Realized Rate'] <= max_rate)]
 
-    # 🧮 Pivot Tables
-    def get_pivots(df, group_col):
-        rr = df.pivot_table(index=group_col, columns="MonthYear", values="RealizedRate", aggfunc="mean").fillna(0)
-        rev = df.pivot_table(index=group_col, columns="MonthYear", values="Revenue", aggfunc="sum").fillna(0).astype(int
+    return merged
+
+def run(df=None, user_question=None):
+    st.title("Realized Rate by Account")
+
+    df_revenue, df_hours = load_data()
+
+    # Sidebar Filters
+    st.sidebar.header("🔍 Filters")
+    min_rate = st.sidebar.number_input("Minimum Realized Rate", min_value=0.0, max_value=1000.0, value=0.0, step=0.1)
+    max_rate = st.sidebar.number_input("Maximum Realized Rate", min_value=0.0, max_value=1000.0, value=1000.0, step=0.1)
+
+    segment_list = ['All'] + sorted(df_revenue['Segment'].dropna().unique())
+    segment = st.sidebar.selectbox("Segment", segment_list)
+
+    bu_list = ['All'] + sorted(df_revenue['BU'].dropna().unique())
+    bu = st.sidebar.selectbox("BU", bu_list)
+
+    du_list = ['All'] + sorted(df_revenue['DU'].dropna().unique())
+    du = st.sidebar.selectbox("DU", du_list)
+
+    quarter_list = ['All'] + ['Q1', 'Q2', 'Q3', 'Q4']
+    quarter = st.sidebar.selectbox("Quarter", quarter_list)
+
+    # Apply filters
+    filtered_df = apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter)
+
+    # ✅ Show account-level match % summary
+    df_hours_grouped = df_hours.groupby(['FinalCustomerName', 'Month'])['NetAvailableHours'].sum().reset_index()
+    full_df = pd.merge(df_revenue, df_hours_grouped, on=['FinalCustomerName', 'Month'], how='inner')
+    full_df['Revenue'] = full_df['Revenue'].fillna(0)
+    full_df['NetAvailableHours'] = full_df['NetAvailableHours'].fillna(0)
+    full_df['Realized Rate'] = full_df.apply(
+        lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
+        axis=1
+    )
+    total_accounts = full_df['FinalCustomerName'].nunique()
+    filtered_accounts = filtered_df['FinalCustomerName'].nunique()
+    pct = round((filtered_accounts / total_accounts) * 100, 1) if total_accounts else 0
+    st.markdown(f"✅ **{filtered_accounts} of {total_accounts} accounts** met the selected Realized Rate threshold (**{pct}%**)")
+
+    # Output tables
+    st.subheader("Realized Rate by FinalCustomerName")
+    st.dataframe(pivot_summary(filtered_df, 'Realized Rate'))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 💰 Total Revenue by Month")
+        st.dataframe(pivot_summary(filtered_df, 'Revenue'))
+    with col2:
+        st.markdown("### ⏱️ Total Net Available Hours by Month")
+        st.dataframe(pivot_summary(filtered_df, 'NetAvailableHours'))
