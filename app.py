@@ -56,12 +56,12 @@ except Exception as e:
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-# ✅ Logo Rendering (Clean, Centered, Not Grainy)
-def display_logo():
+# ✅ Logo Rendering (Top Right, Small)
+def display_logo_top_right():
     logo_path = "sample_data/Logo.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path)
-        max_width = 300
+        max_width = 150
         aspect_ratio = logo.height / logo.width
         resized_logo = logo.resize((max_width, int(max_width * aspect_ratio)))
         buffered = BytesIO()
@@ -69,18 +69,18 @@ def display_logo():
         encoded_image = base64.b64encode(buffered.getvalue()).decode()
         st.markdown(
             f"""
-            <div style='text-align: center; margin-top: -30px; margin-bottom: -10px;'>
+            <div style='position: absolute; top: 10px; right: 20px; z-index: 999;'>
                 <img src="data:image/png;base64,{encoded_image}" width="{max_width}"/>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-display_logo()
+display_logo_top_right()
 
 # ✅ Title
 st.markdown("""
-<h1 style='text-align:center; font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin-top: -40px;'>
+<h1 style='text-align:center; font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin-top: 20px;'>
 Conversational Analytics Assistant
 </h1>
 """, unsafe_allow_html=True)
