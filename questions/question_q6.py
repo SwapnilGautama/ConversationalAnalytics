@@ -4,26 +4,33 @@ import pandas as pd
 @st.cache_data
 def load_data():
     df_revenue = pd.read_csv('sample_data/revenue.csv')
-    df_hours = pd.read_csv('sample_data/netavailablehours.csv')
+    df_hours_raw = pd.read_csv('sample_data/netavailablehours.csv')
 
     df_revenue['Revenue'] = df_revenue['Revenue'].replace('[\$,]', '', regex=True).astype(float)
-    df_hours['NetAvailableHours'] = df_hours['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
+    df_hours_raw['NetAvailableHours'] = df_hours_raw['NetAvailableHours'].replace('[\$,]', '', regex=True).astype(float)
 
     df_revenue['Month'] = df_revenue['Month'].astype(str).str.strip()
-    df_hours['Month'] = df_hours['Month'].astype(str).str.strip()
+    df_hours_raw['Month'] = df_hours_raw['Month'].astype(str).str.strip()
 
-    # Add Quarter column for filtering
+    # Add Quarter
     month_to_qtr = {'Jan': 'Q4', 'Feb': 'Q4', 'Mar': 'Q4', 
                     'Apr': 'Q1', 'May': 'Q1', 'Jun': 'Q1', 
                     'Jul': 'Q2', 'Aug': 'Q2', 'Sep': 'Q2', 
                     'Oct': 'Q3', 'Nov': 'Q3', 'Dec': 'Q3'}
     df_revenue['Quarter'] = df_revenue['Month'].map(month_to_qtr)
+    df_hours_raw['Quarter'] = df_hours_raw['Month'].map(month_to_qtr)
+
+    # ✅ Aggregate net hours correctly
+    df_hours = df_hours_raw.groupby(['FinalCustomerName', 'Month']).agg({
+        'NetAvailableHours': 'sum'
+    }).reset_index()
+
+    # Restore quarter for merged view
     df_hours['Quarter'] = df_hours['Month'].map(month_to_qtr)
 
     return df_revenue, df_hours
 
 def pivot_summary(df, value_field, index_field='FinalCustomerName'):
-    # Group before pivoting to avoid duplicate index error
     df_grouped = df.groupby([index_field, 'Month'])[value_field].sum().reset_index()
     df_pivot = df_grouped.pivot(index=index_field, columns='Month', values=value_field).fillna(0)
     df_pivot = df_pivot[[m for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] if m in df_pivot.columns]]
@@ -38,8 +45,7 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         df_revenue,
         df_hours,
         on=['FinalCustomerName', 'Month'],
-        how='inner',
-        suffixes=('_rev', '_hrs')
+        how='inner'
     )
 
     merged['Revenue'] = merged['Revenue'].fillna(0)
@@ -49,7 +55,13 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         axis=1
     )
 
-    # Apply filters
+    # Reattach Segment, BU, DU from revenue (if not in hours)
+    for col in ['Segment', 'BU', 'DU']:
+        if col not in merged.columns and col in df_revenue.columns:
+            merged[col] = df_revenue.set_index(['FinalCustomerName', 'Month']).loc[
+                pd.MultiIndex.from_frame(merged[['FinalCustomerName', 'Month']]), col
+            ].values
+
     if segment != "All":
         merged = merged[merged['Segment'] == segment]
     if bu != "All":
@@ -69,8 +81,6 @@ def run(df=None, user_question=None):
 
     # Sidebar Filters
     st.sidebar.header("🔍 Filters")
-
-    # 👇 Replace slider with input number fields
     min_rate = st.sidebar.number_input("Minimum Realized Rate", min_value=0.0, max_value=1000.0, value=0.0, step=0.1)
     max_rate = st.sidebar.number_input("Maximum Realized Rate", min_value=0.0, max_value=1000.0, value=1000.0, step=0.1)
 
@@ -89,10 +99,9 @@ def run(df=None, user_question=None):
     # Apply filters
     filtered_df = apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter)
 
-    # Summary Header
+    # Summary
     st.subheader("Realized Rate by FinalCustomerName")
 
-    # ✅ Add summary: how many accounts match threshold
     full_df = pd.merge(df_revenue, df_hours, on=['FinalCustomerName', 'Month'], how='inner')
     full_df['Revenue'] = full_df['Revenue'].fillna(0)
     full_df['NetAvailableHours'] = full_df['NetAvailableHours'].fillna(0)
@@ -100,6 +109,7 @@ def run(df=None, user_question=None):
         lambda row: round(row['Revenue'] / row['NetAvailableHours'], 2) if row['NetAvailableHours'] > 0 else 0,
         axis=1
     )
+
     all_accounts = set(full_df['FinalCustomerName'].dropna().unique())
     filtered_accounts = set(filtered_df['FinalCustomerName'].dropna().unique())
 
