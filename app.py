@@ -56,7 +56,7 @@ st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
 # ✅ Logo Rendering (Top Center with st.image)
 def display_logo():
-    logo_path = "sample_data/logo.png"
+    logo_path = "sample_data/Logo.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path)
         st.image(logo, width=220)
