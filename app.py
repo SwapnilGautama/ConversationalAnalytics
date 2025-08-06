@@ -7,7 +7,9 @@ from kpi_engine import margin
 import os
 import pandas as pd
 import inspect
-from PIL import Image  # ✅ NEW
+from PIL import Image
+from io import BytesIO
+import base64
 
 PROMPT_BANK = [
     "List accounts with margin % less than 30% in the last quarter",
@@ -54,12 +56,25 @@ except Exception as e:
 
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-# ✅ Logo Rendering (Top Center with st.image)
+# ✅ Logo Rendering (Clean, Centered, Not Grainy)
 def display_logo():
     logo_path = "sample_data/Logo.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path)
-        st.image(logo, width=220)
+        max_width = 300
+        aspect_ratio = logo.height / logo.width
+        resized_logo = logo.resize((max_width, int(max_width * aspect_ratio)))
+        buffered = BytesIO()
+        resized_logo.save(buffered, format="PNG")
+        encoded_image = base64.b64encode(buffered.getvalue()).decode()
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin-top: -30px; margin-bottom: -10px;'>
+                <img src="data:image/png;base64,{encoded_image}" width="{max_width}"/>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 display_logo()
 
