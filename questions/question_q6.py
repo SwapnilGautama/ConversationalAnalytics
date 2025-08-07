@@ -35,17 +35,19 @@ def pivot_summary(df, value_field, index_field='FinalCustomerName'):
     return df_pivot
 
 def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter):
-    # 🔧 Fix: Aggregate NetAvailableHours first to prevent duplication
-    df_hours_grouped = df_hours.groupby(['FinalCustomerName', 'Month'])['NetAvailableHours'].sum().reset_index()
+    # 🔄 Group hours at a more granular level
+    group_keys = ['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month']
+    df_hours_grouped = df_hours.groupby(group_keys)['NetAvailableHours'].sum().reset_index()
 
-    # Merge cleanly
+    # 🔄 Merge revenue and hours on same keys
     merged = pd.merge(
         df_revenue,
         df_hours_grouped,
-        on=['FinalCustomerName', 'Month'],
+        on=group_keys,
         how='inner'
     )
 
+    # 🔧 Realized Rate Calculation
     merged['Revenue'] = merged['Revenue'].fillna(0)
     merged['NetAvailableHours'] = merged['NetAvailableHours'].fillna(0)
     merged['Realized Rate'] = merged.apply(
@@ -53,6 +55,7 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         axis=1
     )
 
+    # ✅ Apply filters
     if segment != "All":
         merged = merged[merged['Segment'] == segment]
     if bu != "All":
@@ -61,6 +64,8 @@ def apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, qua
         merged = merged[merged['DU'] == du]
     if quarter != "All":
         merged = merged[merged['Quarter'] == quarter]
+
+    # ✅ Apply Realized Rate filter
     merged = merged[(merged['Realized Rate'] >= min_rate) & (merged['Realized Rate'] <= max_rate)]
 
     return merged
@@ -91,8 +96,9 @@ def run(df=None, user_question=None):
     filtered_df = apply_filters(df_revenue, df_hours, min_rate, max_rate, segment, bu, du, quarter)
 
     # ✅ Show account-level match % summary
-    df_hours_grouped = df_hours.groupby(['FinalCustomerName', 'Month'])['NetAvailableHours'].sum().reset_index()
-    full_df = pd.merge(df_revenue, df_hours_grouped, on=['FinalCustomerName', 'Month'], how='inner')
+    full_group_keys = ['FinalCustomerName', 'Segment', 'BU', 'DU', 'Month']
+    df_hours_grouped = df_hours.groupby(full_group_keys)['NetAvailableHours'].sum().reset_index()
+    full_df = pd.merge(df_revenue, df_hours_grouped, on=full_group_keys, how='inner')
     full_df['Revenue'] = full_df['Revenue'].fillna(0)
     full_df['NetAvailableHours'] = full_df['NetAvailableHours'].fillna(0)
     full_df['Realized Rate'] = full_df.apply(
