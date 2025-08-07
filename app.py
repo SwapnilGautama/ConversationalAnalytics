@@ -69,7 +69,7 @@ def display_header():
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -20px; margin-bottom: 10px;">
             <div style="flex: 1;"></div>
             <div style="flex: 2; text-align: center;">
-                <h1 style='font-family: "Segoe UI", sans-serif; font-size: 38px; color: #002D62; margin: 0;'>
+                <h1 style='font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin: 0;'>
                     Conversational Analytics Assistant
                 </h1>
             </div>
