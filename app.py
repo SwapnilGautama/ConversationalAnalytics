@@ -3,7 +3,7 @@
 import streamlit as st
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-from utils.semantic_matcher import find_best_matching_qid  # existing matcher (qid, prompt, score)
+from utils.semantic_matcher import find_best_matching_qid  # returns (qid, prompt, score)
 import importlib
 from kpi_engine import margin
 import os
@@ -267,7 +267,7 @@ def _unique_nontrivial_values(series: pd.Series):
     return [v for v in vals if isinstance(v, str) and len(v.strip()) >= 3]
 
 # =========================================================
-# UT headcount fallback (multi-dimension + Date_a)  — already working
+# UT headcount fallback (multi-dimension + Date_a) — working
 # =========================================================
 DIMENSION_CANDIDATES_UT = {
     "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
@@ -380,7 +380,7 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
     return True
 
 # =========================================================
-# NEW: Financial multi-dimension filtering for P&L (Segment/Account + Month)
+# Financial multi-dimension filtering for P&L (Segment/Account + Month)
 # =========================================================
 DIMENSION_CANDIDATES_PNL = {
     "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
@@ -393,7 +393,7 @@ def extract_dimension_filters_pnl(user_q: str, df_pnl: pd.DataFrame):
     ql = (user_q or "").lower()
     filters = {}
 
-    # match explicit account token (A1) to first available account-like column
+    # explicit account token (A1)
     acct_token = parse_account_token(user_q)
     if acct_token:
         for col in DIMENSION_CANDIDATES_PNL["account_like"]:
@@ -401,7 +401,7 @@ def extract_dimension_filters_pnl(user_q: str, df_pnl: pd.DataFrame):
                 filters.setdefault(col, []).append(acct_token)
                 break
 
-    # substring matches for known values in Segment/Vertical/BU/DU and account-like
+    # substring matches for known values
     for group, cols in DIMENSION_CANDIDATES_PNL.items():
         for col in cols:
             if col not in df_pnl.columns:
@@ -443,7 +443,7 @@ def apply_pnl_filters(df: pd.DataFrame, filters: dict, month_num: int | None, ye
 
     return work, year
 
-# ------------------ Financial fallbacks (with new filtering) ------------------
+# ------------------ Financial fallbacks (with filtering) ------------------
 def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     st.subheader("AI Fallback — General Summary")
 
@@ -479,7 +479,6 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     margin_amt = rev - cost
     margin_pct = (margin_amt / cost * 100) if cost else None
 
-    # Display context of filters
     pieces = []
     if month_num:
         mdisp = datetime(2000, month_num, 1).strftime("%b")
@@ -514,7 +513,7 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
-    Best-effort use of existing kpi_engine modules when possible.
+    Best-effort use of pandas-only views (no external module guard to avoid NameError).
     Includes headcount intent via UT (using Date_a) if loaded.
     Adds multi-dimension + Month filtering for P&L-based financial metrics.
     """
@@ -533,16 +532,16 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     dim_filters = extract_dimension_filters_pnl(user_q, df)
     dff, resolved_year = apply_pnl_filters(df, dim_filters, month_num, year)
     if dff.empty:
-        dff = df  # fallback to all rows but still display that we tried to filter
+        dff = df
         tried_filter_note = True
     else:
         tried_filter_note = False
 
-    # Margin-style view
-    if "margin" in ql and _optional_modules.get("kpi_engine.margin"):
-        st.subheader("AI Fallback — Margin Analysis (kpi_engine.margin)")
+    # Margin-style view (no dependency on kpi_engine modules)
+    if "margin" in ql:
+        st.subheader("AI Fallback — Margin Analysis")
         try:
-            if _safe_has_cols(dff, ["Type", amount_col, "Month"]):
+            if _safe_has_cols(dff, ["Type", amount_col]) and "Month" in dff.columns:
                 monthly = dff.pivot_table(
                     values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
                 ).reset_index()
@@ -573,12 +572,11 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         except Exception as e:
             st.warning(f"Margin view failed: {e}")
 
-    # Revenue / Cost breakdown
-    if ("revenue" in ql and _optional_modules.get("kpi_engine.revenue")) or \
-       ("cost" in ql and _optional_modules.get("kpi_engine.cost")):
+    # Revenue / Cost breakdown (no dependency on modules)
+    if ("revenue" in ql) or ("cost" in ql):
         st.subheader("AI Fallback — Revenue/Cost Breakdown")
         try:
-            if _safe_has_cols(dff, ["Type", amount_col, "Month"]):
+            if _safe_has_cols(dff, ["Type", amount_col]) and "Month" in dff.columns:
                 g = dff.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
                 g[amount_col] = series_to_million(g[amount_col])
                 parts = [f"Values shown in {unit}."]
@@ -600,7 +598,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         except Exception as e:
             st.warning(f"Rev/Cost view failed: {e}")
 
-    # Offshore / Onsite splits if a location-like column exists
+    # Offshore / Onsite splits (no dependency on modules)
     if ("offshore" in ql or "onsite" in ql) and "Month" in df.columns:
         loc_col = None
         for c in ["Location", "WorkLocation", "Onsite_Offshore", "Onshore_Offshore"]:
