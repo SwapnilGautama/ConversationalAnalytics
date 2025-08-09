@@ -77,17 +77,14 @@ def load_ut_optional():
         # Parse Date_a to datetime for reliable month/year filtering
         if "Date_a" in df.columns:
             df["Date_a_dt"] = pd.to_datetime(df["Date_a"], errors="coerce")
-            # Convenience columns (not required but helpful)
             df["Year"] = df["Date_a_dt"].dt.year
             df["MonthNum"] = df["Date_a_dt"].dt.month
             df["MonthName"] = df["Date_a_dt"].dt.strftime("%b")
         else:
-            # fallback if only Month numeric exists
             if "Month" in df.columns and pd.api.types.is_numeric_dtype(df["Month"]):
                 month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
                 df["MonthName"] = df["Month"].map(month_map)
                 df["MonthNum"] = df["Month"]
-
         return df
     except Exception:
         return None
@@ -172,7 +169,6 @@ def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
     """
     ql = (user_q or "").lower()
     wants_usd = any(k in ql for k in REVCOST_MARGIN_KEYWORDS)
-
     has_usd = "Amount in USD" in df.columns
     has_inr = "Amount in INR" in df.columns
 
@@ -183,7 +179,7 @@ def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
             st.caption("Note: 'Amount in USD' not found — using 'Amount in INR' for this financial question.")
             return "Amount in INR"
         else:
-            return "Amount in USD"  # handled downstream if missing
+            return "Amount in USD"
     else:
         if has_inr:
             return "Amount in INR"
@@ -264,7 +260,7 @@ def _parse_time_filters(q: str):
             out["month_from"], out["month_to"] = m[0], m[1]
     return out
 
-# ---------- NEW: month & year parsing for Date_a-based UT filtering ----------
+# ---------- Month & Year parsing for Date_a-based UT filtering ----------
 MONTH_ALIASES = {
     "jan": 1, "january": 1,
     "feb": 2, "february": 2,
@@ -281,55 +277,98 @@ MONTH_ALIASES = {
 }
 
 def parse_month_year_from_text(q: str):
-    """
-    Returns (month_num, year) if found; otherwise (None, None).
-    Accepts 'Jun 2025', 'June 2025', etc. Year must be 4 digits to avoid ambiguity.
-    """
+    """Returns (month_num, year) if found; otherwise (None, None)."""
     ql = (q or "").lower()
-    # Try patterns like "June 2025" or "Jun 2025"
-    m = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})\b", ql)
+    m = re.search(
+        r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})\b",
+        ql,
+    )
     if m:
         month_token, year = m.group(1), int(m.group(2))
         month_num = MONTH_ALIASES.get(month_token, None)
         return month_num, year
 
-    # If only month name is present (no explicit year)
     for token, mnum in MONTH_ALIASES.items():
         if re.search(rf"\b{token}\b", ql):
             return mnum, None
 
     return None, None
 
-def parse_account_from_text(q: str):
-    """
-    Light account parser: captures tokens like 'A1', 'A-1', 'Account A1'.
-    """
+def parse_account_token(q: str):
+    """Light account parser: tokens like 'A1', 'A-1'."""
     m = re.search(r"\b([A-Za-z]\-?\d{1,3})\b", q or "")
     return m.group(1) if m else None
 
-def ut_filter_by_account_and_period(df_ut: pd.DataFrame, acct_token: str, month_num: int | None, year: int | None):
+# -------- NEW: Extract multiple dimension filters from user text --------
+DIMENSION_CANDIDATES = {
+    "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
+    "segment_like": ["Segment", "Vertical"],
+    "org_like": ["BU", "DU"]
+}
+
+def _unique_nontrivial_values(series: pd.Series):
+    vals = (
+        series.dropna()
+        .astype(str)
+        .map(lambda x: x.strip())
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    # Keep only strings with at least 3 characters to avoid noise
+    return [v for v in vals if isinstance(v, str) and len(v.strip()) >= 3]
+
+def extract_dimension_filters(user_q: str, df_ut: pd.DataFrame):
     """
-    Filters UT using Date_a_dt (preferred). If year is None but month is provided,
-    picks the latest year available for that month.
+    From the query and UT data, infer filters like Segment/Vertical, BU/DU, and Account/Customer.
+    - Uses substring matches against UT unique values (case-insensitive).
+    - Also supports explicit account tokens like 'A1'.
+    Returns dict: {col_name: [matched_values], ...}
     """
     if df_ut is None or df_ut.empty:
-        return pd.DataFrame()
+        return {}
+
+    ql = (user_q or "").lower()
+    filters = {}
+
+    # 1) Account-style token (A1, A-1) -> search across account-like columns
+    acct_token = parse_account_token(user_q)
+    if acct_token:
+        for col in DIMENSION_CANDIDATES["account_like"]:
+            if col in df_ut.columns:
+                filters.setdefault(col, []).append(acct_token)
+                break  # bind it to the first available account-like column
+
+    # 2) Substring matches for known dimension values
+    for group, cols in DIMENSION_CANDIDATES.items():
+        for col in cols:
+            if col not in df_ut.columns:
+                continue
+            matches = []
+            for val in _unique_nontrivial_values(df_ut[col]):
+                if val.lower() in ql:
+                    matches.append(val)
+            if matches:
+                filters.setdefault(col, []).extend(matches)
+
+    return filters
+
+def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, year: int | None):
+    """
+    Applies:
+      - Date_a_dt filters (month/year), inferring latest year if month is given without year.
+      - All dimension filters conjunctively (AND), allowing multiple values per column (OR within a column).
+    """
+    if df_ut is None or df_ut.empty:
+        return pd.DataFrame(), year
 
     work = df_ut.copy()
 
-    # Account filter: try multiple columns
-    acct_cols = [c for c in ["FinalCustomerName", "Company_code", "Account", "Customer"] if c in work.columns]
-    if acct_token and acct_cols:
-        found = pd.Series(False, index=work.index)
-        for c in acct_cols:
-            found = found | work[c].astype(str).str.contains(acct_token, case=False, na=False)
-        work = work[found]
-
-    # Period filter via Date_a_dt
+    # Date_a_dt filter
     if "Date_a_dt" in work.columns and pd.api.types.is_datetime64_any_dtype(work["Date_a_dt"]):
         if month_num:
             if year is None:
-                # choose latest available year for that month
                 yrs = work[work["Date_a_dt"].dt.month == month_num]["Date_a_dt"].dt.year
                 if len(yrs):
                     year = int(yrs.max())
@@ -338,17 +377,26 @@ def ut_filter_by_account_and_period(df_ut: pd.DataFrame, acct_token: str, month_
         elif month_num:
             work = work[work["Date_a_dt"].dt.month == month_num]
     else:
-        # Fallback if Date_a not available: use Month/Year if present
         if month_num and "MonthNum" in work.columns:
             work = work[work["MonthNum"] == month_num]
         if year and "Year" in work.columns:
             work = work[work["Year"] == year]
 
-    return work, year  # return resolved year (may have been inferred)
+    # Dimension filters: AND across columns, OR within same column
+    for col, values in (filters or {}).items():
+        if col not in work.columns or not values:
+            continue
+        mask = pd.Series(False, index=work.index)
+        for v in values:
+            mask = mask | work[col].astype(str).str.contains(str(v), case=False, na=False)
+        work = work[mask]
+
+    return work, year
 
 def headcount_view(user_q: str, df_ut: pd.DataFrame):
     """
-    Headcount = distinct PSNo (or Agent) for the requested account/month using Date_a.
+    Headcount = distinct PSNo (or Agent) for requested filters.
+    Supports multiple filters (Segment/Vertical/BU/DU/Account-like) + Date_a month/year.
     """
     if df_ut is None or df_ut.empty:
         st.subheader("AI Fallback — Additional KPI")
@@ -356,7 +404,7 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
         return True
 
     month_num, year = parse_month_year_from_text(user_q)
-    acct_token = parse_account_from_text(user_q)
+    dim_filters = extract_dimension_filters(user_q, df_ut)
 
     # Person identifier column
     person_cols = [c for c in ["PSNo", "Agent", "EmployeeID", "EmpID"] if c in df_ut.columns]
@@ -366,15 +414,12 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
         return True
     person_col = person_cols[0]
 
-    filt, resolved_year = ut_filter_by_account_and_period(df_ut, acct_token, month_num, year)
+    filt, resolved_year = apply_ut_filters(df_ut, dim_filters, month_num, year)
     if filt.empty:
         st.subheader("AI Fallback — Headcount")
         month_label = "month not specified" if month_num is None else datetime(2000, month_num, 1).strftime("%b")
         year_label = "" if (resolved_year is None and year is None) else f" {resolved_year or year}"
-        if acct_token:
-            st.info(f"No UT records found for account like '{acct_token}' in {month_label}{year_label}.")
-        else:
-            st.info("Please include an account token (e.g., 'A1') and month/year (e.g., 'June 2025').")
+        st.info(f"No UT records found for the requested filters in {month_label}{year_label}.")
         return True
 
     # Optional billable filter
@@ -388,19 +433,31 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
 
     hc = dfw[person_col].nunique()
 
+    # Display filters applied
     st.subheader("AI Fallback — Headcount")
-    acct_display = acct_token or "(all accounts in filter)"
+    pieces = []
     if month_num:
-        month_display = datetime(2000, month_num, 1).strftime("%b")
+        mdisp = datetime(2000, month_num, 1).strftime("%b")
         if resolved_year or year:
-            month_display = f"{month_display} {resolved_year or year}"
+            mdisp = f"{mdisp} {resolved_year or year}"
+        pieces.append(f"**Month:** {mdisp}")
     else:
-        month_display = "(month not specified)"
-    st.markdown(f"**Account:** {acct_display} &nbsp;&nbsp; **Month:** {month_display}")
-    st.dataframe(pd.DataFrame([{"Headcount": hc, "Account (contains)": acct_display, "Month": month_display}]))
+        pieces.append("**Month:** (not specified)")
 
-    # Optional small breakdown by BU/DU if present
-    for grp_col in ["BU", "DU"]:
+    if dim_filters:
+        applied = []
+        for col, vals in dim_filters.items():
+            applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+        pieces.append("**Filters:** " + "; ".join(applied))
+    else:
+        pieces.append("**Filters:** (none)")
+
+    st.markdown(" &nbsp;&nbsp; ".join(pieces))
+
+    st.dataframe(pd.DataFrame([{"Headcount": hc}]))
+
+    # Optional small breakdowns
+    for grp_col in ["BU", "DU", "Segment", "Vertical"]:
         if grp_col in dfw.columns:
             br = dfw.groupby(grp_col, dropna=False)[person_col].nunique().reset_index().rename(columns={person_col:"Headcount"})
             st.markdown(f"**Headcount by {grp_col}**")
@@ -463,7 +520,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     ql = (user_q or "").lower()
 
-    # ---- Headcount intent (Date_a-based) ----
+    # ---- Headcount intent (Date_a + multi-dimension filters) ----
     if any(w in ql for w in ["headcount", "fte", "resources"]) or re.search(r"\bhc\b", ql):
         return headcount_view(user_question, df_ut)
 
