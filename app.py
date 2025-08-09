@@ -47,7 +47,7 @@ def clear_input():
     st.session_state.clear_chat = True
 
 # -----------------------------
-# Data loaders (P&L preserved) + NEW optional UT loader
+# Data loaders (P&L preserved) + OPTIONAL UT loader
 # -----------------------------
 @st.cache_data
 def load_pnl():
@@ -72,16 +72,22 @@ def load_ut_optional():
         return None
     try:
         df = pd.read_excel(ut_path)
-        # Light normalization (column names vary across versions)
         df.columns = [str(c).strip() for c in df.columns]
 
-        # If Month is numeric (1–12), also add MonthName for convenience
-        if "Month" in df.columns and pd.api.types.is_numeric_dtype(df["Month"]):
-            month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
-            df["MonthName"] = df["Month"].map(month_map)
+        # Parse Date_a to datetime for reliable month/year filtering
+        if "Date_a" in df.columns:
+            df["Date_a_dt"] = pd.to_datetime(df["Date_a"], errors="coerce")
+            # Convenience columns (not required but helpful)
+            df["Year"] = df["Date_a_dt"].dt.year
+            df["MonthNum"] = df["Date_a_dt"].dt.month
+            df["MonthName"] = df["Date_a_dt"].dt.strftime("%b")
+        else:
+            # fallback if only Month numeric exists
+            if "Month" in df.columns and pd.api.types.is_numeric_dtype(df["Month"]):
+                month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+                df["MonthName"] = df["Month"].map(month_map)
+                df["MonthNum"] = df["Month"]
 
-        # Standardize possible account columns (we'll try both later)
-        # No heavy transforms to avoid breaking anything.
         return df
     except Exception:
         return None
@@ -205,7 +211,7 @@ def series_to_million(s: pd.Series) -> pd.Series:
         return s
 
 # =========================================================
-# AI FALLBACK (router + opportunistic kpi_engine use) + NEW headcount intent
+# AI FALLBACK (router + opportunistic kpi_engine use) + Headcount intent
 # =========================================================
 SIM_THRESHOLD = 0.72
 FREEFORM_TRIGGERS = ("ai:", "freeform:", "ad-hoc:")
@@ -237,7 +243,7 @@ def _safe_has_cols(frame: pd.DataFrame, cols):
     return isinstance(frame, pd.DataFrame) and all(c in frame.columns for c in cols)
 
 def _parse_time_filters(q: str):
-    """Infer simple time filters from free text."""
+    """Infer simple time filters from free text (used in financial fallback only)."""
     ql = (q or "").lower()
     out = {}
     now = datetime.now()
@@ -249,7 +255,6 @@ def _parse_time_filters(q: str):
         out["month_from"] = prev_month.strftime("%b %Y")
         out["month_to"] = now.strftime("%b %Y")
 
-    # explicit "MMM YYYY"
     m = re.findall(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b", q or "", flags=re.IGNORECASE)
     if m:
         m = [x.title() for x in m]
@@ -259,35 +264,60 @@ def _parse_time_filters(q: str):
             out["month_from"], out["month_to"] = m[0], m[1]
     return out
 
-# -------------- NEW: lightweight parsers for headcount intent --------------
-MONTH_MAP = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
+# ---------- NEW: month & year parsing for Date_a-based UT filtering ----------
+MONTH_ALIASES = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12
+}
 
-def parse_month_from_text(q: str):
+def parse_month_year_from_text(q: str):
+    """
+    Returns (month_num, year) if found; otherwise (None, None).
+    Accepts 'Jun 2025', 'June 2025', etc. Year must be 4 digits to avoid ambiguity.
+    """
     ql = (q or "").lower()
-    for mname, mnum in MONTH_MAP.items():
-        if re.search(rf"\b{mname}\b", ql):
-            return mnum, mname.capitalize()
+    # Try patterns like "June 2025" or "Jun 2025"
+    m = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})\b", ql)
+    if m:
+        month_token, year = m.group(1), int(m.group(2))
+        month_num = MONTH_ALIASES.get(month_token, None)
+        return month_num, year
+
+    # If only month name is present (no explicit year)
+    for token, mnum in MONTH_ALIASES.items():
+        if re.search(rf"\b{token}\b", ql):
+            return mnum, None
+
     return None, None
 
 def parse_account_from_text(q: str):
     """
-    Very light account parser:
-    - Captures tokens like 'A1', 'A-1', 'Account A1'
-    - Returns raw token; later we try to match against known columns
+    Light account parser: captures tokens like 'A1', 'A-1', 'Account A1'.
     """
     m = re.search(r"\b([A-Za-z]\-?\d{1,3})\b", q or "")
     return m.group(1) if m else None
 
-def ut_filter_by_account_and_month(df_ut: pd.DataFrame, acct_token: str, month_num: int):
+def ut_filter_by_account_and_period(df_ut: pd.DataFrame, acct_token: str, month_num: int | None, year: int | None):
     """
-    Tries multiple possible account columns and month fields.
-    Returns a filtered DF (may be empty).
+    Filters UT using Date_a_dt (preferred). If year is None but month is provided,
+    picks the latest year available for that month.
     """
-    if df_ut is None:
+    if df_ut is None or df_ut.empty:
         return pd.DataFrame()
 
     work = df_ut.copy()
-    # Resolve account by trying common columns
+
+    # Account filter: try multiple columns
     acct_cols = [c for c in ["FinalCustomerName", "Company_code", "Account", "Customer"] if c in work.columns]
     if acct_token and acct_cols:
         found = pd.Series(False, index=work.index)
@@ -295,29 +325,40 @@ def ut_filter_by_account_and_month(df_ut: pd.DataFrame, acct_token: str, month_n
             found = found | work[c].astype(str).str.contains(acct_token, case=False, na=False)
         work = work[found]
 
-    # Month filter: support Month (1–12) or MonthName ("Jun")
-    if "Month" in work.columns and pd.api.types.is_numeric_dtype(work["Month"]) and month_num:
-        work = work[work["Month"] == month_num]
-    elif "MonthName" in work.columns and month_num:
-        mname = {v:k for k,v in MONTH_MAP.items()}[month_num].capitalize()
-        work = work[work["MonthName"].astype(str).str.lower() == mname.lower()]
+    # Period filter via Date_a_dt
+    if "Date_a_dt" in work.columns and pd.api.types.is_datetime64_any_dtype(work["Date_a_dt"]):
+        if month_num:
+            if year is None:
+                # choose latest available year for that month
+                yrs = work[work["Date_a_dt"].dt.month == month_num]["Date_a_dt"].dt.year
+                if len(yrs):
+                    year = int(yrs.max())
+        if month_num and year:
+            work = work[(work["Date_a_dt"].dt.month == month_num) & (work["Date_a_dt"].dt.year == year)]
+        elif month_num:
+            work = work[work["Date_a_dt"].dt.month == month_num]
+    else:
+        # Fallback if Date_a not available: use Month/Year if present
+        if month_num and "MonthNum" in work.columns:
+            work = work[work["MonthNum"] == month_num]
+        if year and "Year" in work.columns:
+            work = work[work["Year"] == year]
 
-    return work
+    return work, year  # return resolved year (may have been inferred)
 
 def headcount_view(user_q: str, df_ut: pd.DataFrame):
     """
-    Headcount = distinct PSNo (or Agent) for the requested account/month.
-    Shows a one-row table with the count, plus a small breakdown by BU/DU if available.
+    Headcount = distinct PSNo (or Agent) for the requested account/month using Date_a.
     """
     if df_ut is None or df_ut.empty:
         st.subheader("AI Fallback — Additional KPI")
         st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
         return True
 
-    month_num, month_name = parse_month_from_text(user_q)
+    month_num, year = parse_month_year_from_text(user_q)
     acct_token = parse_account_from_text(user_q)
 
-    # Resolve person id column
+    # Person identifier column
     person_cols = [c for c in ["PSNo", "Agent", "EmployeeID", "EmpID"] if c in df_ut.columns]
     if not person_cols:
         st.subheader("AI Fallback — Headcount")
@@ -325,18 +366,18 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
         return True
     person_col = person_cols[0]
 
-    filt = ut_filter_by_account_and_month(df_ut, acct_token, month_num)
+    filt, resolved_year = ut_filter_by_account_and_period(df_ut, acct_token, month_num, year)
     if filt.empty:
         st.subheader("AI Fallback — Headcount")
-        if acct_token and month_name:
-            st.info(f"No UT records found for account like '{acct_token}' in {month_name}.")
-        elif acct_token:
-            st.info(f"No UT records found for account like '{acct_token}'. Try specifying a month.")
+        month_label = "month not specified" if month_num is None else datetime(2000, month_num, 1).strftime("%b")
+        year_label = "" if (resolved_year is None and year is None) else f" {resolved_year or year}"
+        if acct_token:
+            st.info(f"No UT records found for account like '{acct_token}' in {month_label}{year_label}.")
         else:
-            st.info("Please include an account token (e.g., 'A1') and month name (e.g., 'Jun 2025').")
+            st.info("Please include an account token (e.g., 'A1') and month/year (e.g., 'June 2025').")
         return True
 
-    # Distinct people (optionally filter to billable if Status exists and user asked for billable)
+    # Optional billable filter
     ql = (user_question or "").lower()
     dfw = filt.copy()
     if "Status" in dfw.columns and ("billable" in ql or "non-billable" in ql):
@@ -349,7 +390,12 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
 
     st.subheader("AI Fallback — Headcount")
     acct_display = acct_token or "(all accounts in filter)"
-    month_display = month_name or "(month not specified)"
+    if month_num:
+        month_display = datetime(2000, month_num, 1).strftime("%b")
+        if resolved_year or year:
+            month_display = f"{month_display} {resolved_year or year}"
+    else:
+        month_display = "(month not specified)"
     st.markdown(f"**Account:** {acct_display} &nbsp;&nbsp; **Month:** {month_display}")
     st.dataframe(pd.DataFrame([{"Headcount": hc, "Account (contains)": acct_display, "Month": month_display}]))
 
@@ -413,15 +459,15 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     Best-effort use of existing kpi_engine modules when possible.
-    Includes headcount intent via UT (if loaded).
+    Includes headcount intent via UT (using Date_a) if loaded.
     """
     ql = (user_q or "").lower()
 
-    # ---- NEW: Headcount intent (works only if UT loaded) ----
+    # ---- Headcount intent (Date_a-based) ----
     if any(w in ql for w in ["headcount", "fte", "resources"]) or re.search(r"\bhc\b", ql):
         return headcount_view(user_question, df_ut)
 
-    # ---- Existing financial fallbacks (use USD mn where available) ----
+    # ---- Financial fallbacks (USD mn where available) ----
     amount_col = choose_amount_column(user_q, df)
     unit = unit_label(amount_col)
 
@@ -513,13 +559,13 @@ if user_question and not st.session_state.clear_chat:
 
         # Triggers to force AI path
         force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
-        low_score = (score is not None and score < 0.72)
+        low_score = (score is not None and score < SIM_THRESHOLD)
 
         if force_ai or low_score or not best_qid:
             if force_ai:
                 st.caption("AI mode: freeform override detected.")
             elif low_score:
-                st.caption(f"AI mode: matcher score {score:.2f} < 0.72.")
+                st.caption(f"AI mode: matcher score {score:.2f} < {SIM_THRESHOLD}.")
             else:
                 st.caption("AI mode: no suitable prebuilt match found.")
             ai_fallback(user_question, df_pnl)
