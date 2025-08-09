@@ -15,6 +15,11 @@ import base64
 import re
 from datetime import datetime
 
+# ---------- tiny helper (fixes NameError) ----------
+def _safe_has_cols(frame: pd.DataFrame, cols) -> bool:
+    """Return True if all required columns exist in the DataFrame."""
+    return isinstance(frame, pd.DataFrame) and all(c in frame.columns for c in cols)
+
 # -----------------------------
 # Prompt bank (preserving UX)
 # -----------------------------
@@ -513,7 +518,7 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
-    Best-effort use of pandas-only views (no external module guard to avoid NameError).
+    Best-effort use of pandas-only views.
     Includes headcount intent via UT (using Date_a) if loaded.
     Adds multi-dimension + Month filtering for P&L-based financial metrics.
     """
@@ -537,7 +542,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     else:
         tried_filter_note = False
 
-    # Margin-style view (no dependency on kpi_engine modules)
+    # Margin-style view
     if "margin" in ql:
         st.subheader("AI Fallback — Margin Analysis")
         try:
@@ -572,7 +577,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         except Exception as e:
             st.warning(f"Margin view failed: {e}")
 
-    # Revenue / Cost breakdown (no dependency on modules)
+    # Revenue / Cost breakdown
     if ("revenue" in ql) or ("cost" in ql):
         st.subheader("AI Fallback — Revenue/Cost Breakdown")
         try:
@@ -598,7 +603,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         except Exception as e:
             st.warning(f"Rev/Cost view failed: {e}")
 
-    # Offshore / Onsite splits (no dependency on modules)
+    # Offshore / Onsite splits
     if ("offshore" in ql or "onsite" in ql) and "Month" in df.columns:
         loc_col = None
         for c in ["Location", "WorkLocation", "Onsite_Offshore", "Onshore_Offshore"]:
