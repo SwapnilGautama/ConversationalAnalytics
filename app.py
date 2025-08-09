@@ -3,7 +3,7 @@
 import streamlit as st
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-from utils.semantic_matcher import find_best_matching_qid  # existing matcher (returns qid, prompt, score)
+from utils.semantic_matcher import find_best_matching_qid  # existing matcher (qid, prompt, score)
 import importlib
 from kpi_engine import margin
 import os
@@ -47,7 +47,7 @@ def clear_input():
     st.session_state.clear_chat = True
 
 # -----------------------------
-# Data loaders (preserved)
+# Data loaders (P&L preserved) + NEW optional UT loader
 # -----------------------------
 @st.cache_data
 def load_pnl():
@@ -60,11 +60,39 @@ def load_pnl():
         raise ValueError("Loaded P&L data is empty after preprocessing.")
     return df
 
+@st.cache_data
+def load_ut_optional():
+    """
+    Try to load UT/HR dataset if present.
+    Expected file: sample_data/LNTData.xlsx
+    Returns a cleaned DataFrame or None if not found.
+    """
+    ut_path = os.path.join("sample_data", "LNTData.xlsx")
+    if not os.path.exists(ut_path):
+        return None
+    try:
+        df = pd.read_excel(ut_path)
+        # Light normalization (column names vary across versions)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # If Month is numeric (1–12), also add MonthName for convenience
+        if "Month" in df.columns and pd.api.types.is_numeric_dtype(df["Month"]):
+            month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+            df["MonthName"] = df["Month"].map(month_map)
+
+        # Standardize possible account columns (we'll try both later)
+        # No heavy transforms to avoid breaking anything.
+        return df
+    except Exception:
+        return None
+
 try:
     df_pnl = load_pnl()
 except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
+
+df_ut = load_ut_optional()  # may be None (non-breaking)
 
 # -----------------------------
 # Header (preserved)
@@ -123,7 +151,7 @@ with clear_col:
         clear_input()
 
 # =========================================================
-# Helper: Dynamic Amount field selector + unit helpers (NEW)
+# Helper: Dynamic Amount field selector + unit helpers (financials)
 # =========================================================
 REVCOST_MARGIN_KEYWORDS = (
     "revenue", "cost", "margin", "c&b", "c & b", "c and b", "profit", "loss",
@@ -149,7 +177,7 @@ def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
             st.caption("Note: 'Amount in USD' not found — using 'Amount in INR' for this financial question.")
             return "Amount in INR"
         else:
-            return "Amount in USD"  # will be handled downstream if missing
+            return "Amount in USD"  # handled downstream if missing
     else:
         if has_inr:
             return "Amount in INR"
@@ -162,7 +190,6 @@ def is_usd_col(amount_col: str) -> bool:
     return amount_col.strip().lower() == "amount in usd"
 
 def unit_label(amount_col: str) -> str:
-    # Display label for tables/metrics
     return "USD mn" if is_usd_col(amount_col) else "INR mn (USD unavailable)"
 
 def to_million(value) -> float:
@@ -178,7 +205,7 @@ def series_to_million(s: pd.Series) -> pd.Series:
         return s
 
 # =========================================================
-# AI FALLBACK (router + opportunistic kpi_engine use)
+# AI FALLBACK (router + opportunistic kpi_engine use) + NEW headcount intent
 # =========================================================
 SIM_THRESHOLD = 0.72
 FREEFORM_TRIGGERS = ("ai:", "freeform:", "ad-hoc:")
@@ -232,6 +259,109 @@ def _parse_time_filters(q: str):
             out["month_from"], out["month_to"] = m[0], m[1]
     return out
 
+# -------------- NEW: lightweight parsers for headcount intent --------------
+MONTH_MAP = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
+
+def parse_month_from_text(q: str):
+    ql = (q or "").lower()
+    for mname, mnum in MONTH_MAP.items():
+        if re.search(rf"\b{mname}\b", ql):
+            return mnum, mname.capitalize()
+    return None, None
+
+def parse_account_from_text(q: str):
+    """
+    Very light account parser:
+    - Captures tokens like 'A1', 'A-1', 'Account A1'
+    - Returns raw token; later we try to match against known columns
+    """
+    m = re.search(r"\b([A-Za-z]\-?\d{1,3})\b", q or "")
+    return m.group(1) if m else None
+
+def ut_filter_by_account_and_month(df_ut: pd.DataFrame, acct_token: str, month_num: int):
+    """
+    Tries multiple possible account columns and month fields.
+    Returns a filtered DF (may be empty).
+    """
+    if df_ut is None:
+        return pd.DataFrame()
+
+    work = df_ut.copy()
+    # Resolve account by trying common columns
+    acct_cols = [c for c in ["FinalCustomerName", "Company_code", "Account", "Customer"] if c in work.columns]
+    if acct_token and acct_cols:
+        found = pd.Series(False, index=work.index)
+        for c in acct_cols:
+            found = found | work[c].astype(str).str.contains(acct_token, case=False, na=False)
+        work = work[found]
+
+    # Month filter: support Month (1–12) or MonthName ("Jun")
+    if "Month" in work.columns and pd.api.types.is_numeric_dtype(work["Month"]) and month_num:
+        work = work[work["Month"] == month_num]
+    elif "MonthName" in work.columns and month_num:
+        mname = {v:k for k,v in MONTH_MAP.items()}[month_num].capitalize()
+        work = work[work["MonthName"].astype(str).str.lower() == mname.lower()]
+
+    return work
+
+def headcount_view(user_q: str, df_ut: pd.DataFrame):
+    """
+    Headcount = distinct PSNo (or Agent) for the requested account/month.
+    Shows a one-row table with the count, plus a small breakdown by BU/DU if available.
+    """
+    if df_ut is None or df_ut.empty:
+        st.subheader("AI Fallback — Additional KPI")
+        st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
+        return True
+
+    month_num, month_name = parse_month_from_text(user_q)
+    acct_token = parse_account_from_text(user_q)
+
+    # Resolve person id column
+    person_cols = [c for c in ["PSNo", "Agent", "EmployeeID", "EmpID"] if c in df_ut.columns]
+    if not person_cols:
+        st.subheader("AI Fallback — Headcount")
+        st.info("UT dataset found, but no person identifier column (e.g., PSNo/Agent) was detected.")
+        return True
+    person_col = person_cols[0]
+
+    filt = ut_filter_by_account_and_month(df_ut, acct_token, month_num)
+    if filt.empty:
+        st.subheader("AI Fallback — Headcount")
+        if acct_token and month_name:
+            st.info(f"No UT records found for account like '{acct_token}' in {month_name}.")
+        elif acct_token:
+            st.info(f"No UT records found for account like '{acct_token}'. Try specifying a month.")
+        else:
+            st.info("Please include an account token (e.g., 'A1') and month name (e.g., 'Jun 2025').")
+        return True
+
+    # Distinct people (optionally filter to billable if Status exists and user asked for billable)
+    ql = (user_question or "").lower()
+    dfw = filt.copy()
+    if "Status" in dfw.columns and ("billable" in ql or "non-billable" in ql):
+        if "billable" in ql:
+            dfw = dfw[dfw["Status"].astype(str).str.contains("billable", case=False, na=False)]
+        elif "non-billable" in ql:
+            dfw = dfw[dfw["Status"].astype(str).str.contains("non", case=False, na=False)]
+
+    hc = dfw[person_col].nunique()
+
+    st.subheader("AI Fallback — Headcount")
+    acct_display = acct_token or "(all accounts in filter)"
+    month_display = month_name or "(month not specified)"
+    st.markdown(f"**Account:** {acct_display} &nbsp;&nbsp; **Month:** {month_display}")
+    st.dataframe(pd.DataFrame([{"Headcount": hc, "Account (contains)": acct_display, "Month": month_display}]))
+
+    # Optional small breakdown by BU/DU if present
+    for grp_col in ["BU", "DU"]:
+        if grp_col in dfw.columns:
+            br = dfw.groupby(grp_col, dropna=False)[person_col].nunique().reset_index().rename(columns={person_col:"Headcount"})
+            st.markdown(f"**Headcount by {grp_col}**")
+            st.dataframe(br.sort_values("Headcount", ascending=False))
+    return True
+
+# ------------------ Existing generic financial fallbacks ------------------
 def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     st.subheader("AI Fallback — General Summary")
 
@@ -283,10 +413,15 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     Best-effort use of existing kpi_engine modules when possible.
-    Uses dynamic amount column choice for financial intents.
-    All financial values rendered as million USD (or INR mn if USD missing), 1 decimal.
+    Includes headcount intent via UT (if loaded).
     """
     ql = (user_q or "").lower()
+
+    # ---- NEW: Headcount intent (works only if UT loaded) ----
+    if any(w in ql for w in ["headcount", "fte", "resources"]) or re.search(r"\bhc\b", ql):
+        return headcount_view(user_question, df_ut)
+
+    # ---- Existing financial fallbacks (use USD mn where available) ----
     amount_col = choose_amount_column(user_q, df)
     unit = unit_label(amount_col)
 
@@ -298,15 +433,11 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
                 monthly = df.pivot_table(
                     values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
                 ).reset_index()
-                # Convert to millions
                 for col in ["Revenue", "Cost"]:
                     if col in monthly.columns:
                         monthly[col] = series_to_million(monthly[col])
-                # Margin computations based on scaled values remain proportionally identical
                 if "Revenue" in monthly.columns and "Cost" in monthly.columns:
                     monthly["Margin Amount"] = (monthly["Revenue"] - monthly["Cost"]).round(1)
-                    # Margin % uses original ratio (works the same after scaling)
-                    # Recompute using scaled values is fine as scale cancels out
                     monthly["Margin %"] = monthly.apply(
                         lambda r: round((r["Margin Amount"] / r["Cost"] * 100), 1) if r["Cost"] else None, axis=1
                     )
@@ -345,8 +476,8 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
             st.dataframe(split)
             return True
 
-    # Realized Rate / Headcount / Resources / UT — require UT/HR data
-    if any(k in ql for k in ["realized rate", "headcount", "resources", "fte", "utilization", "ut"]):
+    # Realized Rate / Utilization — require UT/HR data (kept informative)
+    if any(k in ql for k in ["realized rate", "utilization", "ut"]):
         st.subheader("AI Fallback — Additional KPI")
         st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
         return True
@@ -382,13 +513,13 @@ if user_question and not st.session_state.clear_chat:
 
         # Triggers to force AI path
         force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
-        low_score = (score is not None and score < SIM_THRESHOLD)
+        low_score = (score is not None and score < 0.72)
 
         if force_ai or low_score or not best_qid:
             if force_ai:
                 st.caption("AI mode: freeform override detected.")
             elif low_score:
-                st.caption(f"AI mode: matcher score {score:.2f} < {SIM_THRESHOLD}.")
+                st.caption(f"AI mode: matcher score {score:.2f} < 0.72.")
             else:
                 st.caption("AI mode: no suitable prebuilt match found.")
             ai_fallback(user_question, df_pnl)
