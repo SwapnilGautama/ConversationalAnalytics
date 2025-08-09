@@ -100,10 +100,18 @@ for qid, qlist in PROMPT_BANK.items():
 # Precompute question embeddings
 question_embeddings = model.encode(questions)
 
+SIM_THRESHOLD = 0.72  # similarity threshold for fallback
+
 def find_best_matching_qid(user_query):
     query_embedding = model.encode([user_query])[0]
     similarities = util.cos_sim(query_embedding, question_embeddings)[0]
     best_idx = similarities.argmax().item()
     best_qid = qids[best_idx]
     matched_question = questions[best_idx]
-    return best_qid, matched_question
+    best_score = similarities[best_idx].item()
+
+    # Apply threshold: if below, treat as no match
+    if best_score < SIM_THRESHOLD:
+        return None, matched_question, best_score
+
+    return best_qid, matched_question, best_score
