@@ -3,7 +3,7 @@
 import streamlit as st
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-from utils.semantic_matcher import find_best_matching_qid  # keep existing matcher
+from utils.semantic_matcher import find_best_matching_qid  # existing matcher
 import importlib
 from kpi_engine import margin
 import os
@@ -126,7 +126,10 @@ with clear_col:
 # AI FALLBACK (router + opportunistic kpi_engine use)
 # =========================================================
 
-# Optional KPI modules (import-guarded; code won’t break if missing)
+SIM_THRESHOLD = 0.72
+FREEFORM_TRIGGERS = ("ai:", "freeform:", "ad-hoc:")
+
+# Optional KPI modules (import-guarded)
 _optional_modules = {}
 for mod in [
     "kpi_engine.revenue",
@@ -153,10 +156,7 @@ def _safe_has_cols(frame: pd.DataFrame, cols):
     return isinstance(frame, pd.DataFrame) and all(c in frame.columns for c in cols)
 
 def _parse_time_filters(q: str):
-    """
-    Try to infer simple time filters from free text.
-    Returns: dict with potential keys: month_from, month_to, year
-    """
+    """Infer simple time filters from free text."""
     ql = q.lower()
     out = {}
     now = datetime.now()
@@ -193,7 +193,6 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
             rev = float(pivot["Revenue"].iloc[0]) if "Revenue" in pivot.columns else 0.0
             cost = float(pivot["Cost"].iloc[0]) if "Cost" in pivot.columns else 0.0
         else:
-            # Series case
             rev = float(pivot.get("Revenue", 0.0))
             cost = float(pivot.get("Cost", 0.0))
 
@@ -221,8 +220,8 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
-    Best-effort use of existing kpi_engine modules if they expose usable logic.
-    Keeps everything safe and read-only on currently loaded P&L.
+    Best-effort use of existing kpi_engine modules when possible.
+    Keeps everything safe and read-only on the currently loaded P&L data.
     """
     ql = user_q.lower()
 
@@ -278,11 +277,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     return False
 
 def ai_fallback(user_q: str, df: pd.DataFrame):
-    """
-    Main fallback entry:
-    - Try to use kpi_engine-style logic when possible
-    - Else produce a safe, generic P&L summary
-    """
+    """Main fallback entry."""
     used = _use_kpi_tools_if_available(user_q, df)
     if not used:
         _generic_margin_summary(df, user_q)
@@ -293,7 +288,34 @@ def ai_fallback(user_q: str, df: pd.DataFrame):
 # =========================================================
 if user_question and not st.session_state.clear_chat:
     try:
-        best_qid, matched_prompt = find_best_matching_qid(user_question)
+        # Get best match — handle 2- or 3-value returns or dicts
+        res = find_best_matching_qid(user_question)
+        best_qid, matched_prompt, score = None, None, None
+        if isinstance(res, tuple):
+            if len(res) == 3:
+                best_qid, matched_prompt, score = res
+            elif len(res) == 2:
+                best_qid, matched_prompt = res
+            elif len(res) == 1:
+                best_qid = res[0]
+        elif isinstance(res, dict):
+            best_qid = res.get("qid") or res.get("best_qid")
+            matched_prompt = res.get("prompt") or res.get("matched_prompt")
+            score = res.get("score")
+
+        # Triggers to force AI path
+        force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
+        low_score = (score is not None and score < SIM_THRESHOLD)
+
+        if force_ai or low_score or not best_qid:
+            if force_ai:
+                st.caption("AI mode: freeform override detected.")
+            elif low_score:
+                st.caption(f"AI mode: matcher score {score:.2f} < {SIM_THRESHOLD}.")
+            else:
+                st.caption("AI mode: no suitable prebuilt match found.")
+            ai_fallback(user_question, df_pnl)
+            st.stop()
 
         # Pre-configured Q1–Q10 path
         try:
@@ -317,12 +339,10 @@ if user_question and not st.session_state.clear_chat:
                 st.write(result)
 
         except (ModuleNotFoundError, AttributeError) as e:
-            # If prebuilt module missing or invalid, use AI fallback
             st.info(f"Switching to AI fallback for your question (reason: {e})")
             ai_fallback(user_question, df_pnl)
 
     except Exception as e:
-        # Any unexpected router error -> fallback
         st.info("Switching to AI fallback due to an error in routing.")
         st.caption(f"Router error: {e}")
         ai_fallback(user_question, df_pnl)
