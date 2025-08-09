@@ -3,7 +3,7 @@
 import streamlit as st
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-from utils.semantic_matcher import find_best_matching_qid  # existing matcher
+from utils.semantic_matcher import find_best_matching_qid  # existing matcher (now returns qid, prompt, score)
 import importlib
 from kpi_engine import margin
 import os
@@ -123,9 +123,46 @@ with clear_col:
         clear_input()
 
 # =========================================================
+# Helper: Dynamic Amount field selector (NEW)
+# =========================================================
+REVCOST_MARGIN_KEYWORDS = (
+    "revenue", "cost", "margin", "c&b", "c & b", "c and b", "profit", "loss",
+    "cogs", "gross margin", "gm%", "gm %", "cm%", "cm %"
+)
+
+def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
+    """
+    If the question is about revenue/cost/margin, prefer 'Amount in USD'.
+    If it's missing, fall back to 'Amount in INR' with a gentle notice.
+    For non-financial questions, keep existing behavior (use INR if present, else USD if present).
+    """
+    ql = (user_q or "").lower()
+    wants_usd = any(k in ql for k in REVCOST_MARGIN_KEYWORDS)
+
+    has_usd = "Amount in USD" in df.columns
+    has_inr = "Amount in INR" in df.columns
+
+    if wants_usd:
+        if has_usd:
+            return "Amount in USD"
+        elif has_inr:
+            st.caption("Note: 'Amount in USD' not found — using 'Amount in INR' for this financial question.")
+            return "Amount in INR"
+        else:
+            # no known amount columns — we’ll handle missing downstream
+            return "Amount in USD"
+    else:
+        # Non-financial question: retain prior behavior (prefer INR if present)
+        if has_inr:
+            return "Amount in INR"
+        elif has_usd:
+            return "Amount in USD"
+        else:
+            return "Amount in INR"
+
+# =========================================================
 # AI FALLBACK (router + opportunistic kpi_engine use)
 # =========================================================
-
 SIM_THRESHOLD = 0.72
 FREEFORM_TRIGGERS = ("ai:", "freeform:", "ad-hoc:")
 
@@ -157,7 +194,7 @@ def _safe_has_cols(frame: pd.DataFrame, cols):
 
 def _parse_time_filters(q: str):
     """Infer simple time filters from free text."""
-    ql = q.lower()
+    ql = (q or "").lower()
     out = {}
     now = datetime.now()
 
@@ -169,7 +206,7 @@ def _parse_time_filters(q: str):
         out["month_to"] = now.strftime("%b %Y")
 
     # explicit "MMM YYYY"
-    m = re.findall(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b", q, flags=re.IGNORECASE)
+    m = re.findall(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b", q or "", flags=re.IGNORECASE)
     if m:
         m = [x.title() for x in m]
         if len(m) == 1:
@@ -180,64 +217,70 @@ def _parse_time_filters(q: str):
 
 def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     st.subheader("AI Fallback — General Summary")
-    _ = _parse_time_filters(user_q)
 
-    if _safe_has_cols(df, ["Type", "Amount in INR"]):
-        if "Month" in df.columns:
-            g = df.groupby(["Month", "Type"], dropna=False)["Amount in INR"].sum().reset_index()
-            st.markdown("**Monthly Revenue/Cost**")
-            st.dataframe(g)
+    amount_col = choose_amount_column(user_q, df)
+    if not _safe_has_cols(df, ["Type", amount_col]):
+        st.warning(f"The dataset is missing required columns ('Type', '{amount_col}') for a safe fallback summary.")
+        return
 
-        pivot = df.pivot_table(values="Amount in INR", index=None, columns="Type", aggfunc="sum", fill_value=0)
-        if isinstance(pivot, pd.DataFrame):
-            rev = float(pivot["Revenue"].iloc[0]) if "Revenue" in pivot.columns else 0.0
-            cost = float(pivot["Cost"].iloc[0]) if "Cost" in pivot.columns else 0.0
-        else:
-            rev = float(pivot.get("Revenue", 0.0))
-            cost = float(pivot.get("Cost", 0.0))
+    # Monthly totals if Month exists
+    if "Month" in df.columns:
+        g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
+        st.markdown(f"**Monthly Revenue/Cost** (using '{amount_col}')")
+        st.dataframe(g)
 
-        margin_amt = rev - cost
-        margin_pct = (margin_amt / cost * 100) if cost else None
-
-        st.markdown("**Quick Totals**")
-        st.write(
-            {
-                "Revenue (total)": round(rev, 2),
-                "Cost (total)": round(cost, 2),
-                "Margin (Amount)": round(margin_amt, 2),
-                "Margin % ( (Rev - Cost)/Cost )": round(margin_pct, 2) if margin_pct is not None else "N/A",
-            }
-        )
-
-        for key in ["Company_code", "FinalCustomerName", "Account", "Customer"]:
-            if key in df.columns:
-                by_acct = df.groupby([key, "Type"], dropna=False)["Amount in INR"].sum().reset_index()
-                st.markdown(f"**By {key}**")
-                st.dataframe(by_acct.head(50))
-                break
+    # Overall totals and margin
+    pivot = df.pivot_table(values=amount_col, index=None, columns="Type", aggfunc="sum", fill_value=0)
+    if isinstance(pivot, pd.DataFrame):
+        rev = float(pivot["Revenue"].iloc[0]) if "Revenue" in pivot.columns else 0.0
+        cost = float(pivot["Cost"].iloc[0]) if "Cost" in pivot.columns else 0.0
     else:
-        st.warning("The dataset is missing required columns ('Type', 'Amount in INR') for a safe fallback summary.")
+        rev = float(pivot.get("Revenue", 0.0))
+        cost = float(pivot.get("Cost", 0.0))
+
+    margin_amt = rev - cost
+    margin_pct = (margin_amt / cost * 100) if cost else None
+
+    st.markdown("**Quick Totals**")
+    st.write(
+        {
+            f"Revenue (total, {amount_col})": round(rev, 2),
+            f"Cost (total, {amount_col})": round(cost, 2),
+            "Margin (Amount)": round(margin_amt, 2),
+            "Margin % ( (Rev - Cost)/Cost )": round(margin_pct, 2) if margin_pct is not None else "N/A",
+        }
+    )
+
+    # By account-like column
+    for key in ["Company_code", "FinalCustomerName", "Account", "Customer"]:
+        if key in df.columns:
+            by_acct = df.groupby([key, "Type"], dropna=False)[amount_col].sum().reset_index()
+            st.markdown(f"**By {key}** (using '{amount_col}')")
+            st.dataframe(by_acct.head(50))
+            break
 
 def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     Best-effort use of existing kpi_engine modules when possible.
-    Keeps everything safe and read-only on the currently loaded P&L data.
+    Uses dynamic amount column choice for financial intents.
     """
-    ql = user_q.lower()
+    ql = (user_q or "").lower()
+    amount_col = choose_amount_column(user_q, df)
 
     # Margin-style view
     if "margin" in ql and _optional_modules.get("kpi_engine.margin"):
         st.subheader("AI Fallback — Margin Analysis (kpi_engine.margin)")
         try:
-            if _safe_has_cols(df, ["Type", "Amount in INR", "Month"]):
+            if _safe_has_cols(df, ["Type", amount_col, "Month"]):
                 monthly = df.pivot_table(
-                    values="Amount in INR", index="Month", columns="Type", aggfunc="sum", fill_value=0
+                    values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
                 ).reset_index()
                 if "Revenue" in monthly.columns and "Cost" in monthly.columns:
                     monthly["Margin Amount"] = monthly["Revenue"] - monthly["Cost"]
                     monthly["Margin %"] = monthly.apply(
                         lambda r: (r["Margin Amount"] / r["Cost"] * 100) if r["Cost"] else None, axis=1
                     )
+                st.caption(f"Using '{amount_col}' for financial computations.")
                 st.dataframe(monthly)
                 return True
         except Exception as e:
@@ -248,23 +291,25 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
        ("cost" in ql and _optional_modules.get("kpi_engine.cost")):
         st.subheader("AI Fallback — Revenue/Cost Breakdown")
         try:
-            if _safe_has_cols(df, ["Type", "Amount in INR", "Month"]):
-                g = df.groupby(["Month", "Type"], dropna=False)["Amount in INR"].sum().reset_index()
+            if _safe_has_cols(df, ["Type", amount_col, "Month"]):
+                g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
+                st.caption(f"Using '{amount_col}' for financial computations.")
                 st.dataframe(g)
                 return True
         except Exception as e:
             st.warning(f"Rev/Cost view failed: {e}")
 
-    # Offshore / Onsite splits if a location-like column exists
+    # Offshore / Onsite splits if a location-like column exists (still uses chosen amount)
     if ("offshore" in ql or "onsite" in ql) and "Month" in df.columns:
         loc_col = None
         for c in ["Location", "WorkLocation", "Onsite_Offshore", "Onshore_Offshore"]:
             if c in df.columns:
                 loc_col = c
                 break
-        if loc_col and _safe_has_cols(df, ["Type", "Amount in INR", loc_col]):
+        if loc_col and _safe_has_cols(df, ["Type", amount_col, loc_col]):
             st.subheader(f"AI Fallback — {loc_col} Split")
-            split = df.groupby([loc_col, "Type"], dropna=False)["Amount in INR"].sum().reset_index()
+            split = df.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
+            st.caption(f"Using '{amount_col}' for financial computations.")
             st.dataframe(split)
             return True
 
@@ -288,7 +333,7 @@ def ai_fallback(user_q: str, df: pd.DataFrame):
 # =========================================================
 if user_question and not st.session_state.clear_chat:
     try:
-        # Get best match — handle 2- or 3-value returns or dicts
+        # Get best match — handle tuple or dict variants
         res = find_best_matching_qid(user_question)
         best_qid, matched_prompt, score = None, None, None
         if isinstance(res, tuple):
