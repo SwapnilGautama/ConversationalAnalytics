@@ -56,6 +56,12 @@ def load_pnl():
         raise FileNotFoundError(f"File not found at path: {filepath}")
     df = margin.load_pnl_data(filepath)
     df = margin.preprocess_pnl_data(df)
+    # Ensure Month is datetime for filtering
+    if "Month" in df.columns:
+        try:
+            df["Month"] = pd.to_datetime(df["Month"], errors="coerce")
+        except Exception:
+            pass
     if df.empty:
         raise ValueError("Loaded P&L data is empty after preprocessing.")
     return df
@@ -207,60 +213,11 @@ def series_to_million(s: pd.Series) -> pd.Series:
         return s
 
 # =========================================================
-# AI FALLBACK (router + opportunistic kpi_engine use) + Headcount intent
+# Parsing helpers shared by UT & P&L
 # =========================================================
 SIM_THRESHOLD = 0.72
 FREEFORM_TRIGGERS = ("ai:", "freeform:", "ad-hoc:")
 
-# Optional KPI modules (import-guarded)
-_optional_modules = {}
-for mod in [
-    "kpi_engine.revenue",
-    "kpi_engine.revenue_aggregated",
-    "kpi_engine.indirect_revenue",
-    "kpi_engine.offshore_revenue",
-    "kpi_engine.onsite_revenue",
-    "kpi_engine.cost",
-    "kpi_engine.margin",
-    "kpi_engine.realized_rate",
-    "kpi_engine.headcount",
-    "kpi_engine.headcount_aggregated",
-    "kpi_engine.resources",
-    "kpi_engine.bench",
-    "kpi_engine.billed_rate",
-    "kpi_engine.net_available_hours_aggregated",
-]:
-    try:
-        _optional_modules[mod] = importlib.import_module(mod)
-    except Exception:
-        _optional_modules[mod] = None
-
-def _safe_has_cols(frame: pd.DataFrame, cols):
-    return isinstance(frame, pd.DataFrame) and all(c in frame.columns for c in cols)
-
-def _parse_time_filters(q: str):
-    """Infer simple time filters from free text (used in financial fallback only)."""
-    ql = (q or "").lower()
-    out = {}
-    now = datetime.now()
-
-    if "this year" in ql:
-        out["year"] = now.year
-    if "last month" in ql:
-        prev_month = (now.replace(day=1) - pd.DateOffset(days=1)).to_pydatetime()
-        out["month_from"] = prev_month.strftime("%b %Y")
-        out["month_to"] = now.strftime("%b %Y")
-
-    m = re.findall(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b", q or "", flags=re.IGNORECASE)
-    if m:
-        m = [x.title() for x in m]
-        if len(m) == 1:
-            out["month_from"] = out["month_to"] = m[0]
-        else:
-            out["month_from"], out["month_to"] = m[0], m[1]
-    return out
-
-# ---------- Month & Year parsing for Date_a-based UT filtering ----------
 MONTH_ALIASES = {
     "jan": 1, "january": 1,
     "feb": 2, "february": 2,
@@ -287,24 +244,15 @@ def parse_month_year_from_text(q: str):
         month_token, year = m.group(1), int(m.group(2))
         month_num = MONTH_ALIASES.get(month_token, None)
         return month_num, year
-
     for token, mnum in MONTH_ALIASES.items():
         if re.search(rf"\b{token}\b", ql):
             return mnum, None
-
     return None, None
 
 def parse_account_token(q: str):
     """Light account parser: tokens like 'A1', 'A-1'."""
     m = re.search(r"\b([A-Za-z]\-?\d{1,3})\b", q or "")
     return m.group(1) if m else None
-
-# -------- NEW: Extract multiple dimension filters from user text --------
-DIMENSION_CANDIDATES = {
-    "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
-    "segment_like": ["Segment", "Vertical"],
-    "org_like": ["BU", "DU"]
-}
 
 def _unique_nontrivial_values(series: pd.Series):
     vals = (
@@ -316,32 +264,29 @@ def _unique_nontrivial_values(series: pd.Series):
         .unique()
         .tolist()
     )
-    # Keep only strings with at least 3 characters to avoid noise
     return [v for v in vals if isinstance(v, str) and len(v.strip()) >= 3]
 
-def extract_dimension_filters(user_q: str, df_ut: pd.DataFrame):
-    """
-    From the query and UT data, infer filters like Segment/Vertical, BU/DU, and Account/Customer.
-    - Uses substring matches against UT unique values (case-insensitive).
-    - Also supports explicit account tokens like 'A1'.
-    Returns dict: {col_name: [matched_values], ...}
-    """
+# =========================================================
+# UT headcount fallback (multi-dimension + Date_a)  — already working
+# =========================================================
+DIMENSION_CANDIDATES_UT = {
+    "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
+    "segment_like": ["Segment", "Vertical"],
+    "org_like": ["BU", "DU"]
+}
+
+def extract_dimension_filters_ut(user_q: str, df_ut: pd.DataFrame):
     if df_ut is None or df_ut.empty:
         return {}
-
     ql = (user_q or "").lower()
     filters = {}
-
-    # 1) Account-style token (A1, A-1) -> search across account-like columns
     acct_token = parse_account_token(user_q)
     if acct_token:
-        for col in DIMENSION_CANDIDATES["account_like"]:
+        for col in DIMENSION_CANDIDATES_UT["account_like"]:
             if col in df_ut.columns:
                 filters.setdefault(col, []).append(acct_token)
-                break  # bind it to the first available account-like column
-
-    # 2) Substring matches for known dimension values
-    for group, cols in DIMENSION_CANDIDATES.items():
+                break
+    for group, cols in DIMENSION_CANDIDATES_UT.items():
         for col in cols:
             if col not in df_ut.columns:
                 continue
@@ -351,21 +296,12 @@ def extract_dimension_filters(user_q: str, df_ut: pd.DataFrame):
                     matches.append(val)
             if matches:
                 filters.setdefault(col, []).extend(matches)
-
     return filters
 
 def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, year: int | None):
-    """
-    Applies:
-      - Date_a_dt filters (month/year), inferring latest year if month is given without year.
-      - All dimension filters conjunctively (AND), allowing multiple values per column (OR within a column).
-    """
     if df_ut is None or df_ut.empty:
         return pd.DataFrame(), year
-
     work = df_ut.copy()
-
-    # Date_a_dt filter
     if "Date_a_dt" in work.columns and pd.api.types.is_datetime64_any_dtype(work["Date_a_dt"]):
         if month_num:
             if year is None:
@@ -381,8 +317,122 @@ def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, 
             work = work[work["MonthNum"] == month_num]
         if year and "Year" in work.columns:
             work = work[work["Year"] == year]
+    for col, values in (filters or {}).items():
+        if col not in work.columns or not values:
+            continue
+        mask = pd.Series(False, index=work.index)
+        for v in values:
+            mask = mask | work[col].astype(str).str.contains(str(v), case=False, na=False)
+        work = work[mask]
+    return work, year
 
-    # Dimension filters: AND across columns, OR within same column
+def headcount_view(user_q: str, df_ut: pd.DataFrame):
+    if df_ut is None or df_ut.empty:
+        st.subheader("AI Fallback — Additional KPI")
+        st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
+        return True
+    month_num, year = parse_month_year_from_text(user_q)
+    dim_filters = extract_dimension_filters_ut(user_q, df_ut)
+    person_cols = [c for c in ["PSNo", "Agent", "EmployeeID", "EmpID"] if c in df_ut.columns]
+    if not person_cols:
+        st.subheader("AI Fallback — Headcount")
+        st.info("UT dataset found, but no person identifier column (e.g., PSNo/Agent) was detected.")
+        return True
+    person_col = person_cols[0]
+    filt, resolved_year = apply_ut_filters(df_ut, dim_filters, month_num, year)
+    if filt.empty:
+        st.subheader("AI Fallback — Headcount")
+        month_label = "month not specified" if month_num is None else datetime(2000, month_num, 1).strftime("%b")
+        year_label = "" if (resolved_year is None and year is None) else f" {resolved_year or year}"
+        st.info(f"No UT records found for the requested filters in {month_label}{year_label}.")
+        return True
+    ql = (user_question or "").lower()
+    dfw = filt.copy()
+    if "Status" in dfw.columns and ("billable" in ql or "non-billable" in ql):
+        if "billable" in ql:
+            dfw = dfw[dfw["Status"].astype(str).str.contains("billable", case=False, na=False)]
+        elif "non-billable" in ql:
+            dfw = dfw[dfw["Status"].astype(str).str.contains("non", case=False, na=False)]
+    hc = dfw[person_col].nunique()
+    st.subheader("AI Fallback — Headcount")
+    pieces = []
+    if month_num:
+        mdisp = datetime(2000, month_num, 1).strftime("%b")
+        if resolved_year or year:
+            mdisp = f"{mdisp} {resolved_year or year}"
+        pieces.append(f"**Month:** {mdisp}")
+    else:
+        pieces.append("**Month:** (not specified)")
+    if dim_filters:
+        applied = []
+        for col, vals in dim_filters.items():
+            applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+        pieces.append("**Filters:** " + "; ".join(applied))
+    else:
+        pieces.append("**Filters:** (none)")
+    st.markdown(" &nbsp;&nbsp; ".join(pieces))
+    st.dataframe(pd.DataFrame([{"Headcount": hc}]))
+    for grp_col in ["BU", "DU", "Segment", "Vertical"]:
+        if grp_col in dfw.columns:
+            br = dfw.groupby(grp_col, dropna=False)[person_col].nunique().reset_index().rename(columns={person_col:"Headcount"})
+            st.markdown(f"**Headcount by {grp_col}**")
+            st.dataframe(br.sort_values("Headcount", ascending=False))
+    return True
+
+# =========================================================
+# NEW: Financial multi-dimension filtering for P&L (Segment/Account + Month)
+# =========================================================
+DIMENSION_CANDIDATES_PNL = {
+    "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
+    "segment_like": ["Segment", "Vertical", "BU", "DU"]
+}
+
+def extract_dimension_filters_pnl(user_q: str, df_pnl: pd.DataFrame):
+    if df_pnl is None or df_pnl.empty:
+        return {}
+    ql = (user_q or "").lower()
+    filters = {}
+
+    # match explicit account token (A1) to first available account-like column
+    acct_token = parse_account_token(user_q)
+    if acct_token:
+        for col in DIMENSION_CANDIDATES_PNL["account_like"]:
+            if col in df_pnl.columns:
+                filters.setdefault(col, []).append(acct_token)
+                break
+
+    # substring matches for known values in Segment/Vertical/BU/DU and account-like
+    for group, cols in DIMENSION_CANDIDATES_PNL.items():
+        for col in cols:
+            if col not in df_pnl.columns:
+                continue
+            matches = []
+            for val in _unique_nontrivial_values(df_pnl[col]):
+                if val.lower() in ql:
+                    matches.append(val)
+            if matches:
+                filters.setdefault(col, []).extend(matches)
+
+    return filters
+
+def apply_pnl_filters(df: pd.DataFrame, filters: dict, month_num: int | None, year: int | None):
+    if df is None or df.empty:
+        return pd.DataFrame(), year
+    work = df.copy()
+
+    # Month/year via 'Month' datetime column
+    if "Month" in work.columns and pd.api.types.is_datetime64_any_dtype(work["Month"]):
+        if month_num:
+            if year is None:
+                yrs = work[work["Month"].dt.month == month_num]["Month"].dt.year
+                if len(yrs):
+                    year = int(yrs.max())
+        if month_num and year:
+            work = work[(work["Month"].dt.month == month_num) & (work["Month"].dt.year == year)]
+        elif month_num:
+            work = work[work["Month"].dt.month == month_num]
+
+    # Dimension filters: AND across columns, OR within the same column
     for col, values in (filters or {}).items():
         if col not in work.columns or not values:
             continue
@@ -393,78 +443,7 @@ def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, 
 
     return work, year
 
-def headcount_view(user_q: str, df_ut: pd.DataFrame):
-    """
-    Headcount = distinct PSNo (or Agent) for requested filters.
-    Supports multiple filters (Segment/Vertical/BU/DU/Account-like) + Date_a month/year.
-    """
-    if df_ut is None or df_ut.empty:
-        st.subheader("AI Fallback — Additional KPI")
-        st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
-        return True
-
-    month_num, year = parse_month_year_from_text(user_q)
-    dim_filters = extract_dimension_filters(user_q, df_ut)
-
-    # Person identifier column
-    person_cols = [c for c in ["PSNo", "Agent", "EmployeeID", "EmpID"] if c in df_ut.columns]
-    if not person_cols:
-        st.subheader("AI Fallback — Headcount")
-        st.info("UT dataset found, but no person identifier column (e.g., PSNo/Agent) was detected.")
-        return True
-    person_col = person_cols[0]
-
-    filt, resolved_year = apply_ut_filters(df_ut, dim_filters, month_num, year)
-    if filt.empty:
-        st.subheader("AI Fallback — Headcount")
-        month_label = "month not specified" if month_num is None else datetime(2000, month_num, 1).strftime("%b")
-        year_label = "" if (resolved_year is None and year is None) else f" {resolved_year or year}"
-        st.info(f"No UT records found for the requested filters in {month_label}{year_label}.")
-        return True
-
-    # Optional billable filter
-    ql = (user_question or "").lower()
-    dfw = filt.copy()
-    if "Status" in dfw.columns and ("billable" in ql or "non-billable" in ql):
-        if "billable" in ql:
-            dfw = dfw[dfw["Status"].astype(str).str.contains("billable", case=False, na=False)]
-        elif "non-billable" in ql:
-            dfw = dfw[dfw["Status"].astype(str).str.contains("non", case=False, na=False)]
-
-    hc = dfw[person_col].nunique()
-
-    # Display filters applied
-    st.subheader("AI Fallback — Headcount")
-    pieces = []
-    if month_num:
-        mdisp = datetime(2000, month_num, 1).strftime("%b")
-        if resolved_year or year:
-            mdisp = f"{mdisp} {resolved_year or year}"
-        pieces.append(f"**Month:** {mdisp}")
-    else:
-        pieces.append("**Month:** (not specified)")
-
-    if dim_filters:
-        applied = []
-        for col, vals in dim_filters.items():
-            applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
-        pieces.append("**Filters:** " + "; ".join(applied))
-    else:
-        pieces.append("**Filters:** (none)")
-
-    st.markdown(" &nbsp;&nbsp; ".join(pieces))
-
-    st.dataframe(pd.DataFrame([{"Headcount": hc}]))
-
-    # Optional small breakdowns
-    for grp_col in ["BU", "DU", "Segment", "Vertical"]:
-        if grp_col in dfw.columns:
-            br = dfw.groupby(grp_col, dropna=False)[person_col].nunique().reset_index().rename(columns={person_col:"Headcount"})
-            st.markdown(f"**Headcount by {grp_col}**")
-            st.dataframe(br.sort_values("Headcount", ascending=False))
-    return True
-
-# ------------------ Existing generic financial fallbacks ------------------
+# ------------------ Financial fallbacks (with new filtering) ------------------
 def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     st.subheader("AI Fallback — General Summary")
 
@@ -473,17 +452,23 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
         st.warning(f"The dataset is missing required columns ('Type', '{amount_col}') for a safe fallback summary.")
         return
 
+    month_num, year = parse_month_year_from_text(user_q)
+    dim_filters = extract_dimension_filters_pnl(user_q, df)
+    dff, resolved_year = apply_pnl_filters(df, dim_filters, month_num, year)
+
+    if dff.empty:
+        st.info("No P&L rows found for the requested filters/time. Showing overall totals instead.")
+        dff = df
+
     unit = unit_label(amount_col)
 
-    # Monthly totals if Month exists
-    if "Month" in df.columns:
-        g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
+    if "Month" in dff.columns:
+        g = dff.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
         g[amount_col] = series_to_million(g[amount_col])
         st.markdown(f"**Monthly Revenue/Cost** (values in {unit})")
         st.dataframe(g)
 
-    # Overall totals and margin
-    pivot = df.pivot_table(values=amount_col, index=None, columns="Type", aggfunc="sum", fill_value=0)
+    pivot = dff.pivot_table(values=amount_col, index=None, columns="Type", aggfunc="sum", fill_value=0)
     if isinstance(pivot, pd.DataFrame):
         rev = float(pivot["Revenue"].iloc[0]) if "Revenue" in pivot.columns else 0.0
         cost = float(pivot["Cost"].iloc[0]) if "Cost" in pivot.columns else 0.0
@@ -493,6 +478,21 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
 
     margin_amt = rev - cost
     margin_pct = (margin_amt / cost * 100) if cost else None
+
+    # Display context of filters
+    pieces = []
+    if month_num:
+        mdisp = datetime(2000, month_num, 1).strftime("%b")
+        if resolved_year or year:
+            mdisp = f"{mdisp} {resolved_year or year}"
+        pieces.append(f"**Month filter:** {mdisp}")
+    if dim_filters:
+        applied = []
+        for col, vals in dim_filters.items():
+            applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+        pieces.append("**Filters:** " + "; ".join(applied))
+    if pieces:
+        st.caption(" | ".join(pieces))
 
     st.markdown("**Quick Totals**")
     st.write(
@@ -504,10 +504,9 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
         }
     )
 
-    # By account-like column
     for key in ["Company_code", "FinalCustomerName", "Account", "Customer"]:
-        if key in df.columns:
-            by_acct = df.groupby([key, "Type"], dropna=False)[amount_col].sum().reset_index()
+        if key in dff.columns:
+            by_acct = dff.groupby([key, "Type"], dropna=False)[amount_col].sum().reset_index()
             by_acct[amount_col] = series_to_million(by_acct[amount_col])
             st.markdown(f"**By {key}** (values in {unit})")
             st.dataframe(by_acct.head(50))
@@ -517,6 +516,7 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     Best-effort use of existing kpi_engine modules when possible.
     Includes headcount intent via UT (using Date_a) if loaded.
+    Adds multi-dimension + Month filtering for P&L-based financial metrics.
     """
     ql = (user_q or "").lower()
 
@@ -528,12 +528,22 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     amount_col = choose_amount_column(user_q, df)
     unit = unit_label(amount_col)
 
+    # Extract P&L filters once
+    month_num, year = parse_month_year_from_text(user_q)
+    dim_filters = extract_dimension_filters_pnl(user_q, df)
+    dff, resolved_year = apply_pnl_filters(df, dim_filters, month_num, year)
+    if dff.empty:
+        dff = df  # fallback to all rows but still display that we tried to filter
+        tried_filter_note = True
+    else:
+        tried_filter_note = False
+
     # Margin-style view
     if "margin" in ql and _optional_modules.get("kpi_engine.margin"):
         st.subheader("AI Fallback — Margin Analysis (kpi_engine.margin)")
         try:
-            if _safe_has_cols(df, ["Type", amount_col, "Month"]):
-                monthly = df.pivot_table(
+            if _safe_has_cols(dff, ["Type", amount_col, "Month"]):
+                monthly = dff.pivot_table(
                     values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
                 ).reset_index()
                 for col in ["Revenue", "Cost"]:
@@ -544,7 +554,20 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
                     monthly["Margin %"] = monthly.apply(
                         lambda r: round((r["Margin Amount"] / r["Cost"] * 100), 1) if r["Cost"] else None, axis=1
                     )
-                st.caption(f"Values shown in {unit}.")
+                parts = [f"Values shown in {unit}."]
+                if month_num:
+                    mdisp = datetime(2000, month_num, 1).strftime("%b")
+                    if resolved_year or year:
+                        mdisp = f"{mdisp} {resolved_year or year}"
+                    parts.append(f"Month filter: {mdisp}")
+                if dim_filters:
+                    applied = []
+                    for col, vals in dim_filters.items():
+                        applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+                    parts.append("Filters: " + "; ".join(applied))
+                if tried_filter_note:
+                    parts.append("(No rows matched filters — showing overall results.)")
+                st.caption(" | ".join(parts))
                 st.dataframe(monthly)
                 return True
         except Exception as e:
@@ -555,10 +578,23 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
        ("cost" in ql and _optional_modules.get("kpi_engine.cost")):
         st.subheader("AI Fallback — Revenue/Cost Breakdown")
         try:
-            if _safe_has_cols(df, ["Type", amount_col, "Month"]):
-                g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
+            if _safe_has_cols(dff, ["Type", amount_col, "Month"]):
+                g = dff.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
                 g[amount_col] = series_to_million(g[amount_col])
-                st.caption(f"Values shown in {unit}.")
+                parts = [f"Values shown in {unit}."]
+                if month_num:
+                    mdisp = datetime(2000, month_num, 1).strftime("%b")
+                    if resolved_year or year:
+                        mdisp = f"{mdisp} {resolved_year or year}"
+                    parts.append(f"Month filter: {mdisp}")
+                if dim_filters:
+                    applied = []
+                    for col, vals in dim_filters.items():
+                        applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+                    parts.append("Filters: " + "; ".join(applied))
+                if tried_filter_note:
+                    parts.append("(No rows matched filters — showing overall results.)")
+                st.caption(" | ".join(parts))
                 st.dataframe(g)
                 return True
         except Exception as e:
@@ -571,11 +607,24 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
             if c in df.columns:
                 loc_col = c
                 break
-        if loc_col and _safe_has_cols(df, ["Type", amount_col, loc_col]):
+        if loc_col and _safe_has_cols(dff, ["Type", amount_col, loc_col]):
             st.subheader(f"AI Fallback — {loc_col} Split")
-            split = df.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
+            split = dff.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
             split[amount_col] = series_to_million(split[amount_col])
-            st.caption(f"Values shown in {unit}.")
+            parts = [f"Values shown in {unit}."]
+            if month_num:
+                mdisp = datetime(2000, month_num, 1).strftime("%b")
+                if resolved_year or year:
+                    mdisp = f"{mdisp} {resolved_year or year}"
+                parts.append(f"Month filter: {mdisp}")
+            if dim_filters:
+                applied = []
+                for col, vals in dim_filters.items():
+                    applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+                parts.append("Filters: " + "; ".join(applied))
+            if tried_filter_note:
+                parts.append("(No rows matched filters — showing overall results.)")
+            st.caption(" | ".join(parts))
             st.dataframe(split)
             return True
 
@@ -599,7 +648,6 @@ def ai_fallback(user_q: str, df: pd.DataFrame):
 # =========================================================
 if user_question and not st.session_state.clear_chat:
     try:
-        # Get best match — handle tuple or dict variants
         res = find_best_matching_qid(user_question)
         best_qid, matched_prompt, score = None, None, None
         if isinstance(res, tuple):
@@ -614,7 +662,6 @@ if user_question and not st.session_state.clear_chat:
             matched_prompt = res.get("prompt") or res.get("matched_prompt")
             score = res.get("score")
 
-        # Triggers to force AI path
         force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
         low_score = (score is not None and score < SIM_THRESHOLD)
 
