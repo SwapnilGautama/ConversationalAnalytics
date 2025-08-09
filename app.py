@@ -3,7 +3,7 @@
 import streamlit as st
 st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
 
-from utils.semantic_matcher import find_best_matching_qid  # existing matcher (now returns qid, prompt, score)
+from utils.semantic_matcher import find_best_matching_qid  # existing matcher (returns qid, prompt, score)
 import importlib
 from kpi_engine import margin
 import os
@@ -123,7 +123,7 @@ with clear_col:
         clear_input()
 
 # =========================================================
-# Helper: Dynamic Amount field selector (NEW)
+# Helper: Dynamic Amount field selector + unit helpers (NEW)
 # =========================================================
 REVCOST_MARGIN_KEYWORDS = (
     "revenue", "cost", "margin", "c&b", "c & b", "c and b", "profit", "loss",
@@ -133,8 +133,8 @@ REVCOST_MARGIN_KEYWORDS = (
 def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
     """
     If the question is about revenue/cost/margin, prefer 'Amount in USD'.
-    If it's missing, fall back to 'Amount in INR' with a gentle notice.
-    For non-financial questions, keep existing behavior (use INR if present, else USD if present).
+    If it's missing, fall back to 'Amount in INR' with a notice.
+    Non-financial questions: prefer INR if present else USD.
     """
     ql = (user_q or "").lower()
     wants_usd = any(k in ql for k in REVCOST_MARGIN_KEYWORDS)
@@ -149,16 +149,33 @@ def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
             st.caption("Note: 'Amount in USD' not found — using 'Amount in INR' for this financial question.")
             return "Amount in INR"
         else:
-            # no known amount columns — we’ll handle missing downstream
-            return "Amount in USD"
+            return "Amount in USD"  # will be handled downstream if missing
     else:
-        # Non-financial question: retain prior behavior (prefer INR if present)
         if has_inr:
             return "Amount in INR"
         elif has_usd:
             return "Amount in USD"
         else:
             return "Amount in INR"
+
+def is_usd_col(amount_col: str) -> bool:
+    return amount_col.strip().lower() == "amount in usd"
+
+def unit_label(amount_col: str) -> str:
+    # Display label for tables/metrics
+    return "USD mn" if is_usd_col(amount_col) else "INR mn (USD unavailable)"
+
+def to_million(value) -> float:
+    try:
+        return round(float(value) / 1_000_000.0, 1)
+    except Exception:
+        return value
+
+def series_to_million(s: pd.Series) -> pd.Series:
+    try:
+        return (s.astype(float) / 1_000_000.0).round(1)
+    except Exception:
+        return s
 
 # =========================================================
 # AI FALLBACK (router + opportunistic kpi_engine use)
@@ -223,10 +240,13 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
         st.warning(f"The dataset is missing required columns ('Type', '{amount_col}') for a safe fallback summary.")
         return
 
+    unit = unit_label(amount_col)
+
     # Monthly totals if Month exists
     if "Month" in df.columns:
         g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
-        st.markdown(f"**Monthly Revenue/Cost** (using '{amount_col}')")
+        g[amount_col] = series_to_million(g[amount_col])
+        st.markdown(f"**Monthly Revenue/Cost** (values in {unit})")
         st.dataframe(g)
 
     # Overall totals and margin
@@ -244,10 +264,10 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     st.markdown("**Quick Totals**")
     st.write(
         {
-            f"Revenue (total, {amount_col})": round(rev, 2),
-            f"Cost (total, {amount_col})": round(cost, 2),
-            "Margin (Amount)": round(margin_amt, 2),
-            "Margin % ( (Rev - Cost)/Cost )": round(margin_pct, 2) if margin_pct is not None else "N/A",
+            f"Revenue (total, {unit})": to_million(rev),
+            f"Cost (total, {unit})": to_million(cost),
+            "Margin (Amount, same unit)": to_million(margin_amt),
+            "Margin % ( (Rev - Cost)/Cost )": round(margin_pct, 1) if margin_pct is not None else "N/A",
         }
     )
 
@@ -255,7 +275,8 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
     for key in ["Company_code", "FinalCustomerName", "Account", "Customer"]:
         if key in df.columns:
             by_acct = df.groupby([key, "Type"], dropna=False)[amount_col].sum().reset_index()
-            st.markdown(f"**By {key}** (using '{amount_col}')")
+            by_acct[amount_col] = series_to_million(by_acct[amount_col])
+            st.markdown(f"**By {key}** (values in {unit})")
             st.dataframe(by_acct.head(50))
             break
 
@@ -263,9 +284,11 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     """
     Best-effort use of existing kpi_engine modules when possible.
     Uses dynamic amount column choice for financial intents.
+    All financial values rendered as million USD (or INR mn if USD missing), 1 decimal.
     """
     ql = (user_q or "").lower()
     amount_col = choose_amount_column(user_q, df)
+    unit = unit_label(amount_col)
 
     # Margin-style view
     if "margin" in ql and _optional_modules.get("kpi_engine.margin"):
@@ -275,12 +298,19 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
                 monthly = df.pivot_table(
                     values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
                 ).reset_index()
+                # Convert to millions
+                for col in ["Revenue", "Cost"]:
+                    if col in monthly.columns:
+                        monthly[col] = series_to_million(monthly[col])
+                # Margin computations based on scaled values remain proportionally identical
                 if "Revenue" in monthly.columns and "Cost" in monthly.columns:
-                    monthly["Margin Amount"] = monthly["Revenue"] - monthly["Cost"]
+                    monthly["Margin Amount"] = (monthly["Revenue"] - monthly["Cost"]).round(1)
+                    # Margin % uses original ratio (works the same after scaling)
+                    # Recompute using scaled values is fine as scale cancels out
                     monthly["Margin %"] = monthly.apply(
-                        lambda r: (r["Margin Amount"] / r["Cost"] * 100) if r["Cost"] else None, axis=1
+                        lambda r: round((r["Margin Amount"] / r["Cost"] * 100), 1) if r["Cost"] else None, axis=1
                     )
-                st.caption(f"Using '{amount_col}' for financial computations.")
+                st.caption(f"Values shown in {unit}.")
                 st.dataframe(monthly)
                 return True
         except Exception as e:
@@ -293,13 +323,14 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         try:
             if _safe_has_cols(df, ["Type", amount_col, "Month"]):
                 g = df.groupby(["Month", "Type"], dropna=False)[amount_col].sum().reset_index()
-                st.caption(f"Using '{amount_col}' for financial computations.")
+                g[amount_col] = series_to_million(g[amount_col])
+                st.caption(f"Values shown in {unit}.")
                 st.dataframe(g)
                 return True
         except Exception as e:
             st.warning(f"Rev/Cost view failed: {e}")
 
-    # Offshore / Onsite splits if a location-like column exists (still uses chosen amount)
+    # Offshore / Onsite splits if a location-like column exists
     if ("offshore" in ql or "onsite" in ql) and "Month" in df.columns:
         loc_col = None
         for c in ["Location", "WorkLocation", "Onsite_Offshore", "Onshore_Offshore"]:
@@ -309,7 +340,8 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         if loc_col and _safe_has_cols(df, ["Type", amount_col, loc_col]):
             st.subheader(f"AI Fallback — {loc_col} Split")
             split = df.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
-            st.caption(f"Using '{amount_col}' for financial computations.")
+            split[amount_col] = series_to_million(split[amount_col])
+            st.caption(f"Values shown in {unit}.")
             st.dataframe(split)
             return True
 
