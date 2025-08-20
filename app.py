@@ -272,6 +272,21 @@ def _unique_nontrivial_values(series: pd.Series):
     return [v for v in vals if isinstance(v, str) and len(v.strip()) >= 3]
 
 # =========================================================
+# (NEW) Lightweight rule override for Q1 — "margin % below <N>"
+# =========================================================
+_Q1_PATTERNS = [
+    r"\bmargin\s*%?\s*<\s*\d+",
+    r"\bmargin\s*(?:percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
+    r"\bless than\s*\d+\s*%?\s*margin\b",
+    r"\bbelow\s*\d+\s*%?\s*margin\b",
+]
+def _is_q1_margin_below_intent(q: str | None) -> bool:
+    if not q:
+        return False
+    ql = q.lower()
+    return any(re.search(p, ql) for p in _Q1_PATTERNS)
+
+# =========================================================
 # UT headcount fallback (multi-dimension + Date_a) — working
 # =========================================================
 DIMENSION_CANDIDATES_UT = {
@@ -665,6 +680,10 @@ if user_question and not st.session_state.clear_chat:
             matched_prompt = res.get("prompt") or res.get("matched_prompt")
             score = res.get("score")
 
+        # ---- (NEW) Rule-based override for Q1 ----
+        if _is_q1_margin_below_intent(user_question):
+            best_qid, matched_prompt, score = "Q1", "Margin % below threshold", 1.0
+
         force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
         low_score = (score is not None and score < SIM_THRESHOLD)
 
@@ -696,7 +715,9 @@ if user_question and not st.session_state.clear_chat:
                 st.dataframe(result)
             elif isinstance(result, str):
                 st.markdown(result)
-            elif result is not None:
+            elif isinstance(result, None.__class__):
+                pass
+            else:
                 st.write(result)
 
         except (ModuleNotFoundError, AttributeError) as e:
