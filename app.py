@@ -274,13 +274,9 @@ def _unique_nontrivial_values(series: pd.Series):
 # =========================================================
 # (NEW) Lightweight rule override for Q1 — "margin % below <N>"
 # =========================================================
-# (Replace the old list with this)
 _Q1_PATTERNS = [
-    # e.g., "margin % < 10", "gm% < 15", "cm < 12%"
     r"\b(?:margin|gm|cm)\s*%?\s*<\s*\d+\s*%?",
-    # e.g., "margin % less than 10%", "gm percentage below 20", "cm percent under 25%"
     r"\b(?:margin|gm|cm)\s*(?:%|percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
-    # e.g., "less than 10% margin", "under 12 gm%", "below 15 percent cm"
     r"\b(?:less than|below|under)\s*\d+\s*%?\s*(?:margin|gm|cm)\b",
 ]
 def _is_q1_margin_below_intent(q: str | None) -> bool:
@@ -288,6 +284,22 @@ def _is_q1_margin_below_intent(q: str | None) -> bool:
         return False
     ql = q.lower()
     return any(re.search(p, ql) for p in _Q1_PATTERNS)
+
+# =========================================================
+# (NEW) Lightweight rule override for Q3 — "C&B quarter-over-quarter change"
+# =========================================================
+_Q3_PATTERNS = [
+    r"\bc\s*&\s*b\b.*\b(var(?:y|ied)|change|delta|diff(?:erence)?)\b.*\bquarter\b",
+    r"\bc\s*and\s*b\b.*\b(var(?:y|ied)|change|delta|diff(?:erence)?)\b.*\bquarter\b",
+    r"\bc&b\b.*\bqoq\b",
+    r"\bqoq\b.*\bc&b\b",
+    r"\bcompare\b.*\bc&b\b.*\bquarter\b",
+]
+def _is_q3_cb_variance_intent(q: str | None) -> bool:
+    if not q:
+        return False
+    ql = q.lower()
+    return any(re.search(p, ql) for p in _Q3_PATTERNS)
 
 # =========================================================
 # UT headcount fallback (multi-dimension + Date_a) — working
@@ -683,9 +695,13 @@ if user_question and not st.session_state.clear_chat:
             matched_prompt = res.get("prompt") or res.get("matched_prompt")
             score = res.get("score")
 
-        # ---- (NEW) Rule-based override for Q1 ----
+        # --- Rule-based overrides BEFORE threshold check ---
         if _is_q1_margin_below_intent(user_question):
             best_qid, matched_prompt, score = "Q1", "Margin % below threshold", 1.0
+            st.caption("Q1 override: explicit 'margin% below N' intent detected.")
+        elif _is_q3_cb_variance_intent(user_question):
+            best_qid, matched_prompt, score = "Q3", "C&B QoQ variation", 1.0
+            st.caption("Q3 override: explicit 'C&B quarter-over-quarter change' intent detected.")
 
         force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
         low_score = (score is not None and score < SIM_THRESHOLD)
