@@ -274,11 +274,14 @@ def _unique_nontrivial_values(series: pd.Series):
 # =========================================================
 # (NEW) Lightweight rule override for Q1 — "margin % below <N>"
 # =========================================================
+# (Replace the old list with this)
 _Q1_PATTERNS = [
-    r"\bmargin\s*%?\s*<\s*\d+",
-    r"\bmargin\s*(?:percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
-    r"\bless than\s*\d+\s*%?\s*margin\b",
-    r"\bbelow\s*\d+\s*%?\s*margin\b",
+    # e.g., "margin % < 10", "gm% < 15", "cm < 12%"
+    r"\b(?:margin|gm|cm)\s*%?\s*<\s*\d+\s*%?",
+    # e.g., "margin % less than 10%", "gm percentage below 20", "cm percent under 25%"
+    r"\b(?:margin|gm|cm)\s*(?:%|percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
+    # e.g., "less than 10% margin", "under 12 gm%", "below 15 percent cm"
+    r"\b(?:less than|below|under)\s*\d+\s*%?\s*(?:margin|gm|cm)\b",
 ]
 def _is_q1_margin_below_intent(q: str | None) -> bool:
     if not q:
