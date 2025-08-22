@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-st.set_page_config(page_title="LTTS BI Assistant", layout="wide")
+st.set_page_config(page_title="Halo", layout="wide")
 
 from utils.semantic_matcher import find_best_matching_qid  # returns (qid, prompt, score)
 import importlib
