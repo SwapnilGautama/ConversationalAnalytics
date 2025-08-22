@@ -109,32 +109,43 @@ except Exception as e:
 df_ut = load_ut_optional()  # may be None (non-breaking)
 
 # -----------------------------
-# Header (preserved)
+# Header (updated to include Halo logo on the left)
 # -----------------------------
-def display_header():
-    logo_path = "sample_data/Logo.png"
-    if os.path.exists(logo_path):
-        logo = Image.open(logo_path)
-        buffered = BytesIO()
-        logo.save(buffered, format="PNG")
-        encoded_image = base64.b64encode(buffered.getvalue()).decode()
+def _encode_image(path: str, width: int = 140) -> str | None:
+    if not os.path.exists(path):
+        return None
+    img = Image.open(path)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f'<img src="data:image/png;base64,{b64}" width="{width}" />'
 
-        st.markdown(
-            f"""
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -20px; margin-bottom: 10px;">
-                <div style="flex: 1;"></div>
-                <div style="flex: 2; text-align: center;">
-                    <h1 style='font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin: 0;'>
-                        Conversational Analytics Assistant
-                    </h1>
-                </div>
-                <div style="flex: 1; text-align: right;">
-                    <img src="data:image/png;base64,{encoded_image}" width="140" />
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+def display_header():
+    # LEFT: Halo logo (add your file here)
+    halo_logo_path = os.path.join("sample_data", "halo_logo.png")   # <- add your Halo logo here
+    halo_img_tag = _encode_image(halo_logo_path, width=140) or ""
+
+    # RIGHT: Scalability Engineers logo (existing)
+    se_logo_path = os.path.join("sample_data", "Logo.png")
+    se_img_tag = _encode_image(se_logo_path, width=140) or ""
+
+    # Center title text
+    title_html = """
+        <h1 style='font-family: "Segoe UI", sans-serif; font-size: 40px; color: #002D62; margin: 0;'>
+            Conversational Analytics Assistant
+        </h1>
+    """
+
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:-20px; margin-bottom:10px;">
+            <div style="flex:1; text-align:left;">{halo_img_tag}</div>
+            <div style="flex:2; text-align:center;">{title_html}</div>
+            <div style="flex:1; text-align:right;">{se_img_tag}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 display_header()
 
