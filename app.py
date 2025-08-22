@@ -155,7 +155,7 @@ display_header()
 st.markdown(
     """
     <div style='text-align:center; font-size:18px; margin-bottom: 10px;'>
-    Welcome to <b>AIde</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
+    Welcome to <b>Halo</b> — an AI-powered tool for analyzing business trends using your P&L and utilization data.
     </div>
     """,
     unsafe_allow_html=True,
