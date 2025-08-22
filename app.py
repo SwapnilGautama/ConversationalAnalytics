@@ -127,7 +127,7 @@ def display_header():
 
     # RIGHT: Scalability Engineers logo (existing)
     se_logo_path = os.path.join("sample_data", "Logo.png")
-    se_img_tag = _encode_image(se_logo_path, width=140) or ""
+    se_img_tag = _encode_image(se_logo_path, width=230) or ""
 
     # Center title text
     title_html = """
