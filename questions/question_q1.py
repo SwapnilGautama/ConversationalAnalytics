@@ -1,14 +1,16 @@
-# ✅ FINAL Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Segment, DU, BU, Customer | 1 Decimal Formatting
+# questions/question_q1.py
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-import streamlit as st
 import re
-
-pd.options.display.float_format = '{:,.1f}'.format  # Force 1 decimal display globally
 
 def compute_margin(df, groupby_fields):
     df = df.copy()
-    pivot = df.pivot_table(index=["Month"] + groupby_fields, columns="Type", values="Amount", aggfunc="sum").reset_index()
+    pivot = df.pivot_table(
+        index=["Month"] + groupby_fields,
+        columns="Type",
+        values="Amount",
+        aggfunc="sum"
+    ).reset_index()
     pivot["Revenue"] = pivot.get("Revenue", 0)
     pivot["Cost"] = pivot.get("Cost", 0)
     return pivot
@@ -73,25 +75,20 @@ def margin_analysis(df, group_field, threshold, target_month):
     total_entities = grouped.shape[0]
     low_margin_count = filtered_df.shape[0]
     proportion = (low_margin_count / total_entities * 100) if total_entities else 0
-
-    st.markdown(
-        f"🔍 **{group_name}** - For **{time_label}**, **{low_margin_count} entities** had average margin below "
-        f"**{threshold}%**, which is **{proportion:.1f}%** of all **{total_entities} entities**."
+    summary_text = (
+        f"{group_name} - For {time_label}, {low_margin_count} entities had average margin below "
+        f"{threshold}%, which is {proportion:.1f}% of all {total_entities} entities."
     )
 
-    if not top_10.empty:
-        st.dataframe(
-            top_10.reset_index(drop=True).style.format({
-                "Revenue": "{:,.1f}",
-                "Cost": "{:,.1f}",
-                "Margin %": "{:,.1f}",
-                "Revenue (Million USD)": "{:,.1f}",
-                "Cost (Million USD)": "{:,.1f}"
-            }),
-            use_container_width=True
-        )
-    else:
-        st.info("No records found below margin threshold.")
+    return {
+        "summary_text": summary_text,
+        "group_name": group_name,
+        "time_label": time_label,
+        "low_margin_count": low_margin_count,
+        "total_entities": total_entities,
+        "proportion": round(proportion, 1),
+        "top_entities": top_10.to_dict(orient="records") if not top_10.empty else []
+    }
 
 def run(df, user_question=None):
     df = df.copy()
@@ -105,16 +102,11 @@ def run(df, user_question=None):
     threshold = extract_threshold(user_question)
     target_month = extract_month(user_question)
 
-    tabs = st.tabs(["📋 By Client", "🚛 By Segment", "🏢 By BU", "🏭 By DU"])
+    response = {
+        "by_client": margin_analysis(df, "Client", threshold, target_month),
+        "by_segment": margin_analysis(df, "Segment", threshold, target_month),
+        "by_bu": margin_analysis(df, "BU", threshold, target_month),
+        "by_du": margin_analysis(df, "DU", threshold, target_month)
+    }
 
-    with tabs[0]:
-        margin_analysis(df, "Client", threshold, target_month)
-
-    with tabs[1]:
-        margin_analysis(df, "Segment", threshold, target_month)
-
-    with tabs[2]:
-        margin_analysis(df, "BU", threshold, target_month)
-
-    with tabs[3]:
-        margin_analysis(df, "DU", threshold, target_month)
+    return response
