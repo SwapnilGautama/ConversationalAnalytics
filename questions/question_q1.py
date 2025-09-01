@@ -1,18 +1,12 @@
 # ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
-# This version:
+# Updates in this version:
 #  • ALL insights (summary, aggregated net margin %, outliers text, 3-month trend + drivers)
-#    appear ABOVE the table
-#  • The table lists ALL entities below the threshold
-#  • NEW: Bar + line chart BELOW the table
-#       - Bars: Revenue & Cost (mn USD)
-#       - Line: Margin %
-#       - Soft pastel colors, smooth line, no gridlines
-#       - Axis lines & outer border in soft grey
+#    are shown ABOVE the table
+#  • The table lists ALL entities below the threshold (not limited to top 10)
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import re
-import plotly.graph_objects as go  # NEW
 
 pd.options.display.float_format = '{:,.1f}'.format  # Force 1 decimal display globally
 
@@ -118,7 +112,6 @@ def margin_analysis(df, group_field, threshold, target_month):
       • Outliers on margin % (low & high) as inline text
       • Margin% trend for last 3 months + reasons (revenue/cost drivers)
       • THEN the table of ALL entities below threshold
-      • FINALLY a combo chart (bars: Revenue/Cost, line: Margin%)
     """
     group_name = group_field if isinstance(group_field, str) else " × ".join(group_field)
     group_cols = [group_field] if isinstance(group_field, str) else group_field
@@ -171,6 +164,7 @@ def margin_analysis(df, group_field, threshold, target_month):
             high_list = ", ".join(high_outliers[group_cols[0]].astype(str).tolist())
 
     # ---- 3-month margin% trend + reasons (drivers)
+    # Build an aggregated month series over the last 3 distinct months in the data window
     month_agg = (
         filtered_data.groupby(["Month"], dropna=False)[["Revenue", "Cost"]]
         .sum()
@@ -179,11 +173,13 @@ def margin_analysis(df, group_field, threshold, target_month):
     )
 
     # ---------- INSIGHTS (ABOVE the table) ----------
+    # Summary
     st.markdown(
         f"🔍 **{group_name}** — For **{time_label}**, **{low_margin_count}** of **{total_entities}** "
         f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
     )
 
+    # Metric row
     c1, c2 = st.columns([1, 4])
     with c1:
         st.metric(
@@ -192,10 +188,12 @@ def margin_analysis(df, group_field, threshold, target_month):
             help=f"Across all selected {group_name.lower()} for {time_label}"
         )
 
+    # Outliers text
     st.markdown(
         f"**Outliers (IQR):** Low margin → *{low_list}*  |  High margin → *{high_list}*"
     )
 
+    # Trend + drivers
     if len(month_agg) >= 1:
         month_agg["Margin %"] = ((month_agg["Revenue"] - month_agg["Cost"]) / month_agg["Revenue"]) * 100
         last_3 = month_agg.tail(3).reset_index(drop=True)
@@ -240,86 +238,6 @@ def margin_analysis(df, group_field, threshold, target_month):
         )
     else:
         st.info("No records found below the margin threshold.")
-
-    # ---------- CHART (AFTER the table) ----------
-    if not month_agg.empty:
-        # Prepare data for chart
-        cdf = month_agg.copy()
-        cdf["MonthLabel"] = cdf["Month"].dt.strftime("%b %Y")
-        cdf["Revenue_mn"] = cdf["Revenue"] / 1e6
-        cdf["Cost_mn"] = cdf["Cost"] / 1e6
-        cdf["Margin %"] = ((cdf["Revenue"] - cdf["Cost"]) / cdf["Revenue"]) * 100
-
-        # Soft pastels + coral line
-        color_rev = "#A5D8FF"   # light pastel blue
-        color_cost = "#FFD6A5"  # light pastel peach
-        color_line = "#FF6B6B"  # soft coral
-
-        fig = go.Figure()
-
-        # Bars
-        fig.add_trace(go.Bar(
-            name="Revenue (mn USD)",
-            x=cdf["MonthLabel"],
-            y=cdf["Revenue_mn"],
-            marker_color=color_rev
-        ))
-        fig.add_trace(go.Bar(
-            name="Cost (mn USD)",
-            x=cdf["MonthLabel"],
-            y=cdf["Cost_mn"],
-            marker_color=color_cost
-        ))
-
-        # Line (smooth)
-        fig.add_trace(go.Scatter(
-            name="Margin %",
-            x=cdf["MonthLabel"],
-            y=cdf["Margin %"],
-            mode="lines+markers",
-            line=dict(color=color_line, width=2, shape="spline"),
-            yaxis="y2"
-        ))
-
-        # Layout styling: no gridlines, soft grey axes & border
-        soft_grey = "#D0D0D0"
-        fig.update_layout(
-            barmode="group",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(t=20, r=10, l=10, b=10),
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-        )
-        # Primary y-axis (bars)
-        fig.update_yaxes(
-            title_text="Revenue/Cost (mn USD)",
-            showgrid=False,
-            showline=True,
-            linecolor=soft_grey,
-            mirror=True
-        )
-        # Secondary y-axis (line)
-        fig.update_layout(
-            yaxis2=dict(
-                title="Margin %",
-                overlaying="y",
-                side="right",
-                showgrid=False,
-                showline=True,
-                linecolor=soft_grey,
-                mirror=True
-            )
-        )
-        # X-axis
-        fig.update_xaxes(
-            showgrid=False,
-            showline=True,
-            linecolor=soft_grey,
-            mirror=True
-        )
-
-        st.markdown("**Revenue/Cost vs Margin % (by Month)**")
-        st.plotly_chart(fig, use_container_width=True)
 
 
 # -------------------- entry point (preserved) --------------------
