@@ -1,15 +1,14 @@
 # ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
-# This version keeps all features AND:
-#  • Table columns: [Dimension, Revenue (Million USD), Cost (Million USD), Margin %]
-#    - Revenue/Cost formatted to 1 decimal; Margin % formatted to 0 decimals
-#  • Chart is robust: coerces numerics, handles zeros/NaNs, and always renders
-#  • Plotly if present; otherwise Matplotlib fallback with same look
+# Updates in this version:
+#  • FIX: Avoid Streamlit router errors by giving plotly charts a UNIQUE key (prevents AI fallback)
+#  • Chart now shows the LAST 6 MONTHS (rolling), independent of the analysis window
+#  • Table stays compact: Revenue/Cost/Margin in mn USD (1 dp) + Margin % (0 dp)
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import re
 
-# -------- optional plotting backends --------
+# Optional Plotly; fallback to Matplotlib if not present
 _PLOTLY_OK = False
 try:
     import plotly.graph_objects as go
@@ -20,7 +19,7 @@ except Exception:
 import matplotlib.pyplot as plt
 import numpy as np
 
-pd.options.display.float_format = '{:,.1f}'.format  # Force 1 decimal display globally
+pd.options.display.float_format = '{:,.1f}'.format  # 1-decimal global display
 
 
 # -------------------- helpers --------------------
@@ -37,12 +36,8 @@ def compute_margin(df, groupby_fields):
         aggfunc="sum"
     ).reset_index()
 
-    # Ensure numeric
-    for col in ["Revenue", "Cost"]:
-        if col not in pivot.columns:
-            pivot[col] = 0.0
-        pivot[col] = pd.to_numeric(pivot[col], errors="coerce").fillna(0.0)
-
+    pivot["Revenue"] = pivot.get("Revenue", 0)
+    pivot["Cost"] = pivot.get("Cost", 0)
     return pivot
 
 
@@ -80,11 +75,7 @@ def extract_month(user_question):
 
 
 def _outlier_masks_iqr(series: pd.Series):
-    """
-    Return two boolean masks (low_mask, high_mask) via IQR rule:
-    low  < Q1 - 1.5 * IQR
-    high > Q3 + 1.5 * IQR
-    """
+    """Return two boolean masks (low_mask, high_mask) via the IQR rule."""
     s = series.dropna()
     if s.empty:
         f = pd.Series([False] * len(series), index=series.index)
@@ -115,8 +106,8 @@ def _fmt_pct(p):
 
 
 # -------------------- plotting --------------------
-def _plot_combo_plotly(cdf: pd.DataFrame):
-    """Plot with Plotly if available."""
+def _plot_combo_plotly(cdf: pd.DataFrame, key: str):
+    """Plotly combo chart (if Plotly is available)."""
     color_rev = "#A5D8FF"   # pastel blue
     color_cost = "#FFD6A5"  # pastel peach
     color_line = "#FF6B6B"  # soft coral
@@ -132,7 +123,7 @@ def _plot_combo_plotly(cdf: pd.DataFrame):
         marker_color=color_cost
     ))
     fig.add_trace(go.Scatter(
-        name="Margin %", x=cdf["MonthLabel"], y=cdf["Margin_pct"],
+        name="Margin %", x=cdf["MonthLabel"], y=cdf["Margin %"],
         mode="lines+markers",
         line=dict(color=color_line, width=2, shape="spline"),
         yaxis="y2"
@@ -157,11 +148,12 @@ def _plot_combo_plotly(cdf: pd.DataFrame):
         )
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=soft_grey, mirror=True)
-    st.plotly_chart(fig, use_container_width=True)
+    # IMPORTANT: unique key prevents Streamlit router collisions
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 
 def _plot_combo_matplotlib(cdf: pd.DataFrame):
-    """Matplotlib fallback with similar styling."""
+    """Matplotlib fallback (no SciPy needed)."""
     color_rev = "#A5D8FF"
     color_cost = "#FFD6A5"
     color_line = "#FF6B6B"
@@ -170,15 +162,13 @@ def _plot_combo_matplotlib(cdf: pd.DataFrame):
     x = np.arange(len(cdf))
     width = 0.35
 
-    fig, ax1 = plt.subplots(figsize=(8, 3.0))
-    # No gridlines; white background
+    fig, ax1 = plt.subplots(figsize=(8, 3.2))
     ax1.set_facecolor("white")
     fig.patch.set_facecolor("white")
 
-    ax1.bar(x - width/2, cdf["Revenue_mn"], width, color=color_rev, label="Revenue (mn USD)")
-    ax1.bar(x + width/2, cdf["Cost_mn"], width, color=color_cost, label="Cost (mn USD)")
+    ax1.bar(x - width/2, cdf["Revenue_mn"].values, width, color=color_rev, label="Revenue (mn USD)")
+    ax1.bar(x + width/2, cdf["Cost_mn"].values, width, color=color_cost, label="Cost (mn USD)")
 
-    # Axis styles (soft grey lines/border via spines)
     for spine in ["bottom", "left", "right", "top"]:
         ax1.spines[spine].set_color(soft_grey)
         ax1.spines[spine].set_linewidth(1.0)
@@ -187,27 +177,15 @@ def _plot_combo_matplotlib(cdf: pd.DataFrame):
     ax1.tick_params(axis="y", colors="#333333")
     ax1.set_ylabel("Revenue/Cost (mn USD)")
 
-    # Secondary axis for margin %
     ax2 = ax1.twinx()
-    ax2.plot(x, cdf["Margin_pct"], color=color_line, linewidth=2, marker="o")
-    # Optional smoothing (best-effort; no dependency on scipy)
-    try:
-        if len(x) >= 3:
-            from math import ceil
-            # Simple moving average smoothing
-            k = 3
-            s = np.convolve(cdf["Margin_pct"], np.ones(k)/k, mode="same")
-            ax2.lines[-1].set_visible(False)
-            ax2.plot(x, s, color=color_line, linewidth=2)
-    except Exception:
-        pass
-
+    yline = cdf["Margin %"].fillna(0).values
+    ax2.plot(x, yline, color=color_line, linewidth=2, marker="o")
     ax2.spines["right"].set_color(soft_grey)
     ax2.spines["right"].set_linewidth(1.0)
     ax2.set_ylabel("Margin %")
 
     ax1.set_xticks(x)
-    ax1.set_xticklabels(cdf["MonthLabel"], rotation=0)
+    ax1.set_xticklabels(cdf["MonthLabel"].tolist(), rotation=0)
 
     handles1, labels1 = ax1.get_legend_handles_labels()
     line_proxy = plt.Line2D([0], [0], color=color_line, lw=2)
@@ -223,21 +201,17 @@ def _plot_combo_matplotlib(cdf: pd.DataFrame):
 # -------------------- analysis --------------------
 def margin_analysis(df, group_field, threshold, target_month):
     """
-    Renders in order:
-      • Summary sentence
-      • Net margin % (aggregated across selected period & scope)
-      • Outliers on margin % (low & high) as inline text
-      • Margin% trend for last 3 months + drivers
-      • Table: ALL entities below threshold with desired columns/format
-      • Combo chart (bars: Revenue/Cost; line: Margin %)
+    Renders (INSIGHTS first), then:
+      • filtered table (only Revenue/Cost/Margin in mn USD and Margin %)
+      • combo chart below (last 6 months)
     """
     group_name = group_field if isinstance(group_field, str) else " × ".join(group_field)
     group_cols = [group_field] if isinstance(group_field, str) else group_field
 
-    # monthly pivot per group
+    # Monthly pivot per group
     df_margin = compute_margin(df, group_cols)
 
-    # Time window selection
+    # Time window for calculations (selection drives insights/table)
     if target_month is not None:
         window_mask = df_margin["Month"].dt.to_period("M") == target_month.to_period("M")
         filtered_data = df_margin[window_mask]
@@ -248,40 +222,32 @@ def margin_analysis(df, group_field, threshold, target_month):
         filtered_data = df_margin[(df_margin["Month"] >= quarter_start) & (df_margin["Month"] <= latest_month)]
         time_label = "the last quarter"
 
-    # Safeguard numerics
-    for col in ["Revenue", "Cost"]:
-        filtered_data[col] = pd.to_numeric(filtered_data[col], errors="coerce").fillna(0.0)
-
-    # Aggregate to group level across the selected period
+    # Aggregate to group level across selected period
     grouped = filtered_data.groupby(group_cols, dropna=False).agg({
         "Revenue": "sum",
         "Cost": "sum"
     }).reset_index()
 
-    # Core metrics at group level
-    # Safe margin% (avoid div-by-zero)
-    grouped["Margin %"] = np.where(
-        grouped["Revenue"] != 0,
-        (grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"] * 100.0,
-        np.nan
-    )
+    # Core metrics
+    grouped["Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
     grouped["Revenue (Million USD)"] = grouped["Revenue"] / 1e6
     grouped["Cost (Million USD)"] = grouped["Cost"] / 1e6
+    grouped["Margin (Million USD)"] = (grouped["Revenue"] - grouped["Cost"]) / 1e6
 
-    # ---- Net Margin % (aggregated across selected entities & period)
+    # Net margin %
     agg_rev = grouped["Revenue"].sum()
     agg_cost = grouped["Cost"].sum()
     net_margin_pct = ((agg_rev - agg_cost) / agg_rev * 100) if agg_rev else None
 
-    # ---- Entities below threshold (ALL)
-    below_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue"] > 0)]
+    # Entities below threshold
+    below_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
     total_entities = grouped.shape[0]
     low_margin_count = below_df.shape[0]
     proportion = (low_margin_count / total_entities * 100) if total_entities else 0
 
-    # ---- Outliers via IQR — text lists
+    # Outliers text lists
     low_list, high_list = "None", "None"
-    if grouped["Margin %"].notna().any():
+    if "Margin %" in grouped.columns and grouped["Margin %"].notna().any():
         low_mask, high_mask = _outlier_masks_iqr(grouped["Margin %"])
         low_outliers = grouped.loc[low_mask, group_cols + ["Margin %"]].sort_values("Margin %")
         high_outliers = grouped.loc[high_mask, group_cols + ["Margin %"]].sort_values("Margin %", ascending=False)
@@ -290,24 +256,15 @@ def margin_analysis(df, group_field, threshold, target_month):
         if not high_outliers.empty:
             high_list = ", ".join(high_outliers[group_cols[0]].astype(str).tolist())
 
-    # ---- 3-month margin% trend + reasons (drivers)
+    # Month aggregates for drivers (based on selected window)
     month_agg = (
         filtered_data.groupby(["Month"], dropna=False)[["Revenue", "Cost"]]
         .sum()
         .reset_index()
         .sort_values("Month")
     )
-    # Coerce numerics & fill
-    for col in ["Revenue", "Cost"]:
-        month_agg[col] = pd.to_numeric(month_agg[col], errors="coerce").fillna(0.0)
-    # Safe margin %
-    month_agg["Margin_pct"] = np.where(
-        month_agg["Revenue"] != 0,
-        (month_agg["Revenue"] - month_agg["Cost"]) / month_agg["Revenue"] * 100.0,
-        0.0
-    )
 
-    # ---------- INSIGHTS (ABOVE the table) ----------
+    # ---------- INSIGHTS ----------
     st.markdown(
         f"🔍 **{group_name}** — For **{time_label}**, **{low_margin_count}** of **{total_entities}** "
         f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
@@ -326,9 +283,10 @@ def margin_analysis(df, group_field, threshold, target_month):
     )
 
     if len(month_agg) >= 1:
+        month_agg["Margin %"] = ((month_agg["Revenue"] - month_agg["Cost"]) / month_agg["Revenue"]) * 100
         last_3 = month_agg.tail(3).reset_index(drop=True)
         labels = [m.strftime("%b %Y") for m in last_3["Month"]]
-        mvals = [f"{x:,.1f}%" for x in last_3["Margin_pct"]]
+        mvals = [f"{x:,.1f}%" if pd.notnull(x) else "N/A" for x in last_3["Margin %"]]
 
         st.markdown("**Margin % trend (last 3 months)**")
         st.write(", ".join([f"{lab}: {val}" for lab, val in zip(labels, mvals)]))
@@ -352,19 +310,30 @@ def margin_analysis(df, group_field, threshold, target_month):
             for ln in lines:
                 st.markdown(f"- {ln}")
 
-    # ---------- TABLE ----------
+    # ---------- TABLE (ONLY requested columns & formats) ----------
     if not below_df.empty:
+        show_cols = group_cols + [
+            "Revenue (Million USD)", "Cost (Million USD)", "Margin (Million USD)", "Margin %"
+        ]
+        display_df = (
+            below_df[show_cols]
+            .copy()
+            .sort_values("Margin %")  # ascending (lowest first)
+            .reset_index(drop=True)
+        )
+
+        # Round and format
+        display_df["Revenue (Million USD)"] = display_df["Revenue (Million USD)"].round(1)
+        display_df["Cost (Million USD)"] = display_df["Cost (Million USD)"].round(1)
+        display_df["Margin (Million USD)"] = display_df["Margin (Million USD)"].round(1)
+        display_df["Margin %"] = display_df["Margin %"].round(0).astype("Int64")
+
         st.caption("Entities below threshold (all)")
-        # Keep only requested columns and apply formatting
-        display_df = below_df.copy()
-        # Reorder/rename/select columns
-        nice_cols = [group_cols[0], "Revenue (Million USD)", "Cost (Million USD)", "Margin %"]
-        display_df = display_df[nice_cols].rename(columns={group_cols[0]: group_name})
-        # Formats: 1 decimal for money, 0 decimals for %
         st.dataframe(
             display_df.style.format({
                 "Revenue (Million USD)": "{:,.1f}",
                 "Cost (Million USD)": "{:,.1f}",
+                "Margin (Million USD)": "{:,.1f}",
                 "Margin %": "{:,.0f}"
             }),
             use_container_width=True
@@ -372,20 +341,33 @@ def margin_analysis(df, group_field, threshold, target_month):
     else:
         st.info("No records found below the margin threshold.")
 
-    # ---------- CHART ----------
-    if not month_agg.empty:
-        cdf = month_agg.copy()
-        cdf["MonthLabel"] = cdf["Month"].dt.strftime("%b %Y")
-        cdf["Revenue_mn"] = cdf["Revenue"] / 1e6
-        cdf["Cost_mn"] = cdf["Cost"] / 1e6
-        # Chart expects column name 'Margin_pct'
-        cdf["Margin_pct"] = cdf["Margin_pct"].astype(float)
+    # ---------- CHART (LAST 6 MONTHS) ----------
+    # Build chart from last 6 months globally (not just selection window)
+    df_month = (
+        df_margin.groupby("Month")[["Revenue", "Cost"]]
+        .sum()
+        .reset_index()
+        .sort_values("Month")
+    )
+    if not df_month.empty:
+        latest = df_month["Month"].max()
+        six_start = latest - relativedelta(months=5)
+        cdf = df_month[(df_month["Month"] >= six_start) & (df_month["Month"] <= latest)].copy()
 
-        st.markdown("**Revenue/Cost vs Margin % (by Month)**")
-        if _PLOTLY_OK:
-            _plot_combo_plotly(cdf)
-        else:
-            _plot_combo_matplotlib(cdf)
+        if not cdf.empty:
+            cdf["MonthLabel"] = cdf["Month"].dt.strftime("%b %Y")
+            cdf["Revenue_mn"] = (cdf["Revenue"] / 1e6).fillna(0.0)
+            cdf["Cost_mn"] = (cdf["Cost"] / 1e6).fillna(0.0)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                cdf["Margin %"] = (((cdf["Revenue"] - cdf["Cost"]) / cdf["Revenue"]) * 100).replace([np.inf, -np.inf], np.nan)
+
+            st.markdown("**Revenue/Cost vs Margin % (last 6 months)**")
+            if _PLOTLY_OK:
+                # Unique chart key per tab/group prevents router collisions
+                chart_key = f"q1_plotly_{group_name.replace(' ', '_')}"
+                _plot_combo_plotly(cdf, key=chart_key)
+            else:
+                _plot_combo_matplotlib(cdf)
 
 
 # -------------------- entry point --------------------
