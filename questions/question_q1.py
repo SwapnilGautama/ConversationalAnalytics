@@ -1,6 +1,8 @@
-# ✅ FINAL Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Segment, DU, BU, Customer
-# + Net Margin% (aggregated) metric
-# + Outlier list (IQR-based) for low-margin entities
+# ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
+# Enhancements:
+#  • Show ALL entities below threshold (not just top 10)
+#  • Outliers (both low & high) as inline text lists (no table)
+#  • 3-month margin% trends + reasons (revenue/cost drivers)
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
@@ -62,21 +64,43 @@ def extract_month(user_question):
 
 
 # -------------------- NEW: Outlier detection --------------------
-def _low_margin_outliers_iqr(series: pd.Series):
+def _outlier_masks_iqr(series: pd.Series):
     """
-    Return a boolean mask marking *low* outliers via IQR rule:
-    value < Q1 - 1.5 * IQR
+    Return two boolean masks (low_mask, high_mask) via IQR rule:
+    low  < Q1 - 1.5 * IQR
+    high > Q3 + 1.5 * IQR
     Robust to skew; ignores NaNs.
     """
     s = series.dropna()
     if s.empty:
-        return pd.Series([False] * len(series), index=series.index)
+        f = pd.Series([False] * len(series), index=series.index)
+        return f, f
 
     q1 = s.quantile(0.25)
     q3 = s.quantile(0.75)
     iqr = q3 - q1
-    cutoff = q1 - 1.5 * iqr
-    return series < cutoff
+    low_cut = q1 - 1.5 * iqr
+    high_cut = q3 + 1.5 * iqr
+    return (series < low_cut), (series > high_cut)
+
+
+def _pct_change(old, new):
+    """Safe percent change. Returns None when not computable."""
+    try:
+        old = float(old)
+        new = float(new)
+        if old == 0:
+            return None
+        return (new - old) / old * 100.0
+    except Exception:
+        return None
+
+
+def _fmt_pct(p):
+    if p is None:
+        return "N/A"
+    sign = "+" if p >= 0 else ""
+    return f"{sign}{p:,.1f}%"
 
 
 # -------------------- analysis (extended) --------------------
@@ -84,9 +108,10 @@ def margin_analysis(df, group_field, threshold, target_month):
     """
     Renders:
       • summary sentence
-      • NEW: Net margin % (aggregated across selected period) as st.metric
-      • Table of entities below threshold (top10)
-      • NEW: Outliers on margin % using IQR (low outliers only)
+      • Net margin % (aggregated across selected period & scope)
+      • Table of ALL entities below threshold
+      • Outliers on margin % (low & high) as inline text
+      • Margin% trend for last 3 months + reasons (revenue/cost drivers)
     """
     group_name = group_field if isinstance(group_field, str) else " × ".join(group_field)
     group_cols = [group_field] if isinstance(group_field, str) else group_field
@@ -94,9 +119,10 @@ def margin_analysis(df, group_field, threshold, target_month):
     # monthly pivot per group
     df_margin = compute_margin(df, group_cols)
 
-    # Time window
+    # Time window selection
     if target_month is not None:
-        filtered_data = df_margin[df_margin["Month"].dt.to_period("M") == target_month.to_period("M")]
+        window_mask = df_margin["Month"].dt.to_period("M") == target_month.to_period("M")
+        filtered_data = df_margin[window_mask]
         time_label = target_month.strftime("%B %Y")
     else:
         latest_month = df_margin["Month"].max()
@@ -110,12 +136,12 @@ def margin_analysis(df, group_field, threshold, target_month):
         "Cost": "sum"
     }).reset_index()
 
-    # Core metrics
+    # Core metrics at group level
     grouped["Margin %"] = ((grouped["Revenue"] - grouped["Cost"]) / grouped["Revenue"]) * 100
     grouped["Revenue (Million USD)"] = grouped["Revenue"] / 1e6
     grouped["Cost (Million USD)"] = grouped["Cost"] / 1e6
 
-    # --- NEW: Net Margin % (aggregated across selected entities & period)
+    # --- Net Margin % (aggregated across selected entities & period)
     agg_rev = grouped["Revenue"].sum()
     agg_cost = grouped["Cost"].sum()
     net_margin_pct = ((agg_rev - agg_cost) / agg_rev * 100) if agg_rev else None
@@ -128,10 +154,8 @@ def margin_analysis(df, group_field, threshold, target_month):
             help=f"Across all selected {group_name.lower()} for {time_label}"
         )
 
-    # Threshold filter
+    # ---- Entities below threshold: show ALL (not just top 10)
     filtered_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
-    top_10 = filtered_df.sort_values("Margin %", ascending=False).head(10)
-
     total_entities = grouped.shape[0]
     low_margin_count = filtered_df.shape[0]
     proportion = (low_margin_count / total_entities * 100) if total_entities else 0
@@ -141,10 +165,12 @@ def margin_analysis(df, group_field, threshold, target_month):
         f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
     )
 
-    if not top_10.empty:
-        st.caption("Entities below threshold (top 10)")
+    if not filtered_df.empty:
+        st.caption("Entities below threshold (all)")
+        # Order naturally by lowest margin %
+        display_df = filtered_df.sort_values("Margin %").reset_index(drop=True).copy()
         st.dataframe(
-            top_10.reset_index(drop=True).style.format({
+            display_df.style.format({
                 "Revenue": "{:,.1f}",
                 "Cost": "{:,.1f}",
                 "Margin %": "{:,.1f}",
@@ -156,18 +182,62 @@ def margin_analysis(df, group_field, threshold, target_month):
     else:
         st.info("No records found below the margin threshold.")
 
-    # --- NEW: Outliers (low margin %) via IQR
+    # ---- Outliers (both low & high) via IQR — shown as text lists
     if "Margin %" in grouped.columns and grouped["Margin %"].notna().any():
-        mask_outliers = _low_margin_outliers_iqr(grouped["Margin %"])
-        outliers = grouped.loc[mask_outliers, group_cols + ["Margin %"]].sort_values("Margin %")
-        if not outliers.empty:
-            st.caption("Low-margin outliers (IQR method)")
-            st.dataframe(
-                outliers.reset_index(drop=True).style.format({"Margin %": "{:,.1f}"}),
-                use_container_width=True
+        low_mask, high_mask = _outlier_masks_iqr(grouped["Margin %"])
+        low_outliers = grouped.loc[low_mask, group_cols + ["Margin %"]].sort_values("Margin %")
+        high_outliers = grouped.loc[high_mask, group_cols + ["Margin %"]].sort_values("Margin %", ascending=False)
+
+        lo_names = ", ".join(low_outliers[group_cols[0]].astype(str).tolist()) if not low_outliers.empty else "None"
+        hi_names = ", ".join(high_outliers[group_cols[0]].astype(str).tolist()) if not high_outliers.empty else "None"
+
+        st.markdown(
+            f"**Outliers (IQR):** Low margin → *{lo_names}*  |  High margin → *{hi_names}*"
+        )
+
+    # ---- 3-month margin% trend + reasons (drivers)
+    # Build an aggregated month series over the last 3 distinct months in the data window
+    month_agg = (
+        filtered_data.groupby(["Month"], dropna=False)[["Revenue", "Cost"]]
+        .sum()
+        .reset_index()
+        .sort_values("Month")
+    )
+
+    if len(month_agg) >= 1:
+        month_agg["Margin %"] = ((month_agg["Revenue"] - month_agg["Cost"]) / month_agg["Revenue"]) * 100
+
+        # take last 3 months within available window
+        last_3 = month_agg.tail(3).reset_index(drop=True)
+        # Prepare readable labels
+        labels = [m.strftime("%b %Y") for m in last_3["Month"]]
+        mvals = [f"{x:,.1f}%" if pd.notnull(x) else "N/A" for x in last_3["Margin %"]]
+
+        st.markdown("**Margin % trend (last 3 months)**")
+        st.write(", ".join([f"{lab}: {val}" for lab, val in zip(labels, mvals)]))
+
+        # Drivers: revenue/cost MoM% + overall change across the 3-month span
+        if len(last_3) >= 2:
+            lines = []
+            for i in range(1, len(last_3)):
+                r_chg = _pct_change(last_3.loc[i-1, "Revenue"], last_3.loc[i, "Revenue"])
+                c_chg = _pct_change(last_3.loc[i-1, "Cost"], last_3.loc[i, "Cost"])
+                lines.append(
+                    f"From **{labels[i-1]} → {labels[i]}**: "
+                    f"Revenue {_fmt_pct(r_chg)}, Cost {_fmt_pct(c_chg)}."
+                )
+
+            # Overall change (first → last)
+            r_total = _pct_change(last_3.loc[0, "Revenue"], last_3.loc[len(last_3)-1, "Revenue"])
+            c_total = _pct_change(last_3.loc[0, "Cost"], last_3.loc[len(last_3)-1, "Cost"])
+            lines.append(
+                f"Overall (**{labels[0]} → {labels[-1]}**): "
+                f"Revenue {_fmt_pct(r_total)}, Cost {_fmt_pct(c_total)}."
             )
-        else:
-            st.caption("Low-margin outliers (IQR): None detected.")
+
+            st.caption("**Drivers**")
+            for ln in lines:
+                st.markdown(f"- {ln}")
 
 
 # -------------------- entry point (preserved) --------------------
