@@ -80,7 +80,7 @@ def _pct_change(old, new):
         old = float(old); new = float(new)
         if old == 0:
             return None
-        return (new - old) / old * 100.0
+        return (new - old) / old * 100.00
     except Exception:
         return None
 
