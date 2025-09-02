@@ -1,9 +1,12 @@
 # ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
-# Changes in this version:
-#  • Removed Outliers (IQR) section.
-#  • Added "Revenue at risk" metric (amount + % of total revenue in selection).
-#  • Added "Top contributors to risk" (largest revenue accounts below threshold).
-#  • Preserved: unique Plotly keys (no router/AI fallback), 6-month chart, compact table.
+# Updates in this version:
+#  • Added top metrics: Total Revenue, Total Cost (both in mn USD),
+#    alongside Net Margin % (Aggregated) and Revenue at Risk.
+#  • Added "Margin gap to threshold ($ mn)" — the extra margin required
+#    for the below-threshold cohort to reach the target margin%.
+#  • Kept: "Top contributors to risk", 3-month trend + drivers,
+#    below-threshold table, and 6-month combo chart with UNIQUE Plotly keys
+#    (prevents Streamlit router issues/AI fallback).
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -221,12 +224,12 @@ def margin_analysis(df, group_field, threshold, target_month):
     grouped["Cost (Million USD)"] = grouped["Cost"] / 1e6
     grouped["Margin (Million USD)"] = (grouped["Revenue"] - grouped["Cost"]) / 1e6
 
-    # Net margin %
+    # Aggregates across selection
     agg_rev = grouped["Revenue"].sum()
     agg_cost = grouped["Cost"].sum()
     net_margin_pct = ((agg_rev - agg_cost) / agg_rev * 100) if agg_rev else None
 
-    # Below-threshold entities for this selection
+    # Below-threshold cohort
     below_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
     total_entities = grouped.shape[0]
     low_margin_count = below_df.shape[0]
@@ -238,7 +241,8 @@ def margin_analysis(df, group_field, threshold, target_month):
         f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
     )
 
-    # KPI tiles: Net margin %, Revenue at risk
+    # KPI tiles — 2 rows:
+    # Row 1: Net Margin %, Revenue at Risk
     c1, c2 = st.columns([1, 1.4])
     with c1:
         st.metric(
@@ -248,7 +252,7 @@ def margin_analysis(df, group_field, threshold, target_month):
         )
     with c2:
         rev_at_risk = below_df["Revenue"].sum()
-        total_rev = grouped["Revenue"].sum()
+        total_rev = agg_rev
         risk_pct = (rev_at_risk / total_rev * 100) if total_rev else 0
         st.metric(
             label="Revenue at Risk (below margin threshold)",
@@ -256,6 +260,33 @@ def margin_analysis(df, group_field, threshold, target_month):
             delta=f"{risk_pct:,.1f}% of selection revenue",
             help="Revenue contributed by entities below the margin threshold"
         )
+
+    # Row 2: Total Revenue, Total Cost
+    c3, c4 = st.columns([1.2, 1.2])
+    with c3:
+        st.metric(
+            label="Total Revenue (selection)",
+            value=f"${agg_rev/1e6:,.1f} mn"
+        )
+    with c4:
+        st.metric(
+            label="Total Cost (selection)",
+            value=f"${agg_cost/1e6:,.1f} mn"
+        )
+
+    # Additional value metric: Margin gap to threshold (how much more margin is needed to reach the target)
+    if not below_df.empty:
+        curr_margin_amt = (below_df["Revenue"] - below_df["Cost"])
+        req_margin_amt = (threshold / 100.0) * below_df["Revenue"]
+        gap = np.maximum(0.0, req_margin_amt - curr_margin_amt)
+        gap_total = gap.sum() / 1e6  # mn USD
+        c5, _ = st.columns([1.2, 1])
+        with c5:
+            st.metric(
+                label=f"Margin gap to reach {threshold:.0f}% (below-threshold cohort)",
+                value=f"${gap_total:,.1f} mn",
+                help="Additional margin needed for the low-margin cohort to meet the threshold"
+            )
 
     # Top contributors to risk (largest revenue in low-margin set)
     if not below_df.empty:
