@@ -1,8 +1,10 @@
 # ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
-# Updates in this version:
-#  • FIX: Avoid Streamlit router errors by giving plotly charts a UNIQUE key (prevents AI fallback)
-#  • Chart now shows the LAST 6 MONTHS (rolling), independent of the analysis window
-#  • Table stays compact: Revenue/Cost/Margin in mn USD (1 dp) + Margin % (0 dp)
+# Changes in this version:
+#  • Removed Outliers (IQR) section.
+#  • Added "Revenue at risk" metric (amount + % of total revenue in selection).
+#  • Added "Top contributors to risk" (largest revenue accounts below threshold).
+#  • Preserved: unique Plotly keys (no router/AI fallback), 6-month chart, compact table.
+
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 import streamlit as st
@@ -74,20 +76,6 @@ def extract_month(user_question):
     return None
 
 
-def _outlier_masks_iqr(series: pd.Series):
-    """Return two boolean masks (low_mask, high_mask) via the IQR rule."""
-    s = series.dropna()
-    if s.empty:
-        f = pd.Series([False] * len(series), index=series.index)
-        return f, f
-    q1 = s.quantile(0.25)
-    q3 = s.quantile(0.75)
-    iqr = q3 - q1
-    low_cut = q1 - 1.5 * iqr
-    high_cut = q3 + 1.5 * iqr
-    return (series < low_cut), (series > high_cut)
-
-
 def _pct_change(old, new):
     try:
         old = float(old); new = float(new)
@@ -148,8 +136,7 @@ def _plot_combo_plotly(cdf: pd.DataFrame, key: str):
         )
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=soft_grey, mirror=True)
-    # IMPORTANT: unique key prevents Streamlit router collisions
-    st.plotly_chart(fig, use_container_width=True, key=key)
+    st.plotly_chart(fig, use_container_width=True, key=key)  # unique key avoids router collision
 
 
 def _plot_combo_matplotlib(cdf: pd.DataFrame):
@@ -239,22 +226,49 @@ def margin_analysis(df, group_field, threshold, target_month):
     agg_cost = grouped["Cost"].sum()
     net_margin_pct = ((agg_rev - agg_cost) / agg_rev * 100) if agg_rev else None
 
-    # Entities below threshold
+    # Below-threshold entities for this selection
     below_df = grouped[(grouped["Margin %"] < threshold) & (grouped["Revenue (Million USD)"] > 0)]
     total_entities = grouped.shape[0]
     low_margin_count = below_df.shape[0]
     proportion = (low_margin_count / total_entities * 100) if total_entities else 0
 
-    # Outliers text lists
-    low_list, high_list = "None", "None"
-    if "Margin %" in grouped.columns and grouped["Margin %"].notna().any():
-        low_mask, high_mask = _outlier_masks_iqr(grouped["Margin %"])
-        low_outliers = grouped.loc[low_mask, group_cols + ["Margin %"]].sort_values("Margin %")
-        high_outliers = grouped.loc[high_mask, group_cols + ["Margin %"]].sort_values("Margin %", ascending=False)
-        if not low_outliers.empty:
-            low_list = ", ".join(low_outliers[group_cols[0]].astype(str).tolist())
-        if not high_outliers.empty:
-            high_list = ", ".join(high_outliers[group_cols[0]].astype(str).tolist())
+    # ---------- INSIGHTS ----------
+    st.markdown(
+        f"🔍 **{group_name}** — For **{time_label}**, **{low_margin_count}** of **{total_entities}** "
+        f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
+    )
+
+    # KPI tiles: Net margin %, Revenue at risk
+    c1, c2 = st.columns([1, 1.4])
+    with c1:
+        st.metric(
+            label="Net Margin % (Aggregated)",
+            value=f"{net_margin_pct:,.1f}%" if net_margin_pct is not None else "N/A",
+            help=f"Across all selected {group_name.lower()} for {time_label}"
+        )
+    with c2:
+        rev_at_risk = below_df["Revenue"].sum()
+        total_rev = grouped["Revenue"].sum()
+        risk_pct = (rev_at_risk / total_rev * 100) if total_rev else 0
+        st.metric(
+            label="Revenue at Risk (below margin threshold)",
+            value=f"${rev_at_risk/1e6:,.1f} mn",
+            delta=f"{risk_pct:,.1f}% of selection revenue",
+            help="Revenue contributed by entities below the margin threshold"
+        )
+
+    # Top contributors to risk (largest revenue in low-margin set)
+    if not below_df.empty:
+        top_n = 5
+        top_risk = (
+            below_df[group_cols + ["Revenue"]]
+            .sort_values("Revenue", ascending=False)
+            .head(top_n)
+        )
+        names = top_risk[group_cols[0]].astype(str).tolist()
+        vals = (top_risk["Revenue"] / 1e6).round(1).tolist()
+        bullets = ", ".join([f"{n} (${v:,.1f} mn)" for n, v in zip(names, vals)])
+        st.markdown(f"**Top contributors to risk** — {bullets}")
 
     # Month aggregates for drivers (based on selected window)
     month_agg = (
@@ -264,24 +278,7 @@ def margin_analysis(df, group_field, threshold, target_month):
         .sort_values("Month")
     )
 
-    # ---------- INSIGHTS ----------
-    st.markdown(
-        f"🔍 **{group_name}** — For **{time_label}**, **{low_margin_count}** of **{total_entities}** "
-        f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
-    )
-
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        st.metric(
-            label="Net Margin % (Aggregated)",
-            value=f"{net_margin_pct:,.1f}%" if net_margin_pct is not None else "N/A",
-            help=f"Across all selected {group_name.lower()} for {time_label}"
-        )
-
-    st.markdown(
-        f"**Outliers (IQR):** Low margin → *{low_list}*  |  High margin → *{high_list}*"
-    )
-
+    # Margin % trend and drivers
     if len(month_agg) >= 1:
         month_agg["Margin %"] = ((month_agg["Revenue"] - month_agg["Cost"]) / month_agg["Revenue"]) * 100
         last_3 = month_agg.tail(3).reset_index(drop=True)
@@ -363,9 +360,8 @@ def margin_analysis(df, group_field, threshold, target_month):
 
             st.markdown("**Revenue/Cost vs Margin % (last 6 months)**")
             if _PLOTLY_OK:
-                # Unique chart key per tab/group prevents router collisions
                 chart_key = f"q1_plotly_{group_name.replace(' ', '_')}"
-                _plot_combo_plotly(cdf, key=chart_key)
+                _plot_combo_plotly(cdf, key=chart_key)  # unique key per tab
             else:
                 _plot_combo_matplotlib(cdf)
 
