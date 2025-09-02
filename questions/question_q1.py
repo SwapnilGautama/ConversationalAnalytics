@@ -1,12 +1,8 @@
 # ✅ Q1 — Margin % is (Revenue - Cost)/Revenue | Tabs by Client, Segment, BU, DU
-# Updates in this version:
-#  • Added top metrics: Total Revenue, Total Cost (both in mn USD),
-#    alongside Net Margin % (Aggregated) and Revenue at Risk.
-#  • Added "Margin gap to threshold ($ mn)" — the extra margin required
-#    for the below-threshold cohort to reach the target margin%.
-#  • Kept: "Top contributors to risk", 3-month trend + drivers,
-#    below-threshold table, and 6-month combo chart with UNIQUE Plotly keys
-#    (prevents Streamlit router issues/AI fallback).
+# Updates:
+#  • Single-row KPI header (Net Margin %, Revenue at Risk, Total Revenue, Total Cost, Margin Gap).
+#  • Bar + line chart now has value labels (bars and line points).
+#  • All previous features preserved (drivers, risk contributors, table, 6-month chart, unique keys).
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -98,32 +94,51 @@ def _fmt_pct(p):
 
 # -------------------- plotting --------------------
 def _plot_combo_plotly(cdf: pd.DataFrame, key: str):
-    """Plotly combo chart (if Plotly is available)."""
+    """Plotly combo chart (if Plotly is available) with labels."""
     color_rev = "#A5D8FF"   # pastel blue
     color_cost = "#FFD6A5"  # pastel peach
     color_line = "#FF6B6B"  # soft coral
     soft_grey = "#D0D0D0"
 
+    # Labels
+    rev_labels = cdf["Revenue_mn"].round(1)
+    cost_labels = cdf["Cost_mn"].round(1)
+    margin_labels = cdf["Margin %"].round(0).astype("Int64").astype(str)  # as strings for text
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name="Revenue (mn USD)", x=cdf["MonthLabel"], y=cdf["Revenue_mn"],
-        marker_color=color_rev
+        name="Revenue (mn USD)",
+        x=cdf["MonthLabel"],
+        y=cdf["Revenue_mn"],
+        marker_color=color_rev,
+        text=rev_labels,
+        textposition="outside",
+        cliponaxis=False
     ))
     fig.add_trace(go.Bar(
-        name="Cost (mn USD)", x=cdf["MonthLabel"], y=cdf["Cost_mn"],
-        marker_color=color_cost
+        name="Cost (mn USD)",
+        x=cdf["MonthLabel"],
+        y=cdf["Cost_mn"],
+        marker_color=color_cost,
+        text=cost_labels,
+        textposition="outside",
+        cliponaxis=False
     ))
     fig.add_trace(go.Scatter(
-        name="Margin %", x=cdf["MonthLabel"], y=cdf["Margin %"],
-        mode="lines+markers",
+        name="Margin %",
+        x=cdf["MonthLabel"],
+        y=cdf["Margin %"],
+        mode="lines+markers+text",
         line=dict(color=color_line, width=2, shape="spline"),
+        text=margin_labels,
+        textposition="top center",
         yaxis="y2"
     ))
 
     fig.update_layout(
         barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=20, r=10, l=10, b=10),
+        margin=dict(t=30, r=10, l=10, b=10),
         plot_bgcolor="white",
         paper_bgcolor="white",
     )
@@ -143,7 +158,7 @@ def _plot_combo_plotly(cdf: pd.DataFrame, key: str):
 
 
 def _plot_combo_matplotlib(cdf: pd.DataFrame):
-    """Matplotlib fallback (no SciPy needed)."""
+    """Matplotlib fallback (no SciPy needed) with labels."""
     color_rev = "#A5D8FF"
     color_cost = "#FFD6A5"
     color_line = "#FF6B6B"
@@ -156,8 +171,8 @@ def _plot_combo_matplotlib(cdf: pd.DataFrame):
     ax1.set_facecolor("white")
     fig.patch.set_facecolor("white")
 
-    ax1.bar(x - width/2, cdf["Revenue_mn"].values, width, color=color_rev, label="Revenue (mn USD)")
-    ax1.bar(x + width/2, cdf["Cost_mn"].values, width, color=color_cost, label="Cost (mn USD)")
+    bars1 = ax1.bar(x - width/2, cdf["Revenue_mn"].values, width, color=color_rev, label="Revenue (mn USD)")
+    bars2 = ax1.bar(x + width/2, cdf["Cost_mn"].values, width, color=color_cost, label="Cost (mn USD)")
 
     for spine in ["bottom", "left", "right", "top"]:
         ax1.spines[spine].set_color(soft_grey)
@@ -167,9 +182,19 @@ def _plot_combo_matplotlib(cdf: pd.DataFrame):
     ax1.tick_params(axis="y", colors="#333333")
     ax1.set_ylabel("Revenue/Cost (mn USD)")
 
+    # Labels on bars
+    for b in list(bars1) + list(bars2):
+        h = b.get_height()
+        ax1.annotate(f"{h:.1f}", (b.get_x() + b.get_width()/2, h),
+                     ha="center", va="bottom", fontsize=9, color="#444", xytext=(0, 3), textcoords="offset points")
+
     ax2 = ax1.twinx()
     yline = cdf["Margin %"].fillna(0).values
     ax2.plot(x, yline, color=color_line, linewidth=2, marker="o")
+    # Labels on line
+    for xi, yi in zip(x, yline):
+        ax2.annotate(f"{yi:.0f}", (xi, yi), ha="center", va="bottom", fontsize=9, color="#444", xytext=(0, 3), textcoords="offset points")
+
     ax2.spines["right"].set_color(soft_grey)
     ax2.spines["right"].set_linewidth(1.0)
     ax2.set_ylabel("Margin %")
@@ -241,19 +266,19 @@ def margin_analysis(df, group_field, threshold, target_month):
         f"entities had average margin below **{threshold}%** (**{proportion:,.1f}%**)."
     )
 
-    # KPI tiles — 2 rows:
-    # Row 1: Net Margin %, Revenue at Risk
-    c1, c2 = st.columns([1, 1.4])
+    # Single-row KPI header: Net Margin %, Revenue at Risk, Total Revenue, Total Cost, Margin Gap
+    c1, c2, c3, c4, c5 = st.columns([1.0, 1.4, 1.1, 1.1, 1.4])
+
     with c1:
         st.metric(
             label="Net Margin % (Aggregated)",
             value=f"{net_margin_pct:,.1f}%" if net_margin_pct is not None else "N/A",
             help=f"Across all selected {group_name.lower()} for {time_label}"
         )
+
     with c2:
         rev_at_risk = below_df["Revenue"].sum()
-        total_rev = agg_rev
-        risk_pct = (rev_at_risk / total_rev * 100) if total_rev else 0
+        risk_pct = (rev_at_risk / agg_rev * 100) if agg_rev else 0
         st.metric(
             label="Revenue at Risk (below margin threshold)",
             value=f"${rev_at_risk/1e6:,.1f} mn",
@@ -261,31 +286,33 @@ def margin_analysis(df, group_field, threshold, target_month):
             help="Revenue contributed by entities below the margin threshold"
         )
 
-    # Row 2: Total Revenue, Total Cost
-    c3, c4 = st.columns([1.2, 1.2])
     with c3:
         st.metric(
             label="Total Revenue (selection)",
             value=f"${agg_rev/1e6:,.1f} mn"
         )
+
     with c4:
         st.metric(
             label="Total Cost (selection)",
             value=f"${agg_cost/1e6:,.1f} mn"
         )
 
-    # Additional value metric: Margin gap to threshold (how much more margin is needed to reach the target)
-    if not below_df.empty:
-        curr_margin_amt = (below_df["Revenue"] - below_df["Cost"])
-        req_margin_amt = (threshold / 100.0) * below_df["Revenue"]
-        gap = np.maximum(0.0, req_margin_amt - curr_margin_amt)
-        gap_total = gap.sum() / 1e6  # mn USD
-        c5, _ = st.columns([1.2, 1])
-        with c5:
+    with c5:
+        if not below_df.empty:
+            curr_margin_amt = (below_df["Revenue"] - below_df["Cost"])
+            req_margin_amt = (threshold / 100.0) * below_df["Revenue"]
+            gap = np.maximum(0.0, req_margin_amt - curr_margin_amt)
+            gap_total = gap.sum() / 1e6  # mn USD
             st.metric(
                 label=f"Margin gap to reach {threshold:.0f}% (below-threshold cohort)",
                 value=f"${gap_total:,.1f} mn",
                 help="Additional margin needed for the low-margin cohort to meet the threshold"
+            )
+        else:
+            st.metric(
+                label=f"Margin gap to reach {threshold:.0f}% (below-threshold cohort)",
+                value="$0.0 mn"
             )
 
     # Top contributors to risk (largest revenue in low-margin set)
@@ -328,7 +355,7 @@ def margin_analysis(df, group_field, threshold, target_month):
                     f"From **{labels[i-1]} → {labels[i]}**: "
                     f"Revenue {_fmt_pct(r_chg)}, Cost {_fmt_pct(c_chg)}."
                 )
-            r_total = _pct_change(last_3.loc[0, "Revenue"], last_3.loc[len(last_3)-1, "Revenue"])
+            r_total = _pct_change(last_3.loc[0], last_3.loc[len(last_3)-1]) if False else _pct_change(last_3.loc[0, "Revenue"], last_3.loc[len(last_3)-1, "Revenue"])
             c_total = _pct_change(last_3.loc[0, "Cost"], last_3.loc[len(last_3)-1, "Cost"])
             lines.append(
                 f"Overall (**{labels[0]} → {labels[-1]}**): "
