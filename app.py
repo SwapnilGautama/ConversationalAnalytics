@@ -1,4 +1,8 @@
-# app.py
+# app.py — Halo LTTS (free-flowing LLM router + safe fallbacks)
+# - Adds Azure OpenAI intent router (free-form conversation)
+# - Preserves all existing behavior and prompt-bank UX
+# - Expands margin synonyms to treat "profit%" like "margin%"
+# - Adds robust fallbacks if LLM is unavailable
 
 import streamlit as st
 st.set_page_config(page_title="Halo", layout="wide")
@@ -15,10 +19,76 @@ import base64
 import re
 from datetime import datetime
 
+# ========= NEW: Azure OpenAI (optional) =========
+AOAI_AVAILABLE = False
+try:
+    # Prefer the new SDK class shipped with openai>=1.0
+    from openai import AzureOpenAI
+    AOAI_AVAILABLE = True
+except Exception:
+    # Not fatal—router will degrade to non-LLM path
+    AOAI_AVAILABLE = False
+
+
+def _aoai_client():
+    """
+    Returns configured Azure OpenAI client or None.
+    Uses env vars:
+        AZURE_OPENAI_ENDPOINT
+        AZURE_OPENAI_API_KEY
+        AZURE_OPENAI_DEPLOYMENT
+        AZURE_OPENAI_API_VERSION (optional; default 2024-02-15-preview)
+    """
+    if not AOAI_AVAILABLE:
+        return None
+
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    key = os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+
+    if not endpoint or not key:
+        return None
+
+    try:
+        client = AzureOpenAI(
+            api_key=key,
+            api_version=api_version,
+            azure_endpoint=endpoint,
+        )
+        return client
+    except Exception:
+        return None
+
+
+def _aoai_chat(messages, deployment=None, temperature=0.0, max_tokens=700):
+    """
+    Small wrapper that calls Azure OpenAI ChatCompletions if configured.
+    Returns (text, error_message_or_None).
+    """
+    client = _aoai_client()
+    deployment = deployment or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+    if not client or not deployment:
+        return None, "Azure OpenAI not configured."
+
+    try:
+        # Chat Completions style (compatible with 4o/4o-mini deployments)
+        resp = client.chat.completions.create(
+            model=deployment,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            messages=messages,
+        )
+        text = resp.choices[0].message.content if resp and resp.choices else None
+        return text, None
+    except Exception as e:
+        return None, f"AOAI error: {e}"
+
+
 # ---------- tiny helper (fixes NameError) ----------
 def _safe_has_cols(frame: pd.DataFrame, cols) -> bool:
     """Return True if all required columns exist in the DataFrame."""
     return isinstance(frame, pd.DataFrame) and all(c in frame.columns for c in cols)
+
 
 # -----------------------------
 # Prompt bank (preserving UX)
@@ -36,20 +106,27 @@ PROMPT_BANK = [
 ]
 
 # -----------------------------
-# Session state (preserved)
+# Session state (preserved + chat memory)
 # -----------------------------
 if "autofill_text" not in st.session_state:
     st.session_state.autofill_text = ""
 if "clear_chat" not in st.session_state:
     st.session_state.clear_chat = False
+if "chat_history" not in st.session_state:
+    # keep a light memory for intent routing / LLM answers
+    st.session_state.chat_history = []  # [{role: "user"/"assistant", "content": "..."}]
+
 
 def handle_click(prompt):
     st.session_state.autofill_text = prompt
     st.session_state.clear_chat = False
 
+
 def clear_input():
     st.session_state.autofill_text = ""
     st.session_state.clear_chat = True
+    st.session_state.chat_history = []
+
 
 # -----------------------------
 # Data loaders (P&L preserved) + OPTIONAL UT loader
@@ -70,6 +147,7 @@ def load_pnl():
     if df.empty:
         raise ValueError("Loaded P&L data is empty after preprocessing.")
     return df
+
 
 @st.cache_data
 def load_ut_optional():
@@ -100,6 +178,7 @@ def load_ut_optional():
     except Exception:
         return None
 
+
 try:
     df_pnl = load_pnl()
 except Exception as e:
@@ -107,6 +186,7 @@ except Exception as e:
     st.stop()
 
 df_ut = load_ut_optional()  # may be None (non-breaking)
+
 
 # -----------------------------
 # Header (updated to include Halo logo on the left)
@@ -119,6 +199,7 @@ def _encode_image(path: str, width: int = 140) -> str | None:
     img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return f'<img src="data:image/png;base64,{b64}" width="{width}" />'
+
 
 def display_header():
     # LEFT: Halo logo (add your file here)
@@ -146,6 +227,7 @@ def display_header():
         """,
         unsafe_allow_html=True,
     )
+
 
 display_header()
 
@@ -183,6 +265,7 @@ REVCOST_MARGIN_KEYWORDS = (
     "cogs", "gross margin", "gm%", "gm %", "cm%", "cm %"
 )
 
+
 def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
     """
     If the question is about revenue/cost/margin, prefer 'Amount in USD'.
@@ -210,11 +293,14 @@ def choose_amount_column(user_q: str, df: pd.DataFrame) -> str:
         else:
             return "Amount in INR"
 
+
 def is_usd_col(amount_col: str) -> bool:
     return amount_col.strip().lower() == "amount in usd"
 
+
 def unit_label(amount_col: str) -> str:
     return "USD mn" if is_usd_col(amount_col) else "INR mn (USD unavailable)"
+
 
 def to_million(value) -> float:
     try:
@@ -222,11 +308,13 @@ def to_million(value) -> float:
     except Exception:
         return value
 
+
 def series_to_million(s: pd.Series) -> pd.Series:
     try:
         return (s.astype(float) / 1_000_000.0).round(1)
     except Exception:
         return s
+
 
 # =========================================================
 # Parsing helpers shared by UT & P&L
@@ -249,6 +337,7 @@ MONTH_ALIASES = {
     "dec": 12, "december": 12
 }
 
+
 def parse_month_year_from_text(q: str):
     """Returns (month_num, year) if found; otherwise (None, None)."""
     ql = (q or "").lower()
@@ -265,10 +354,12 @@ def parse_month_year_from_text(q: str):
             return mnum, None
     return None, None
 
+
 def parse_account_token(q: str):
     """Light account parser: tokens like 'A1', 'A-1'."""
     m = re.search(r"\b([A-Za-z]\-?\d{1,3})\b", q or "")
     return m.group(1) if m else None
+
 
 def _unique_nontrivial_values(series: pd.Series):
     vals = (
@@ -282,19 +373,23 @@ def _unique_nontrivial_values(series: pd.Series):
     )
     return [v for v in vals if isinstance(v, str) and len(v.strip()) >= 3]
 
+
 # =========================================================
-# (NEW) Lightweight rule override for Q1 — "margin % below <N>"
+# (UPDATED) Lightweight rule override for Q1 — "margin % below <N>"  (+profit synonyms)
 # =========================================================
 _Q1_PATTERNS = [
-    r"\b(?:margin|gm|cm)\s*%?\s*<\s*\d+\s*%?",
-    r"\b(?:margin|gm|cm)\s*(?:%|percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
-    r"\b(?:less than|below|under)\s*\d+\s*%?\s*(?:margin|gm|cm)\b",
+    r"\b(?:margin|gm|cm|profit|profitability)\s*%?\s*<\s*\d+\s*%?",
+    r"\b(?:margin|gm|cm|profit|profitability)\s*(?:%|percent|percentage)?\s*(?:less than|below|under)\s*\d+\s*%?",
+    r"\b(?:less than|below|under)\s*\d+\s*%?\s*(?:margin|gm|cm|profit|profitability)\b",
 ]
+
+
 def _is_q1_margin_below_intent(q: str | None) -> bool:
     if not q:
         return False
     ql = q.lower()
     return any(re.search(p, ql) for p in _Q1_PATTERNS)
+
 
 # =========================================================
 # (NEW) Lightweight rule override for Q3 — "C&B quarter-over-quarter change"
@@ -306,11 +401,14 @@ _Q3_PATTERNS = [
     r"\bqoq\b.*\bc&b\b",
     r"\bcompare\b.*\bc&b\b.*\bquarter\b",
 ]
+
+
 def _is_q3_cb_variance_intent(q: str | None) -> bool:
     if not q:
         return False
     ql = q.lower()
     return any(re.search(p, ql) for p in _Q3_PATTERNS)
+
 
 # =========================================================
 # UT headcount fallback (multi-dimension + Date_a) — working
@@ -320,6 +418,7 @@ DIMENSION_CANDIDATES_UT = {
     "segment_like": ["Segment", "Vertical"],
     "org_like": ["BU", "DU"]
 }
+
 
 def extract_dimension_filters_ut(user_q: str, df_ut: pd.DataFrame):
     if df_ut is None or df_ut.empty:
@@ -343,6 +442,7 @@ def extract_dimension_filters_ut(user_q: str, df_ut: pd.DataFrame):
             if matches:
                 filters.setdefault(col, []).extend(matches)
     return filters
+
 
 def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, year: int | None):
     if df_ut is None or df_ut.empty:
@@ -371,6 +471,7 @@ def apply_ut_filters(df_ut: pd.DataFrame, filters: dict, month_num: int | None, 
             mask = mask | work[col].astype(str).str.contains(str(v), case=False, na=False)
         work = work[mask]
     return work, year
+
 
 def headcount_view(user_q: str, df_ut: pd.DataFrame):
     if df_ut is None or df_ut.empty:
@@ -425,6 +526,7 @@ def headcount_view(user_q: str, df_ut: pd.DataFrame):
             st.dataframe(br.sort_values("Headcount", ascending=False))
     return True
 
+
 # =========================================================
 # Financial multi-dimension filtering for P&L (Segment/Account + Month)
 # =========================================================
@@ -432,6 +534,7 @@ DIMENSION_CANDIDATES_PNL = {
     "account_like": ["FinalCustomerName", "Account", "Customer", "Company_code"],
     "segment_like": ["Segment", "Vertical", "BU", "DU"]
 }
+
 
 def extract_dimension_filters_pnl(user_q: str, df_pnl: pd.DataFrame):
     if df_pnl is None or df_pnl.empty:
@@ -461,6 +564,7 @@ def extract_dimension_filters_pnl(user_q: str, df_pnl: pd.DataFrame):
 
     return filters
 
+
 def apply_pnl_filters(df: pd.DataFrame, filters: dict, month_num: int | None, year: int | None):
     if df is None or df.empty:
         return pd.DataFrame(), year
@@ -488,6 +592,7 @@ def apply_pnl_filters(df: pd.DataFrame, filters: dict, month_num: int | None, ye
         work = work[mask]
 
     return work, year
+
 
 # ------------------ Financial fallbacks (with filtering) ------------------
 def _generic_margin_summary(df: pd.DataFrame, user_q: str):
@@ -523,7 +628,9 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
         cost = float(pivot.get("Cost", 0.0))
 
     margin_amt = rev - cost
-    margin_pct = (margin_amt / cost * 100) if cost else None
+    # BOTH %s for clarity
+    margin_pct_cost = (margin_amt / cost * 100) if cost else None
+    profit_pct_rev  = (margin_amt / rev  * 100) if rev else None
 
     pieces = []
     if month_num:
@@ -545,7 +652,8 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
             f"Revenue (total, {unit})": to_million(rev),
             f"Cost (total, {unit})": to_million(cost),
             "Margin (Amount, same unit)": to_million(margin_amt),
-            "Margin % ( (Rev - Cost)/Cost )": round(margin_pct, 1) if margin_pct is not None else "N/A",
+            "Margin % ( (Rev - Cost)/Cost )": round(margin_pct_cost, 1) if margin_pct_cost is not None else "N/A",
+            "Profit % ( (Rev - Cost)/Revenue )": round(profit_pct_rev, 1) if profit_pct_rev is not None else "N/A",
         }
     )
 
@@ -557,23 +665,177 @@ def _generic_margin_summary(df: pd.DataFrame, user_q: str):
             st.dataframe(by_acct.head(50))
             break
 
-def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
+
+# ========= NEW: relative period helper used by margin engine =========
+def resolve_relative_period(q: str, df: pd.DataFrame):
+    """
+    Returns a boolean mask for df if 'last month' or 'last quarter' is detected.
+    Falls back to None if not found or Month missing.
+    """
+    if "Month" not in df.columns or not pd.api.types.is_datetime64_any_dtype(df["Month"]):
+        return None
+    ql = (q or "").lower()
+    last_date = pd.to_datetime(df["Month"], errors="coerce").max()
+    if pd.isna(last_date):
+        return None
+    if "last month" in ql:
+        ym = (last_date.year, last_date.month)
+        return (df["Month"].dt.year == ym[0]) & (df["Month"].dt.month == ym[1])
+    if "last quarter" in ql or "previous quarter" in ql:
+        qtr = (last_date.month - 1)//3 + 1
+        prev_q = qtr - 1 or 4
+        prev_y = last_date.year - (1 if qtr == 1 else 0)
+        return (df["Month"].dt.to_period("Q") == pd.Period(f"{prev_y}Q{prev_q}"))
+    return None
+
+
+# ========= NEW: generic margin/profit% engine (freeform) =========
+MARGIN_SYNONYMS = (
+    "margin", "gm", "cm", "profit", "profitability",
+    "profit%", "profit %", "profit percent", "profit percentage",
+    "margin%", "margin %", "gm%", "cm%"
+)
+
+
+def has_margin_intent(q: str | None) -> bool:
+    ql = (q or "").lower()
+    return any(tok in ql for tok in MARGIN_SYNONYMS)
+
+
+def extract_threshold(q: str):
+    ql = (q or "").lower()
+    m = re.search(r"(<=|>=|<|>)\s*(\d{1,3}(?:\.\d+)?)\s*%?", ql)
+    if m:
+        return m.group(1), float(m.group(2))
+    word_ops = [
+        (r"\b(less than|below|under)\b", "<"),
+        (r"\b(more than|above|greater than|over)\b", ">")
+    ]
+    for pat, sym in word_ops:
+        m2 = re.search(pat + r"\s*(\d{1,3}(?:\.\d+)?)\s*%?", ql)
+        if m2:
+            return sym, float(m2.group(1))
+    return None, None
+
+
+def extract_topn(q: str):
+    ql = (q or "").lower()
+    m = re.search(r"\b(top|bottom)\s*(\d{1,3})\b", ql)
+    if m:
+        return m.group(1), int(m.group(2))
+    return None, None
+
+
+def generic_margin_engine(user_q: str, df: pd.DataFrame):
+    """
+    Flexible, dataframe-only engine that:
+      * applies account/segment + month filters,
+      * understands 'last month/quarter',
+      * computes Revenue, Cost, Margin amount,
+      * computes BOTH margin% (Rev-Cost)/Cost and profit% (Rev-Cost)/Revenue,
+      * supports threshold queries (e.g., margin < 30%), and
+      * supports Top/Bottom N by margin/profit%.
+    """
+    if df is None or df.empty:
+        st.info("No P&L data loaded.")
+        return True
+
+    amount_col = choose_amount_column(user_q, df)
+    unit = unit_label(amount_col)
+
+    month_num, year = parse_month_year_from_text(user_q)
+    dim_filters = extract_dimension_filters_pnl(user_q, df)
+    dff, resolved_year = apply_pnl_filters(df, dim_filters, month_num, year)
+
+    rel_mask = resolve_relative_period(user_q, df)
+    if rel_mask is not None:
+        dff = dff[rel_mask] if not dff.empty else df[rel_mask]
+
+    if dff.empty:
+        dff = df  # fallback to global view
+
+    group_cols_pref = ["FinalCustomerName", "Account", "Customer", "Company_code", "Segment", "Vertical", "BU", "DU"]
+    grp = next((c for c in group_cols_pref if c in dff.columns), None)
+
+    if _safe_has_cols(dff, ["Type", amount_col]):
+        if grp:
+            g = dff.groupby([grp, "Type"], dropna=False)[amount_col].sum().reset_index()
+            pivot = g.pivot_table(values=amount_col, index=grp, columns="Type", aggfunc="sum", fill_value=0).reset_index()
+        else:
+            pivot = dff.pivot_table(values=amount_col, index=None, columns="Type", aggfunc="sum", fill_value=0)
+            pivot = pivot.to_frame().T
+            pivot.insert(0, "All", "Total")
+            grp = "All"
+    else:
+        st.warning(f"Missing required columns to compute margin ('Type', '{amount_col}').")
+        return True
+
+    for col in ["Revenue", "Cost"]:
+        if col not in pivot.columns:
+            pivot[col] = 0.0
+    pivot["MarginAmount"] = pivot["Revenue"] - pivot["Cost"]
+    pivot["MarginPct_cost"] = pivot.apply(lambda r: (r["MarginAmount"]/r["Cost"]*100) if r["Cost"] else None, axis=1)
+    pivot["ProfitPct_rev"] = pivot.apply(lambda r: (r["MarginAmount"]/r["Revenue"]*100) if r["Revenue"] else None, axis=1)
+
+    op, thr = extract_threshold(user_q)
+    order, topn = extract_topn(user_q)
+
+    use_rev_pct = "profit" in (user_q or "").lower()
+    pct_col = "ProfitPct_rev" if use_rev_pct else "MarginPct_cost"
+
+    if thr is not None:
+        if op in ("<", "<="):
+            pivot = pivot[pivot[pct_col] <= thr] if op == "<=" else pivot[pivot[pct_col] < thr]
+        elif op in (">", ">="):
+            pivot = pivot[pivot[pct_col] >= thr] if op == ">=" else pivot[pivot[pct_col] > thr]
+
+    if order and topn:
+        asc = (order == "bottom")
+        pivot = pivot.sort_values(pct_col, ascending=asc).head(topn)
+
+    for c in ["Revenue", "Cost", "MarginAmount"]:
+        pivot[c] = series_to_million(pivot[c])
+
+    parts = [f"Values shown in {unit}.", f"Ranking by **{'Profit% (Rev)' if use_rev_pct else 'Margin% (Cost)'}**."]
+    if month_num:
+        mdisp = datetime(2000, month_num, 1).strftime("%b")
+        if resolved_year or year:
+            mdisp = f"{mdisp} {resolved_year or year}"
+        parts.append(f"Month filter: {mdisp}")
+    if dim_filters:
+        applied = []
+        for col, vals in dim_filters.items():
+            applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+        parts.append("Filters: " + "; ".join(applied))
+    st.caption(" | ".join(parts))
+
+    st.subheader("AI Fallback — Margin/Profit% View")
+    cols_order = [grp, "Revenue", "Cost", "MarginAmount", "MarginPct_cost", "ProfitPct_rev"]
+    show = [c for c in cols_order if c in pivot.columns]
+    st.dataframe(pivot[show].rename(columns={
+        "MarginAmount":"Margin (Amount)",
+        "MarginPct_cost":"Margin % ( (Rev-Cost)/Cost )",
+        "ProfitPct_rev":"Profit % ( (Rev-Cost)/Revenue )"
+    }))
+    return True
+
+
+# ------------------ Smarter KPI tool chooser (pandas-first) ------------------
+def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame, route_hint: str | None = None):
     """
     Best-effort use of pandas-only views.
     Includes headcount intent via UT (using Date_a) if loaded.
     Adds multi-dimension + Month filtering for P&L-based financial metrics.
+    Optional route_hint can force a particular view.
     """
     ql = (user_q or "").lower()
 
-    # ---- Headcount intent (Date_a + multi-dimension filters) ----
-    if any(w in ql for w in ["headcount", "fte", "resources"]) or re.search(r"\bhc\b", ql):
+    # ---- Headcount intent ----
+    if route_hint == "HEADCOUNT" or any(w in ql for w in ["headcount", "fte", "resources"]) or re.search(r"\bhc\b", ql):
         return headcount_view(user_question, df_ut)
 
-    # ---- Financial fallbacks (USD mn where available) ----
     amount_col = choose_amount_column(user_q, df)
     unit = unit_label(amount_col)
-
-    # Extract P&L filters once
     month_num, year = parse_month_year_from_text(user_q)
     dim_filters = extract_dimension_filters_pnl(user_q, df)
     dff, resolved_year = apply_pnl_filters(df, dim_filters, month_num, year)
@@ -583,43 +845,12 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
     else:
         tried_filter_note = False
 
-    # Margin-style view
-    if "margin" in ql:
-        st.subheader("AI Fallback — Margin Analysis")
-        try:
-            if _safe_has_cols(dff, ["Type", amount_col]) and "Month" in dff.columns:
-                monthly = dff.pivot_table(
-                    values=amount_col, index="Month", columns="Type", aggfunc="sum", fill_value=0
-                ).reset_index()
-                for col in ["Revenue", "Cost"]:
-                    if col in monthly.columns:
-                        monthly[col] = series_to_million(monthly[col])
-                if "Revenue" in monthly.columns and "Cost" in monthly.columns:
-                    monthly["Margin Amount"] = (monthly["Revenue"] - monthly["Cost"]).round(1)
-                    monthly["Margin %"] = monthly.apply(
-                        lambda r: round((r["Margin Amount"] / r["Cost"] * 100), 1) if r["Cost"] else None, axis=1
-                    )
-                parts = [f"Values shown in {unit}."]
-                if month_num:
-                    mdisp = datetime(2000, month_num, 1).strftime("%b")
-                    if resolved_year or year:
-                        mdisp = f"{mdisp} {resolved_year or year}"
-                    parts.append(f"Month filter: {mdisp}")
-                if dim_filters:
-                    applied = []
-                    for col, vals in dim_filters.items():
-                        applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
-                    parts.append("Filters: " + "; ".join(applied))
-                if tried_filter_note:
-                    parts.append("(No rows matched filters — showing overall results.)")
-                st.caption(" | ".join(parts))
-                st.dataframe(monthly)
-                return True
-        except Exception as e:
-            st.warning(f"Margin view failed: {e}")
+    # ---- Margin / Profit% view ----
+    if route_hint == "MARGIN" or has_margin_intent(user_q) or "margin" in ql or "profit" in ql:
+        return generic_margin_engine(user_q, df)
 
-    # Revenue / Cost breakdown
-    if ("revenue" in ql) or ("cost" in ql):
+    # ---- Revenue/Cost breakdown ----
+    if route_hint == "REV_COST" or ("revenue" in ql) or ("cost" in ql):
         st.subheader("AI Fallback — Revenue/Cost Breakdown")
         try:
             if _safe_has_cols(dff, ["Type", amount_col]) and "Month" in dff.columns:
@@ -644,127 +875,124 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame):
         except Exception as e:
             st.warning(f"Rev/Cost view failed: {e}")
 
-    # Offshore / Onsite splits
-    if ("offshore" in ql or "onsite" in ql) and "Month" in df.columns:
+    # ---- Offshore / Onsite splits ----
+    if route_hint == "ON_OFF" or (("offshore" in ql or "onsite" in ql) and "Month" in df.columns):
         loc_col = None
         for c in ["Location", "WorkLocation", "Onsite_Offshore", "Onshore_Offshore"]:
             if c in df.columns:
                 loc_col = c
                 break
         if loc_col and _safe_has_cols(dff, ["Type", amount_col, loc_col]):
-            st.subheader(f"AI Fallback — {loc_col} Split")
-            split = dff.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
-            split[amount_col] = series_to_million(split[amount_col])
-            parts = [f"Values shown in {unit}."]
-            if month_num:
-                mdisp = datetime(2000, month_num, 1).strftime("%b")
-                if resolved_year or year:
-                    mdisp = f"{mdisp} {resolved_year or year}"
-                parts.append(f"Month filter: {mdisp}")
-            if dim_filters:
-                applied = []
-                for col, vals in dim_filters.items():
-                    applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
-                parts.append("Filters: " + "; ".join(applied))
-            if tried_filter_note:
-                parts.append("(No rows matched filters — showing overall results.)")
-            st.caption(" | ".join(parts))
-            st.dataframe(split)
-            return True
+            try:
+                g = dff.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
+                g[amount_col] = series_to_million(g[amount_col])
+                parts = [f"Values shown in {unit}."]
+                if month_num:
+                    mdisp = datetime(2000, month_num, 1).strftime("%b")
+                    if resolved_year or year:
+                        mdisp = f"{mdisp} {resolved_year or year}"
+                    parts.append(f"Month filter: {mdisp}")
+                if dim_filters:
+                    applied = []
+                    for col, vals in dim_filters.items():
+                        applied.append(f"{col} contains [{', '.join(map(str, vals))}]")
+                    parts.append("Filters: " + "; ".join(applied))
+                if tried_filter_note:
+                    parts.append("(No rows matched filters — showing overall results.)")
+                st.caption(" | ".join(parts))
+                st.dataframe(g.sort_values([loc_col, "Type"]))
+                return True
+            except Exception as e:
+                st.warning(f"Onsite/Offshore view failed: {e}")
 
-    # Realized Rate / Utilization — require UT/HR data (kept informative)
-    if any(k in ql for k in ["realized rate", "utilization", "ut"]):
-        st.subheader("AI Fallback — Additional KPI")
-        st.info("This analysis needs UT/HR datasets (e.g., NetAvailableHours, Utilization%). Please load/connect UT data to enable.")
+    # If nothing matched, try a generic margin summary or return False to let other paths handle.
+    try:
+        _generic_margin_summary(df, user_q)
         return True
+    except Exception as e:
+        st.warning(f"Generic summary failed: {e}")
+        return False
 
+
+# =========================================================
+# LLM router (optional) + overall dispatcher
+# =========================================================
+
+def _llm_route_and_answer(user_q: str) -> bool:
+    """Use Azure OpenAI (if configured) to answer freeform questions."""
+    system = (
+        "You are an analytics assistant for P&L and utilization data. "
+        "Prefer precise, concise answers; when numbers are unknown, say so. "
+        "Never fabricate columns; avoid assuming currency unless stated."
+    )
+    msgs = [{"role": "system", "content": system}]
+    # Include a tiny chat memory for context
+    for m in st.session_state.chat_history[-6:]:
+        msgs.append(m)
+    msgs.append({"role": "user", "content": user_q})
+    text, err = _aoai_chat(msgs)
+    if err or not text:
+        return False
+    st.subheader("AI Answer")
+    st.write(text)
+    # Append to memory
+    st.session_state.chat_history.append({"role":"user","content":user_q})
+    st.session_state.chat_history.append({"role":"assistant","content":text})
+    return True
+
+
+def _dispatch_to_qmodule(qid: str, df_pnl: pd.DataFrame, df_ut: pd.DataFrame, user_q: str) -> bool:
+    """Try to import question module and run it. Expected function: run(df_pnl, df_ut, user_q)."""
+    try:
+        module_name = f"question_engine.question_q{qid}" if not qid.startswith('q') else f"question_engine.{qid}"
+        mod = importlib.import_module(module_name)
+        if hasattr(mod, "run"):
+            st.subheader(f"Configured Analysis — {qid.upper()}")
+            mod.run(df_pnl=df_pnl, df_ut=df_ut, user_question=user_q)
+            return True
+    except Exception as e:
+        st.warning(f"Could not run configured analysis for {qid}: {e}")
     return False
 
-def ai_fallback(user_q: str, df: pd.DataFrame):
-    """Main fallback entry."""
-    used = _use_kpi_tools_if_available(user_q, df)
-    if not used:
-        _generic_margin_summary(df, user_q)
-    st.success("✅ AI-generated fallback completed.")
 
 # =========================================================
-# MAIN ROUTER (prebuilt path preserved + AI fallback)
+# UI — Prompt bank suggestions
+# =========================================================
+st.markdown("<hr style='margin: 6px 0 10px 0; opacity: 0.2;'/>", unsafe_allow_html=True)
+st.markdown("**Try a question:**")
+
+
+btn_cols = st.columns(len(PROMPT_BANK))
+for i, prompt in enumerate(PROMPT_BANK):
+    with btn_cols[i]:
+        if st.button(prompt, key=f"pb_{i}"):
+            handle_click(prompt)
+            st.experimental_rerun()
+
+
+# =========================================================
+# Main handle: when user submits a question
 # =========================================================
 if user_question and not st.session_state.clear_chat:
-    try:
-        res = find_best_matching_qid(user_question)
-        best_qid, matched_prompt, score = None, None, None
-        if isinstance(res, tuple):
-            if len(res) == 3:
-                best_qid, matched_prompt, score = res
-            elif len(res) == 2:
-                best_qid, matched_prompt = res
-            elif len(res) == 1:
-                best_qid = res[0]
-        elif isinstance(res, dict):
-            best_qid = res.get("qid") or res.get("best_qid")
-            matched_prompt = res.get("prompt") or res.get("matched_prompt")
-            score = res.get("score")
+    ql = user_question.lower().strip()
 
-        # --- Rule-based overrides BEFORE threshold check ---
-        if _is_q1_margin_below_intent(user_question):
-            best_qid, matched_prompt, score = "Q1", "Margin % below threshold", 1.0
-            st.caption("Q1 override: explicit 'margin% below N' intent detected.")
-        elif _is_q3_cb_variance_intent(user_question):
-            best_qid, matched_prompt, score = "Q3", "C&B QoQ variation", 1.0
-            st.caption("Q3 override: explicit 'C&B quarter-over-quarter change' intent detected.")
-
-        force_ai = user_question.lower().strip().startswith(FREEFORM_TRIGGERS)
-        low_score = (score is not None and score < SIM_THRESHOLD)
-
-        if force_ai or low_score or not best_qid:
-            if force_ai:
-                st.caption("AI mode: freeform override detected.")
-            elif low_score:
-                st.caption(f"AI mode: matcher score {score:.2f} < {SIM_THRESHOLD}.")
-            else:
-                st.caption("AI mode: no suitable prebuilt match found.")
-            ai_fallback(user_question, df_pnl)
-            st.stop()
-
-        # Pre-configured Q1–Q10 path
+    # 1) Lightweight pandas-first tools (headcount, margin/profit%, rev/cost, onshore/offshore)
+    handled = _use_kpi_tools_if_available(user_question, df_pnl)
+    if not handled:
+        # 2) Try configured questions via semantic matcher
         try:
-            question_module = importlib.import_module(f"questions.question_{best_qid.lower()}")
-            run_func = getattr(question_module, "run", None)
-            if run_func is None:
-                raise AttributeError(f"'run' function not found in module for {best_qid}")
+            qid, prompt, score = find_best_matching_qid(ql)
+        except Exception:
+            qid, prompt, score = None, None, 0.0
 
-            run_params = inspect.signature(run_func).parameters
-            if len(run_params) >= 2:
-                result = run_func(df_pnl, user_question)
-            else:
-                result = run_func(df_pnl)
+        if qid and score >= SIM_THRESHOLD:
+            handled = _dispatch_to_qmodule(qid, df_pnl, df_ut, user_question)
 
-            st.success("✅ Analysis complete.")
-            if isinstance(result, pd.DataFrame):
-                st.dataframe(result)
-            elif isinstance(result, str):
-                st.markdown(result)
-            elif isinstance(result, None.__class__):
-                pass
-            else:
-                st.write(result)
+    # 3) If still not handled, use LLM router for freeform (if available) else final fallback
+    if not handled:
+        if any(ql.startswith(t) for t in FREEFORM_TRIGGERS) or ql.endswith("?") or "explain" in ql:
+            handled = _llm_route_and_answer(user_question)
 
-        except (ModuleNotFoundError, AttributeError) as e:
-            st.info(f"Switching to AI fallback for your question (reason: {e})")
-            ai_fallback(user_question, df_pnl)
-
-    except Exception as e:
-        st.info("Switching to AI fallback due to an error in routing.")
-        st.caption(f"Router error: {e}")
-        ai_fallback(user_question, df_pnl)
-
-# -----------------------------
-# Prompt bank (preserved)
-# -----------------------------
-st.markdown("---")
-st.markdown("💡 **Try asking:**")
-col1, col2 = st.columns(2)
-for i, prompt in enumerate(PROMPT_BANK):
-    with (col1 if i % 2 == 0 else col2):
-        st.button(prompt, on_click=handle_click, args=(prompt,))
+    if not handled:
+        # 4) Final safety net — generic margin summary
+        _generic_margin_summary(df_pnl, user_question)
