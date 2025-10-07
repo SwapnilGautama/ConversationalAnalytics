@@ -882,7 +882,8 @@ def _use_kpi_tools_if_available(user_q: str, df: pd.DataFrame, route_hint: str |
             if c in df.columns:
                 loc_col = c
                 break
-        if loc_col and _safe_has_cols(dff, ["Type", amount_col, loc_col]):
+        if loc_col and _safe_has_cols(dff, ["Type", amount_col, loc_col
+            ]):
             try:
                 g = dff.groupby([loc_col, "Type"], dropna=False)[amount_col].sum().reset_index()
                 g[amount_col] = series_to_million(g[amount_col])
@@ -967,7 +968,10 @@ for i, prompt in enumerate(PROMPT_BANK):
     with btn_cols[i]:
         if st.button(prompt, key=f"pb_{i}"):
             handle_click(prompt)
-            st.experimental_rerun()
+            try:
+                st.rerun()
+            except AttributeError:
+                st.experimental_rerun()
 
 
 # =========================================================
